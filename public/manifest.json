@@ -1,0 +1,56 @@
+{
+  "name": "APEX Coach",
+  "short_name": "APEX",
+  "description": "Fitness, Nutrition & Diabète T1 - Ton coach personnel",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#00ff94",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/favicon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/web-app-manifest-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/web-app-manifest-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Musculation",
+      "url": "/muscu"
+    },
+    {
+      "name": "Nutrition",
+      "url": "/nutrition"
+    },
+    {
+      "name": "Diabète",
+      "url": "/diabete"
+    }
+  ]
+}
