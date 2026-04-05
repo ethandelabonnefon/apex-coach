@@ -1,5 +1,19 @@
 import { DIABETES_CONFIG } from './constants';
-import type { MealTime } from '@/types';
+import type { DiabetesConfig, MealTime } from '@/types';
+
+function getRatioForMeal(config: DiabetesConfig, mealTime: MealTime): number {
+  // Try insulinRatios first (new system)
+  if (config.insulinRatios?.length) {
+    const found = config.insulinRatios.find((r) => r.mealKey === mealTime);
+    if (found) return found.ratio;
+  }
+  // Fallback to legacy ratios
+  if (mealTime in config.ratios) {
+    return config.ratios[mealTime as keyof typeof config.ratios];
+  }
+  // Default fallback
+  return config.ratios.lunch;
+}
 
 export function calculateBolus(
   carbsGrams: number,
@@ -8,6 +22,7 @@ export function calculateBolus(
   isPreWorkout: boolean = false,
   workoutType: 'muscu' | 'running' | null = null,
   minutesUntilWorkout: number = 0,
+  configOverride?: DiabetesConfig,
 ): {
   carbBolus: number;
   correctionBolus: number;
@@ -15,8 +30,8 @@ export function calculateBolus(
   adjustments: string[];
   reasoning: string[];
 } {
-  const config = DIABETES_CONFIG;
-  const ratio = config.ratios[mealTime];
+  const config = configOverride || DIABETES_CONFIG;
+  const ratio = getRatioForMeal(config, mealTime);
   const isf = config.insulinSensitivityFactor;
   const target = config.targetGlucose;
 
@@ -64,9 +79,10 @@ export function estimateGlucoseImpact(
   insulinUnits: number,
   carbsGrams: number,
   mealTime: MealTime,
+  configOverride?: DiabetesConfig,
 ): { estimatedPeak: number; estimatedTrough: number; timeline: { time: number; glucose: number }[] } {
-  const config = DIABETES_CONFIG;
-  const ratio = config.ratios[mealTime];
+  const config = configOverride || DIABETES_CONFIG;
+  const ratio = getRatioForMeal(config, mealTime);
   const isf = config.insulinSensitivityFactor;
 
   // Estimation simplifiée de l'impact

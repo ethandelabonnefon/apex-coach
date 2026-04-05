@@ -61,8 +61,18 @@ export interface MobilityData {
   thoracicRotation: string | null;
 }
 
+export interface InsulinRatio {
+  id: string;
+  label: string;
+  mealKey: string;       // 'morning' | 'lunch' | 'snack' | 'dinner' | custom
+  timeStart: string;     // "07:00"
+  timeEnd: string;       // "10:00"
+  ratio: number;         // 1:X
+}
+
 export interface DiabetesConfig {
   ratios: { morning: number; lunch: number; dinner: number };
+  insulinRatios: InsulinRatio[];
   insulinSensitivityFactor: number;
   targetGlucose: number;
   targetRange: { min: number; max: number };
@@ -188,4 +198,4 @@ export interface WeekPlan {
   sessions: RunningSession[];
 }
 
-export type MealTime = 'morning' | 'lunch' | 'dinner';
+export type MealTime = 'morning' | 'lunch' | 'snack' | 'dinner';

@@ -42,6 +42,12 @@ export const USER_PROFILE: UserProfile = {
 
 export const DIABETES_CONFIG: DiabetesConfig = {
   ratios: { morning: 5, lunch: 7, dinner: 9 },
+  insulinRatios: [
+    { id: "r-morning", label: "Petit-déjeuner", mealKey: "morning", timeStart: "07:00", timeEnd: "10:00", ratio: 5 },
+    { id: "r-lunch", label: "Déjeuner", mealKey: "lunch", timeStart: "12:00", timeEnd: "14:00", ratio: 7 },
+    { id: "r-snack", label: "Goûter", mealKey: "snack", timeStart: "15:00", timeEnd: "17:00", ratio: 8 },
+    { id: "r-dinner", label: "Dîner", mealKey: "dinner", timeStart: "19:00", timeEnd: "21:00", ratio: 9 },
+  ],
   insulinSensitivityFactor: 35,
   targetGlucose: 110,
   targetRange: { min: 70, max: 180 },

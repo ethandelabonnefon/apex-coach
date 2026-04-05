@@ -55,9 +55,10 @@ export default function DiabetePage() {
       currentGlucose,
       isPreWorkout,
       workoutType,
-      minutesUntilWorkout
+      minutesUntilWorkout,
+      diabetesConfig
     );
-  }, [showResult, carbsGrams, mealTime, currentGlucose, isPreWorkout, workoutType, minutesUntilWorkout]);
+  }, [showResult, carbsGrams, mealTime, currentGlucose, isPreWorkout, workoutType, minutesUntilWorkout, diabetesConfig]);
 
   // ---- Insulin on board ----
   const iob = useMemo(() => {
@@ -104,6 +105,7 @@ export default function DiabetePage() {
   const mealTimeLabels: Record<MealTime, string> = {
     morning: "Petit-dej",
     lunch: "Dejeuner",
+    snack: "Gouter",
     dinner: "Diner",
   };
 
@@ -113,11 +115,18 @@ export default function DiabetePage() {
         title="Diabete T1"
         subtitle={`Gestion insuline · ${profile.insulinRapid} · Basale ${profile.basalDose}U/jour · CGM ${profile.cgmType}`}
         action={
-          <Link href="/diabete/patterns">
-            <Button variant="secondary" size="sm">
-              Patterns connus
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link href="/diabete/parametres">
+              <Button variant="ghost" size="sm">
+                ⚙️ Parametres
+              </Button>
+            </Link>
+            <Link href="/diabete/patterns">
+              <Button variant="secondary" size="sm">
+                Patterns connus
+              </Button>
+            </Link>
+          </div>
         }
       />
 
@@ -169,6 +178,7 @@ export default function DiabetePage() {
                 >
                   <option value="morning">Petit-dejeuner</option>
                   <option value="lunch">Dejeuner</option>
+                  <option value="snack">Gouter</option>
                   <option value="dinner">Diner</option>
                 </select>
               </div>
@@ -614,24 +624,28 @@ export default function DiabetePage() {
 
           {/* Ratios Summary */}
           <Card>
-            <SectionTitle>Ratios & Parametres</SectionTitle>
-            <div className="grid grid-cols-3 gap-3 mb-4">
-              {(["morning", "lunch", "dinner"] as MealTime[]).map((time) => (
-                <div key={time} className="p-3 rounded-xl bg-white/[0.03] text-center">
-                  <p className="text-xs text-white/35 mb-1">{mealTimeLabels[time]}</p>
-                  <p
-                    className={`text-lg font-bold ${
-                      time === "morning"
-                        ? "text-[#ff9500]"
-                        : time === "lunch"
-                          ? "text-[#00d4ff]"
-                          : "text-[#a855f7]"
-                    }`}
-                  >
-                    1:{diabetesConfig.ratios[time]}
-                  </p>
-                </div>
-              ))}
+            <div className="flex items-center justify-between mb-4">
+              <SectionTitle className="!mb-0">Ratios & Parametres</SectionTitle>
+              <Link href="/diabete/parametres" className="text-xs text-[#00d4ff] hover:text-[#00d4ff]/80 transition-colors">
+                Modifier ⚙️
+              </Link>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              {(diabetesConfig.insulinRatios || [
+                { id: "m", label: "Petit-dej", mealKey: "morning", ratio: diabetesConfig.ratios.morning },
+                { id: "l", label: "Dejeuner", mealKey: "lunch", ratio: diabetesConfig.ratios.lunch },
+                { id: "d", label: "Diner", mealKey: "dinner", ratio: diabetesConfig.ratios.dinner },
+              ]).map((r, i) => {
+                const colors = ["text-[#ff9500]", "text-[#00d4ff]", "text-[#00ff94]", "text-[#a855f7]"];
+                return (
+                  <div key={r.id} className="p-3 rounded-xl bg-white/[0.03] text-center">
+                    <p className="text-xs text-white/35 mb-1">{r.label}</p>
+                    <p className={`text-lg font-bold ${colors[i % colors.length]}`}>
+                      1:{r.ratio}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">

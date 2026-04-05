@@ -70,6 +70,7 @@ interface AppState {
 
   // Diabetes
   diabetesConfig: DiabetesConfig;
+  updateDiabetesConfig: (updates: Partial<DiabetesConfig>) => void;
   glucoseReadings: GlucoseReading[];
   addGlucoseReading: (reading: GlucoseReading) => void;
   insulinLogs: InsulinLog[];
@@ -138,6 +139,7 @@ export const useStore = create<AppState>()(
       updateProfile: (updates) => set((s) => ({ profile: { ...s.profile, ...updates } })),
 
       diabetesConfig: DIABETES_CONFIG,
+      updateDiabetesConfig: (updates) => set((s) => ({ diabetesConfig: { ...s.diabetesConfig, ...updates } })),
       glucoseReadings: [],
       addGlucoseReading: (reading) => set((s) => ({ glucoseReadings: [reading, ...s.glucoseReadings].slice(0, 500) })),
       insulinLogs: [],
