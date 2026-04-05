@@ -58,7 +58,7 @@ export function Navigation() {
       </aside>
 
       {/* Mobile header */}
-      <header className="lg:hidden sticky top-0 z-40 bg-[#12121a]/95 backdrop-blur-xl border-b border-white/[0.06] px-4 py-3">
+      <header className="lg:hidden sticky top-0 z-40 bg-[#12121a]/95 backdrop-blur-xl border-b border-white/[0.06] px-4 py-3 pt-safe">
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-bold">
             <span className="neon-green">APEX</span>{" "}
