@@ -131,8 +131,33 @@ textarea:focus {
 
 /* Safe areas for PWA */
 .pb-safe {
-  padding-bottom: calc(1rem + var(--safe-area-inset-bottom));
+  padding-bottom: calc(0.5rem + var(--safe-area-inset-bottom));
 }
 .pt-safe {
   padding-top: calc(1rem + var(--safe-area-inset-top));
+}
+
+/* Scrollbar hide utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Touch target minimum 44px */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Prevent iOS zoom on input focus */
+input, select, textarea {
+  font-size: 16px !important;
+}
+
+/* Smooth scroll */
+html {
+  scroll-behavior: smooth;
 }

@@ -39,17 +39,17 @@ export function StatCard({
   icon?: string;
 }) {
   return (
-    <Card>
+    <Card className="!p-3 sm:!p-5">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-xs text-white/40 uppercase tracking-wider mb-1">{label}</p>
-          <p className={`text-2xl font-bold ${color}`}>
+          <p className="text-[10px] sm:text-xs text-white/40 uppercase tracking-wider mb-1">{label}</p>
+          <p className={`text-xl sm:text-2xl font-bold ${color}`}>
             {value}
-            {unit && <span className="text-sm font-normal text-white/40 ml-1">{unit}</span>}
+            {unit && <span className="text-[10px] sm:text-sm font-normal text-white/40 ml-1">{unit}</span>}
           </p>
-          {sub && <p className="text-xs text-white/35 mt-1">{sub}</p>}
+          {sub && <p className="text-[10px] sm:text-xs text-white/35 mt-1">{sub}</p>}
         </div>
-        {icon && <span className="text-2xl opacity-60">{icon}</span>}
+        {icon && <span className="text-xl sm:text-2xl opacity-60">{icon}</span>}
       </div>
     </Card>
   );
@@ -116,10 +116,10 @@ export function PageHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between mb-8">
+    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6 sm:mb-8">
       <div>
-        <h1 className="text-2xl font-bold">{title}</h1>
-        {subtitle && <p className="text-white/40 text-sm mt-1">{subtitle}</p>}
+        <h1 className="text-xl sm:text-2xl font-bold">{title}</h1>
+        {subtitle && <p className="text-white/40 text-xs sm:text-sm mt-1">{subtitle}</p>}
       </div>
       {action}
     </div>

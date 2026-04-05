@@ -491,7 +491,7 @@ export default function DiagnosticPage() {
   // ─── MUSCU / RUNNING TABS ─────────────────────────────────────
   if (activeTab === "musculation" || activeTab === "running") {
     return (
-      <div className="p-6 md:p-8 max-w-4xl mx-auto">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
         <PageHeader
           title="Mon Diagnostic"
           subtitle="Morphologie, musculation et running"
@@ -512,7 +512,7 @@ export default function DiagnosticPage() {
   // ─── SUMMARY VIEW (read mode) ─────────────────────────────────
   if (diagnosticCompleted && lastEntry && viewMode === "summary") {
     return (
-      <div className="p-6 md:p-8 max-w-4xl mx-auto">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
         <PageHeader
           title="Mon Diagnostic"
           subtitle="Morphologie, musculation et running"
@@ -605,7 +605,7 @@ export default function DiagnosticPage() {
   // ─── RESULTS VIEW ──────────────────────────────────────────────
   if (viewMode === "results" && analysis) {
     return (
-      <div className="p-6 md:p-8 max-w-4xl mx-auto">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
         <PageHeader
           title="Résultats du diagnostic"
           subtitle="Analyse morphologique et recommandations personnalisées"
@@ -757,7 +757,7 @@ export default function DiagnosticPage() {
 
   // ─── FORM VIEW (create/edit) ───────────────────────────────────
   return (
-    <div className="p-6 md:p-8 max-w-3xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
       <PageHeader
         title="Mon Diagnostic"
         subtitle="Morphologie, musculation et running"

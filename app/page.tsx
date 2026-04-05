@@ -26,14 +26,14 @@ export default function Dashboard() {
   const lastGlucose = glucoseReadings[0];
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <PageHeader
         title={`Salut ${profile.name}`}
         subtitle="Voici ton tableau de bord APEX"
       />
 
       {/* Quick stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 mb-6 sm:mb-8">
         <StatCard label="Poids" value={profile.weight} unit="kg" icon="⚖️" color="text-white" />
         <StatCard label="VO2max" value={profile.vo2max} unit="ml/kg/min" icon="❤️" color="text-[#00d4ff]" />
         <StatCard label="DC 1RM" value={profile.benchPress1RM} unit="kg" icon="🏋️" color="text-[#a855f7]" />
@@ -54,7 +54,7 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 md:gap-6">
         {/* Colonne 1: Diabète & Nutrition */}
         <div className="space-y-6">
           <Card glow="green">

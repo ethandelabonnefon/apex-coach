@@ -319,7 +319,7 @@ export function SessionClient({ sessionId }: { sessionId: string }) {
 
   if (!session) {
     return (
-      <div className="p-6 md:p-8 max-w-4xl mx-auto">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold mb-4">Seance introuvable</h1>
         <p className="text-white/40">Aucune seance ne correspond a cet identifiant.</p>
       </div>
@@ -381,7 +381,7 @@ export function SessionClient({ sessionId }: { sessionId: string }) {
 
   if (submitted) {
     return (
-      <div className="p-6 md:p-8 max-w-4xl mx-auto text-center py-20">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto text-center py-20">
         <span className="text-5xl mb-6 block">&#10003;</span>
         <h1 className="text-2xl font-bold mb-2">Seance enregistree !</h1>
         <p className="text-white/40 mb-6">Bonne seance, les donnees sont sauvegardees.</p>
@@ -400,7 +400,7 @@ export function SessionClient({ sessionId }: { sessionId: string }) {
   const completedCount = completedWorkouts.filter((w) => w.sessionId === session.id).length;
 
   return (
-    <div className="p-6 md:p-8 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
       <PageHeader
         title={session.name}
         subtitle={`${session.day} -- ~${session.duration} min -- ${session.focus}`}

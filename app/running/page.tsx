@@ -200,7 +200,7 @@ export default function RunningPage() {
   const maxVolume = Math.max(...weeks.map((w) => w.volume));
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <PageHeader
         title="Plan Semi-Marathon"
         subtitle={`14 semaines | VMA ${vma.toFixed(1)} km/h | VO2max ${VO2MAX} ml/kg/min`}
@@ -250,7 +250,7 @@ export default function RunningPage() {
       {/* Pace Zones Summary */}
       <Card className="mb-6">
         <SectionTitle>Allures par zone</SectionTitle>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
           {(["z1", "z2", "z3", "z4", "z5"] as const).map((zKey, i) => {
             const z = zones[zKey];
             const zoneColors = [
@@ -284,7 +284,7 @@ export default function RunningPage() {
 
       {/* Current Week Detail */}
       <SectionTitle>Detail Semaine {currentRunningWeek} — {currentWeekData.phase}</SectionTitle>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+      <div className="grid sm:grid-cols-2 gap-4 mb-8">
         {currentWeekData.sessions.map((session, idx) => (
           <Card key={idx} glow={session.type === "intervals" ? "orange" : "blue"}>
             <div className="flex items-start justify-between mb-3">
@@ -394,7 +394,7 @@ export default function RunningPage() {
 
       {/* T1D Running Adaptations */}
       <SectionTitle>Adaptations Diabete T1 — Course</SectionTitle>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8">
         <Card>
           <h3 className="font-semibold text-white mb-3">Avant la course</h3>
           <div className="space-y-2">
@@ -511,8 +511,8 @@ export default function RunningPage() {
       {/* Race Predictions */}
       <SectionTitle>Predictions de course</SectionTitle>
       <Card className="mb-8">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto scrollbar-hide -mx-2 px-2">
+          <table className="w-full text-sm min-w-[500px]">
             <thead>
               <tr className="text-white/40 text-xs uppercase tracking-wider border-b border-white/[0.06]">
                 <th className="text-left py-3 pr-4">Distance</th>

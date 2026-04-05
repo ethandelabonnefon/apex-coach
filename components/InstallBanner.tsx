@@ -28,7 +28,7 @@ export function InstallBanner() {
   if (!isIOS && !canInstall) return null;
 
   return (
-    <div className="fixed bottom-20 left-4 right-4 bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl p-4 shadow-lg z-50 md:hidden">
+    <div className="fixed bottom-20 left-4 right-4 bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl p-4 shadow-lg z-50 lg:hidden">
       <button
         onClick={handleDismiss}
         className="absolute top-2 right-3 text-white/70 hover:text-white text-lg"

@@ -411,7 +411,7 @@ export default function ProfilPage() {
   };
 
   return (
-    <div className="p-6 md:p-8 max-w-5xl mx-auto pb-32">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto pb-32">
       <PageHeader
         title="Mon Profil"
         subtitle="Configure tes informations personnelles, diabete et entrainement"
@@ -822,8 +822,8 @@ export default function ProfilPage() {
       <MensurationsSection />
 
       {/* Sticky save bar */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/95 to-transparent pointer-events-none">
-        <div className="max-w-5xl mx-auto flex justify-end pointer-events-auto">
+      <div className="fixed bottom-16 lg:bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/95 to-transparent pointer-events-none z-40">
+        <div className="max-w-5xl mx-auto lg:ml-64 flex justify-end pointer-events-auto">
           <Button onClick={handleSaveAll} size="lg">
             {saved ? "Sauvegarde !" : "Sauvegarder les modifications"}
           </Button>

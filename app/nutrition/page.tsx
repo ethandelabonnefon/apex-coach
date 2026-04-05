@@ -239,7 +239,7 @@ export default function NutritionPage() {
   // ──────────────────────────────────────────────
   if (view === "diagnostic") {
     return (
-      <div className="p-6 md:p-8 max-w-7xl mx-auto">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
         <PageHeader
           title="Diagnostic Nutritionnel"
           subtitle="Calcul personnalisé de tes besoins caloriques et macros"
@@ -261,7 +261,7 @@ export default function NutritionPage() {
   // ──────────────────────────────────────────────
   if (view === "results" && calculation && diagnosticSnapshot && mealPlan) {
     return (
-      <div className="p-6 md:p-8 max-w-7xl mx-auto">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
         <PageHeader
           title="Tes Objectifs Nutritionnels"
           subtitle="Calculés sur mesure avec tes données"
@@ -281,7 +281,7 @@ export default function NutritionPage() {
   // TRACKER VIEW (main page)
   // ──────────────────────────────────────────────
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <PageHeader
         title="Nutrition"
         subtitle="Suivi nutritionnel et macros du jour"
@@ -300,7 +300,7 @@ export default function NutritionPage() {
       {/* ========== Daily Summary ========== */}
       <Card className="mb-6" glow="green">
         <SectionTitle>Résumé du jour</SectionTitle>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 mb-6">
           <MacroRing value={totals.calories} max={targets.calories} color="#00ff94" label="Calories" unit="kcal" />
           <MacroRing value={totals.protein} max={targets.protein} color="#00d4ff" label="Protéines" unit="g" />
           <MacroRing value={totals.carbs} max={targets.carbs} color="#ff9500" label="Glucides" unit="g" />
@@ -314,7 +314,7 @@ export default function NutritionPage() {
         </div>
       </Card>
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid md:grid-cols-2 gap-4 md:gap-6">
         {/* ========== Left column: Meal Logger ========== */}
         <div className="space-y-6">
           {/* Meal form */}

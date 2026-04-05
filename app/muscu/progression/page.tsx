@@ -73,7 +73,7 @@ export default function ProgressionPage() {
   const hasAnyData = exerciseNames.length > 0;
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <PageHeader
         title="Progression"
         subtitle={`${completedWorkouts.length} seance${completedWorkouts.length !== 1 ? "s" : ""} enregistree${completedWorkouts.length !== 1 ? "s" : ""}`}

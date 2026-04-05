@@ -119,7 +119,7 @@ export default function MuscuPage() {
   // ─── CAS 1 : Pas de diagnostic → Rediriger ────────────────────
   if (!hasDiagnostic && !program) {
     return (
-      <div className="p-6 md:p-8 max-w-4xl mx-auto">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
         <PageHeader title="Musculation" subtitle="Programme personnalisé" />
         <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
           <div className="text-6xl mb-4">💪</div>
@@ -150,7 +150,7 @@ export default function MuscuPage() {
   // ─── CAS 2 : Diagnostic fait mais pas de programme → Générer ──
   if (hasDiagnostic && !program) {
     return (
-      <div className="p-6 md:p-8 max-w-4xl mx-auto">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
         <PageHeader title="Musculation" subtitle="Programme personnalisé" />
         <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
           {generating ? (
@@ -191,7 +191,7 @@ export default function MuscuPage() {
 
   // ─── CAS 3 : Programme actif → Afficher ───────────────────────
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <PageHeader
         title="Musculation"
         subtitle="Programme, periodisation et volume"
@@ -229,7 +229,7 @@ export default function MuscuPage() {
 
       {/* Programme overview */}
       <Card glow="purple" className="mb-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <div className="flex items-center gap-3 mb-2">
               <h2 className="text-xl font-bold">{displayName}</h2>
@@ -241,18 +241,18 @@ export default function MuscuPage() {
               Semaine {currentWeek} -- {displayDaysPerWeek} seances/semaine -- {totalSets} sets/semaine
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="text-center px-4 py-2 rounded-xl bg-white/[0.03]">
-              <p className="text-xs text-white/35">RIR cible</p>
-              <p className="text-lg font-bold text-[#a855f7]">{phase.rirTarget}</p>
+          <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center sm:gap-3">
+            <div className="text-center px-3 sm:px-4 py-2 rounded-xl bg-white/[0.03]">
+              <p className="text-[10px] sm:text-xs text-white/35">RIR cible</p>
+              <p className="text-base sm:text-lg font-bold text-[#a855f7]">{phase.rirTarget}</p>
             </div>
-            <div className="text-center px-4 py-2 rounded-xl bg-white/[0.03]">
-              <p className="text-xs text-white/35">Volume</p>
-              <p className="text-lg font-bold text-[#a855f7]">{Math.round(phase.volumeMultiplier * 100)}%</p>
+            <div className="text-center px-3 sm:px-4 py-2 rounded-xl bg-white/[0.03]">
+              <p className="text-[10px] sm:text-xs text-white/35">Volume</p>
+              <p className="text-base sm:text-lg font-bold text-[#a855f7]">{Math.round(phase.volumeMultiplier * 100)}%</p>
             </div>
-            <div className="text-center px-4 py-2 rounded-xl bg-white/[0.03]">
-              <p className="text-xs text-white/35">DC 1RM</p>
-              <p className="text-lg font-bold text-[#a855f7]">{profile.benchPress1RM} kg</p>
+            <div className="text-center px-3 sm:px-4 py-2 rounded-xl bg-white/[0.03]">
+              <p className="text-[10px] sm:text-xs text-white/35">DC 1RM</p>
+              <p className="text-base sm:text-lg font-bold text-[#a855f7]">{profile.benchPress1RM} kg</p>
             </div>
           </div>
         </div>
@@ -266,7 +266,7 @@ export default function MuscuPage() {
       {/* Periodisation */}
       <SectionTitle>Periodisation (cycle de 6 semaines)</SectionTitle>
       <Card className="mb-6">
-        <div className="grid grid-cols-6 gap-2 mb-4">
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-4">
           {[1, 2, 3, 4, 5, 6].map((w) => {
             const p = getCurrentPhaseInfo(w);
             const isCurrent = w === cycleWeek;
@@ -292,7 +292,7 @@ export default function MuscuPage() {
             );
           })}
         </div>
-        <div className="grid md:grid-cols-3 gap-4 text-sm">
+        <div className="grid sm:grid-cols-3 gap-3 sm:gap-4 text-sm">
           <div className="p-3 rounded-xl bg-[#a855f7]/10 border border-[#a855f7]/20">
             <p className="font-semibold text-[#a855f7] mb-1">Accumulation (S1-S3)</p>
             <p className="text-white/50 text-xs">Volume eleve, intensite moderee. RIR 2-3. Focus : construire du volume d&apos;entrainement.</p>
@@ -310,7 +310,7 @@ export default function MuscuPage() {
 
       {/* Sessions list */}
       <SectionTitle>Seances de la semaine</SectionTitle>
-      <div className="grid md:grid-cols-2 gap-4 mb-8">
+      <div className="grid sm:grid-cols-2 gap-4 mb-8">
         {displaySessions.map((session) => {
           const sessionSets = session.exercises.reduce((s, e) => s + e.sets, 0);
           const completedCount = completedWorkouts.filter((w) => w.sessionId === session.id).length;
@@ -364,7 +364,7 @@ export default function MuscuPage() {
       <InfoBox variant="info">
         Basé sur les recommandations de Mike Israetel (RP). MEV = volume minimum efficace, MAV = volume adaptatif, MRV = volume maximum recuperable.
       </InfoBox>
-      <div className="grid md:grid-cols-2 gap-4 mt-4">
+      <div className="grid sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
         {Object.entries(VOLUME_LANDMARKS).map(([muscle, landmarks]) => {
           const current = weeklyVolume[muscle] || 0;
           const adjustedCurrent = Math.round(current * phase.volumeMultiplier);

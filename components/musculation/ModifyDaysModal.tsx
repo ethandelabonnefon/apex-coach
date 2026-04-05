@@ -22,8 +22,8 @@ export default function ModifyDaysModal({ currentDays, onConfirm, onClose, regen
   const [selectedDays, setSelectedDays] = useState(currentDays);
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-[#0f0f18] border border-white/10 rounded-2xl p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 sm:flex sm:items-center sm:justify-center sm:p-4" onClick={onClose}>
+      <div className="absolute inset-x-0 bottom-0 sm:relative sm:inset-auto bg-[#0f0f18] border border-white/10 rounded-t-2xl sm:rounded-2xl p-6 max-w-sm w-full max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-bold text-white mb-4">Modifier le nombre de séances</h2>
 
         <div className="space-y-2 mb-5">

@@ -108,7 +108,7 @@ export default function DiabetePage() {
   };
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <PageHeader
         title="Diabete T1"
         subtitle={`Gestion insuline · ${profile.insulinRapid} · Basale ${profile.basalDose}U/jour · CGM ${profile.cgmType}`}
@@ -135,7 +135,7 @@ export default function DiabetePage() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid md:grid-cols-2 gap-4 md:gap-6">
         {/* ============ LEFT COLUMN ============ */}
         <div className="space-y-6">
           {/* Bolus Calculator */}

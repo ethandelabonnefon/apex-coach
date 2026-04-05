@@ -43,11 +43,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-full bg-[#0a0a0f] text-white">
         <OfflineIndicator />
-        <div className="flex min-h-screen">
-          <Navigation />
-          <main className="flex-1 ml-0 md:ml-64 pb-20 md:pb-0">{children}</main>
-          <CoachProvider />
+        <Navigation />
+        <div className="lg:ml-64 min-h-screen pb-20 lg:pb-0">
+          <main>{children}</main>
         </div>
+        <CoachProvider />
         <InstallBanner />
         <ServiceWorkerRegistrar />
       </body>
