@@ -128,7 +128,7 @@ export default function MuscuPage() {
             Complète le diagnostic musculation pour que l'IA génère un programme
             adapté à tes objectifs, ta morphologie et ton emploi du temps.
           </p>
-          <Link href="/diagnostic">
+          <Link href="/profil/diagnostic">
             <Button>Commencer le diagnostic</Button>
           </Link>
 

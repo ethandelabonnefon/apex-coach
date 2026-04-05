@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import Link from "next/link";
 import { Card, PageHeader, Button, Badge, SectionTitle, InfoBox } from "@/components/ui";
 import { useStore } from "@/lib/store";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
@@ -219,7 +220,7 @@ function MensurationsSection() {
       <Card glow="blue">
         <div className="flex items-center justify-between mb-4">
           <SectionTitle className="!mb-0">Mes Mensurations</SectionTitle>
-          <a href="/diagnostic" className="text-xs text-[#00d4ff] hover:text-[#00d4ff]/80 transition-colors">
+          <a href="/profil/diagnostic" className="text-xs text-[#00d4ff] hover:text-[#00d4ff]/80 transition-colors">
             Mettre à jour
           </a>
         </div>
@@ -424,6 +425,32 @@ export default function ProfilPage() {
           </div>
         }
       />
+
+      {/* Quick access menu */}
+      <Card className="mb-6">
+        <SectionTitle>Accès rapide</SectionTitle>
+        <div className="space-y-1">
+          {[
+            { href: "/profil/diagnostic", icon: "🔬", label: "Mon Diagnostic", desc: "Morphologie, muscu, running" },
+            { href: "/diabete", icon: "💉", label: "Paramètres Diabète", desc: "Ratios, FSI, cible glycémique" },
+          ].map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="flex items-center justify-between p-3 rounded-xl hover:bg-white/[0.03] transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-xl">{item.icon}</span>
+                <div>
+                  <p className="text-sm font-medium">{item.label}</p>
+                  <p className="text-xs text-white/35">{item.desc}</p>
+                </div>
+              </div>
+              <span className="text-white/20">→</span>
+            </Link>
+          ))}
+        </div>
+      </Card>
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* ---------------------------------------------------------- */}

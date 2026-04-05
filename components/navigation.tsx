@@ -3,14 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const NAV_ITEMS = [
+const SIDEBAR_ITEMS = [
   { href: "/", label: "Dashboard", icon: "⚡" },
-  { href: "/diagnostic", label: "Diagnostic", icon: "🔬" },
-  { href: "/diabete", label: "Diabete", icon: "💉" },
-  { href: "/nutrition", label: "Nutrition", icon: "🥗" },
   { href: "/muscu", label: "Muscu", icon: "🏋️" },
   { href: "/running", label: "Running", icon: "🏃" },
+  { href: "/nutrition", label: "Nutrition", icon: "🥗" },
+  { href: "/diabete", label: "Diabète", icon: "💉" },
   { href: "/profil", label: "Profil", icon: "👤" },
+];
+
+const BOTTOM_NAV_ITEMS = [
+  { href: "/", label: "Dashboard", icon: "⚡" },
+  { href: "/muscu", label: "Muscu", icon: "🏋️" },
+  { href: "/running", label: "Running", icon: "🏃" },
+  { href: "/nutrition", label: "Nutrition", icon: "🥗" },
+  { href: "/diabete", label: "Diabète", icon: "💉" },
 ];
 
 export function Navigation() {
@@ -28,7 +35,7 @@ export function Navigation() {
           <p className="text-xs text-white/35 mt-1">Fitness · Nutrition · T1D</p>
         </div>
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto scrollbar-hide">
-          {NAV_ITEMS.map((item) => {
+          {SIDEBAR_ITEMS.map((item) => {
             const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
             return (
               <Link
@@ -73,7 +80,7 @@ export function Navigation() {
       {/* Mobile bottom nav */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#12121a]/95 backdrop-blur-xl border-t border-white/[0.06] z-50">
         <div className="flex justify-around py-2 pb-safe">
-          {NAV_ITEMS.slice(0, 5).map((item) => {
+          {BOTTOM_NAV_ITEMS.map((item) => {
             const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
             return (
               <Link

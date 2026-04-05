@@ -8,7 +8,7 @@ const PRECACHE_URLS = [
   "/running",
   "/diabete",
   "/profil",
-  "/diagnostic",
+  "/profil/diagnostic",
   "/manifest.json",
 ];
 
