@@ -181,7 +181,7 @@ export default function MuscuPage() {
                   <Badge color="gray">Split : {String(muscuDiagnosticData.preferredSplit).replace(/_/g, " ")}</Badge>
                 )}
               </div>
-              <Button onClick={handleGenerate}>Générer mon programme</Button>
+              <Button onClick={handleGenerate} size="lg" className="touch-target">Générer mon programme</Button>
             </>
           )}
         </div>

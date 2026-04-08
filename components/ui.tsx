@@ -191,7 +191,8 @@ export function Button({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex items-center justify-center gap-2 transition-all ${variants[variant]} ${sizes[size]} ${
+      style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+      className={`inline-flex items-center justify-center gap-2 transition-all cursor-pointer select-none ${variants[variant]} ${sizes[size]} ${
         disabled ? "opacity-40 cursor-not-allowed" : ""
       } ${className}`}
     >

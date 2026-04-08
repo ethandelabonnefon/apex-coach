@@ -45,14 +45,27 @@ export default function CoachButton({ onClick, hasUnread }: CoachButtonProps) {
     };
   }, []);
 
-  // Initialize default position on mount
+  // Initialize position on mount: default to bottom-right, and force-snap any
+  // previously saved position to an edge so it can never block center content.
   useEffect(() => {
     if (pos.x === -1 && pos.y === -1) {
-      const defaultPos = clamp(window.innerWidth - 56 - 24, window.innerHeight - 56 - 100);
+      const defaultPos = clamp(window.innerWidth - 56 - 16, window.innerHeight - 56 - 100);
       setPos(defaultPos);
       savePosition(defaultPos);
+      return;
     }
-  }, [pos, clamp]);
+    const size = 56;
+    const margin = 16;
+    const rightEdge = window.innerWidth - size - margin;
+    if (pos.x !== margin && pos.x !== rightEdge) {
+      const centerX = pos.x + size / 2;
+      const snappedX = centerX < window.innerWidth / 2 ? margin : rightEdge;
+      const snapped = clamp(snappedX, pos.y);
+      setPos(snapped);
+      savePosition(snapped);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     isDragging.current = true;
@@ -76,12 +89,27 @@ export default function CoachButton({ onClick, hasUnread }: CoachButtonProps) {
     setPos(newPos);
   }, [clamp]);
 
+  // Snap to nearest horizontal edge (left or right) so the button never
+  // blocks center content like the "Générer mon programme" button.
+  const snapToEdge = useCallback((p: { x: number; y: number }) => {
+    const size = 56;
+    const margin = 16;
+    const centerX = p.x + size / 2;
+    const snappedX =
+      centerX < window.innerWidth / 2
+        ? margin
+        : window.innerWidth - size - margin;
+    return clamp(snappedX, p.y);
+  }, [clamp]);
+
   const handleTouchEnd = useCallback(() => {
     isDragging.current = false;
     if (hasMoved.current) {
-      savePosition(pos);
+      const snapped = snapToEdge(pos);
+      setPos(snapped);
+      savePosition(snapped);
     }
-  }, [pos]);
+  }, [pos, snapToEdge]);
 
   const handleClick = useCallback(() => {
     // If drag just ended with movement, skip this click
