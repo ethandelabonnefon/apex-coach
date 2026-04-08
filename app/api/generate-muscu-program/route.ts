@@ -73,11 +73,32 @@ GÉNÈRE UN PROGRAMME MUSCULATION PERSONNALISÉ avec cette structure JSON :
 
 Réponds UNIQUEMENT avec le JSON, sans texte avant ou après. Sois précis et scientifique. Réponds en français.`;
 
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4000,
-      messages: [{ role: "user", content: prompt }],
-    });
+    // Retry on 529 (overloaded) with exponential backoff.
+    const callAnthropic = async () => {
+      const maxRetries = 3;
+      let lastErr: unknown = null;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          return await anthropic.messages.create({
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 4000,
+            messages: [{ role: "user", content: prompt }],
+          });
+        } catch (err) {
+          lastErr = err;
+          const status = (err as { status?: number })?.status;
+          const overloaded = status === 529 || status === 503;
+          if (!overloaded || attempt === maxRetries) throw err;
+          const wait = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
+          console.warn(`[generate-muscu-program] API ${status}, retry ${attempt + 1}/${maxRetries} in ${wait}ms`);
+          await new Promise((r) => setTimeout(r, wait));
+        }
+      }
+      throw lastErr;
+    };
+
+    const message = await callAnthropic();
+    if (!message) throw new Error("No response from Anthropic");
 
     const textBlock = message.content.find((b) => b.type === "text");
     const responseText = textBlock?.text || "{}";
@@ -94,6 +115,8 @@ Réponds UNIQUEMENT avec le JSON, sans texte avant ou après. Sois précis et sc
   } catch (error) {
     console.error("Erreur generate-muscu-program:", error);
     const message = error instanceof Error ? error.message : "Erreur inconnue";
-    return Response.json({ error: message }, { status: 500 });
+    const status = (error as { status?: number })?.status;
+    const httpStatus = status === 529 || status === 503 ? 503 : 500;
+    return Response.json({ error: message, code: status }, { status: httpStatus });
   }
 }

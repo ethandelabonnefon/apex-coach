@@ -97,13 +97,137 @@ function mapExperienceLevel(data: Record<string, unknown>): 'beginner' | 'interm
   return 'intermediate';
 }
 
-// Generate personalized program using LOCAL deterministic generator (no API)
+// Type for the AI route's JSON response
+interface AIProgramResponse {
+  fullAnalysis?: string;
+  programName?: string;
+  split?: string;
+  sessions?: Array<{
+    day: string;
+    name: string;
+    focus: string;
+    duration: number;
+    exercises: Array<{
+      name: string;
+      sets: number;
+      reps: string;
+      rir: number;
+      rest: number;
+      reasoning?: string;
+      cues?: string[];
+      alternatives?: string[];
+    }>;
+    t1dNotes?: string;
+  }>;
+  volumePerMuscle?: Record<string, { setsPerWeek: number; justification?: string }>;
+  t1dProtocol?: { preworkout?: string; postworkout?: string; alerts?: string[] };
+}
+
+function aiResponseToActiveProgram(
+  ai: AIProgramResponse,
+  daysPerWeek: number,
+  morphologyEntry: DiagnosticEntry | null,
+): ActiveProgram {
+  const sessions = (ai.sessions ?? []).map((s, sIdx) => ({
+    id: `ai-${sIdx}-${crypto.randomUUID().slice(0, 8)}`,
+    day: s.day,
+    name: s.name,
+    focus: s.focus,
+    duration: s.duration,
+    exercises: (s.exercises ?? []).map((ex, exIdx) => ({
+      order: exIdx + 1,
+      name: ex.name,
+      sets: ex.sets,
+      reps: ex.reps,
+      rir: ex.rir,
+      rest: ex.rest,
+      reasoning: ex.reasoning,
+      cues: ex.cues,
+      alternatives: ex.alternatives,
+    })),
+  }));
+
+  return {
+    id: crypto.randomUUID(),
+    name: ai.programName || "Programme personnalisé",
+    splitType: ai.split || "ppl",
+    daysPerWeek,
+    currentWeek: 1,
+    currentPhase: "accumulation",
+    sessions,
+    volumeDistribution: ai.volumePerMuscle || {},
+    generationReasoning: ai.fullAnalysis || "",
+    generatedFrom: {
+      muscuDiagDate: new Date().toISOString(),
+      morphologyDate: morphologyEntry?.date,
+    },
+    predictions: {},
+    t1dProtocol: {
+      preworkout: ai.t1dProtocol?.preworkout || "",
+      postworkout: ai.t1dProtocol?.postworkout || "",
+      alerts: ai.t1dProtocol?.alerts || [],
+    },
+    createdAt: new Date().toISOString(),
+    version: 1,
+    isGenerated: true,
+  };
+}
+
+// Generate personalized program — AI first (Claude), local fallback on failure.
 export async function generatePersonalizedProgram(params: {
   muscuDiagnosticData: Record<string, unknown>;
   morphologyEntry: DiagnosticEntry | null;
   profile: { name: string; age: number; height: number; weight: number; goals: string[] };
 }): Promise<ActiveProgram> {
   const { muscuDiagnosticData, morphologyEntry, profile } = params;
+  const daysPerWeek = Number(muscuDiagnosticData.daysPerWeek) || 4;
+
+  // ─── 1) Try AI generation first ──────────────────────────────
+  try {
+    console.log("[program-gen] trying AI generation");
+    const bodyMapAnalysisForAI = morphologyEntry
+      ? buildBodyAnalysis(morphologyEntry, profile.height, profile.weight)
+      : null;
+    const bodyMapText = bodyMapAnalysisForAI
+      ? bodyMapAnalysisForAI
+          .map((m) => `- ${m.name}: ${m.status}`)
+          .join("\n")
+      : null;
+
+    const res = await fetch("/api/generate-muscu-program", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        diagnosticData: muscuDiagnosticData,
+        userContext: {
+          name: profile.name,
+          age: profile.age,
+          height: profile.height,
+          weight: profile.weight,
+          goals: profile.goals,
+        },
+        bodyMapAnalysis: bodyMapText,
+        morphologyData: morphologyEntry,
+      }),
+    });
+
+    if (res.ok) {
+      const ai = (await res.json()) as AIProgramResponse;
+      if (ai.sessions && ai.sessions.length > 0) {
+        console.log("[program-gen] AI generation succeeded");
+        return aiResponseToActiveProgram(ai, daysPerWeek, morphologyEntry);
+      }
+      console.warn("[program-gen] AI returned empty sessions, falling back to local");
+    } else {
+      const body = await res.json().catch(() => ({}));
+      console.warn(`[program-gen] AI route ${res.status}, falling back to local`, body);
+    }
+  } catch (err) {
+    console.warn("[program-gen] AI generation failed, falling back to local:", err);
+  }
+
+  // ─── 2) Local deterministic fallback ─────────────────────────
+  console.log("[program-gen] using local generator");
 
   // Build body map analysis
   const bodyMapAnalysis = morphologyEntry
@@ -137,7 +261,7 @@ export async function generatePersonalizedProgram(params: {
 
   // Generate program locally — instant, deterministic, free
   const result = generateProgramLocal({
-    daysPerWeek: Number(muscuDiagnosticData.daysPerWeek) || 4,
+    daysPerWeek,
     splitType: String(muscuDiagnosticData.preferredSplit || ''),
     morphology: {
       armLength: mapLength(longueurs.bras || longueurs.arms),
@@ -158,7 +282,7 @@ export async function generatePersonalizedProgram(params: {
     id: crypto.randomUUID(),
     name: result.programName,
     splitType: result.split,
-    daysPerWeek: Number(muscuDiagnosticData.daysPerWeek) || 4,
+    daysPerWeek,
     currentWeek: 1,
     currentPhase: "accumulation",
     sessions: result.sessions.map(session => ({
