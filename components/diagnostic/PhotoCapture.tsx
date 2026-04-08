@@ -199,7 +199,6 @@ export default function PhotoCapture({ photos, onPhotosChange }: PhotoCapturePro
               ref={(el) => { fileInputRefs.current[i] = el; }}
               type="file"
               accept="image/*"
-              capture="user"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
