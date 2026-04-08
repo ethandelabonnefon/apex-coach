@@ -79,6 +79,7 @@ export default function MuscuPage() {
 
   // Generate program from diagnostic
   const handleGenerate = async () => {
+    console.log("[muscu] handleGenerate triggered");
     setGenerating(true);
     try {
       const morphologyEntry = diagnosticHistory[0] || null;

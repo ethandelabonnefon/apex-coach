@@ -7,12 +7,15 @@ interface CoachButtonProps {
   hasUnread?: boolean;
 }
 
-const STORAGE_KEY = "apex-coach-btn-pos";
+const STORAGE_KEY = "apex-coach-btn-pos-v2";
+const LEGACY_KEY = "apex-coach-btn-pos";
 const DEFAULT_POS = { x: -1, y: -1 }; // -1 means "use default"
 
 function loadPosition(): { x: number; y: number } {
   if (typeof window === "undefined") return DEFAULT_POS;
   try {
+    // Drop any pre-v2 stored position so users on a stale overlap get reset.
+    localStorage.removeItem(LEGACY_KEY);
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw);
   } catch {}
@@ -45,22 +48,36 @@ export default function CoachButton({ onClick, hasUnread }: CoachButtonProps) {
     };
   }, []);
 
+  // Constrain Y to a "safe zone" — only the very top (under header) or the
+  // bottom (above mobile nav). This guarantees the button can never sit over
+  // central content like the "Générer mon programme" CTA.
+  const constrainY = useCallback((y: number) => {
+    const size = 56;
+    const topZoneMax = 80; // just under app header
+    const bottomZoneMin = window.innerHeight - size - 100; // above bottom nav
+    if (y <= (topZoneMax + bottomZoneMin) / 2) {
+      return Math.min(Math.max(y, 16), topZoneMax);
+    }
+    return Math.max(Math.min(y, bottomZoneMin), bottomZoneMin - 60);
+  }, []);
+
   // Initialize position on mount: default to bottom-right, and force-snap any
-  // previously saved position to an edge so it can never block center content.
+  // previously saved position to a safe edge zone.
   useEffect(() => {
+    const size = 56;
+    const margin = 16;
     if (pos.x === -1 && pos.y === -1) {
-      const defaultPos = clamp(window.innerWidth - 56 - 16, window.innerHeight - 56 - 100);
+      const defaultPos = clamp(window.innerWidth - size - margin, window.innerHeight - size - 100);
       setPos(defaultPos);
       savePosition(defaultPos);
       return;
     }
-    const size = 56;
-    const margin = 16;
     const rightEdge = window.innerWidth - size - margin;
-    if (pos.x !== margin && pos.x !== rightEdge) {
-      const centerX = pos.x + size / 2;
-      const snappedX = centerX < window.innerWidth / 2 ? margin : rightEdge;
-      const snapped = clamp(snappedX, pos.y);
+    const centerX = pos.x + size / 2;
+    const snappedX = centerX < window.innerWidth / 2 ? margin : rightEdge;
+    const snappedY = constrainY(pos.y);
+    if (snappedX !== pos.x || snappedY !== pos.y) {
+      const snapped = clamp(snappedX, snappedY);
       setPos(snapped);
       savePosition(snapped);
     }
@@ -89,8 +106,8 @@ export default function CoachButton({ onClick, hasUnread }: CoachButtonProps) {
     setPos(newPos);
   }, [clamp]);
 
-  // Snap to nearest horizontal edge (left or right) so the button never
-  // blocks center content like the "Générer mon programme" button.
+  // Snap to nearest edge (left/right horizontally, top/bottom safe zone
+  // vertically) so the button never blocks center content.
   const snapToEdge = useCallback((p: { x: number; y: number }) => {
     const size = 56;
     const margin = 16;
@@ -99,8 +116,8 @@ export default function CoachButton({ onClick, hasUnread }: CoachButtonProps) {
       centerX < window.innerWidth / 2
         ? margin
         : window.innerWidth - size - margin;
-    return clamp(snappedX, p.y);
-  }, [clamp]);
+    return clamp(snappedX, constrainY(p.y));
+  }, [clamp, constrainY]);
 
   const handleTouchEnd = useCallback(() => {
     isDragging.current = false;

@@ -122,11 +122,18 @@ export async function generatePersonalizedProgram(params: {
   const longueurs = (morphologyEntry?.longueurs || {}) as Record<string, string>;
   const mobilite = (morphologyEntry?.mobilite || {}) as Record<string, string>;
 
-  // Build equipment list
-  const diagEquipment = muscuDiagnosticData.equipment as string[] | undefined;
-  const equipment: Equipment[] = diagEquipment?.length
-    ? diagEquipment.filter((e): e is Equipment => DEFAULT_EQUIPMENT.includes(e as Equipment))
-    : DEFAULT_EQUIPMENT;
+  // Build equipment list — accept either an array of items or a single
+  // string preset (e.g. "gym_complete", "home_minimal").
+  const rawEquipment = muscuDiagnosticData.equipment as string | string[] | undefined;
+  const diagEquipment: string[] = Array.isArray(rawEquipment)
+    ? rawEquipment
+    : typeof rawEquipment === "string" && rawEquipment.length > 0
+      ? [rawEquipment]
+      : [];
+  const filtered = diagEquipment.filter((e): e is Equipment =>
+    DEFAULT_EQUIPMENT.includes(e as Equipment),
+  );
+  const equipment: Equipment[] = filtered.length > 0 ? filtered : DEFAULT_EQUIPMENT;
 
   // Generate program locally — instant, deterministic, free
   const result = generateProgramLocal({
