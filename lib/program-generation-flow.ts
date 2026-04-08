@@ -119,7 +119,7 @@ interface AIProgramResponse {
     }>;
     t1dNotes?: string;
   }>;
-  volumePerMuscle?: Record<string, { setsPerWeek: number; justification?: string }>;
+  volumePerMuscle?: Record<string, { setsPerWeek: number; status?: string; justification?: string }>;
   t1dProtocol?: { preworkout?: string; postworkout?: string; alerts?: string[] };
 }
 
@@ -155,7 +155,16 @@ function aiResponseToActiveProgram(
     currentWeek: 1,
     currentPhase: "accumulation",
     sessions,
-    volumeDistribution: ai.volumePerMuscle || {},
+    volumeDistribution: Object.fromEntries(
+      Object.entries(ai.volumePerMuscle ?? {}).map(([k, v]) => [
+        k,
+        {
+          setsPerWeek: v.setsPerWeek,
+          status: v.status ?? "",
+          justification: v.justification ?? "",
+        },
+      ]),
+    ),
     generationReasoning: ai.fullAnalysis || "",
     generatedFrom: {
       muscuDiagDate: new Date().toISOString(),
