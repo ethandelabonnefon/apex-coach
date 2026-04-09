@@ -118,7 +118,20 @@ export default function RunningDiagnosticForm() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <SectionTitle className="!mb-0">Plan Running généré</SectionTitle>
-          <Button variant="ghost" size="sm" onClick={() => { setResult(null); setStep(0); }}>Refaire le diagnostic</Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              useStore.setState({
+                runningDiagnosticCompleted: false,
+                generatedRunningPlan: null,
+              });
+              setResult(null);
+              setStep(0);
+            }}
+          >
+            Refaire le diagnostic
+          </Button>
         </div>
         <InfoBox variant="success">Plan running personnalisé généré avec succès !</InfoBox>
 
@@ -175,7 +188,11 @@ export default function RunningDiagnosticForm() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <SectionTitle className="!mb-0">Diagnostic Running</SectionTitle>
-          <Button variant="secondary" size="sm" onClick={() => setStep(0)}>Modifier</Button>
+          <Button variant="secondary" size="sm" onClick={() => {
+            useStore.setState({ runningDiagnosticCompleted: false, generatedRunningPlan: null });
+            setResult(null);
+            setStep(0);
+          }}>Modifier</Button>
         </div>
         <InfoBox variant="success">Diagnostic running complété !</InfoBox>
         <Card>

@@ -92,7 +92,22 @@ export default function MuscuDiagnosticForm() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <SectionTitle className="!mb-0">Programme généré</SectionTitle>
-          <Button variant="ghost" size="sm" onClick={() => { setResult(null); setStep(0); }}>Refaire le diagnostic</Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              // Fully reset: local state + store flags so the result view
+              // is dismissed and the form re-opens at step 0.
+              useStore.setState({
+                muscuDiagnosticCompleted: false,
+                generatedMuscuProgram: null,
+              });
+              setResult(null);
+              setStep(0);
+            }}
+          >
+            Refaire le diagnostic
+          </Button>
         </div>
         <InfoBox variant="success">Programme muscu personnalisé généré avec succès !</InfoBox>
         {Boolean((program as Record<string, unknown>).fullAnalysis) && (
