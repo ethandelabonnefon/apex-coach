@@ -8,10 +8,11 @@ interface ProgramUpdateModalProps {
   change: ProgramChange;
   diff: DiagnosticDiff | null;
   onAcknowledge: () => void;
+  onApply?: () => void;
   onClose: () => void;
 }
 
-export default function ProgramUpdateModal({ change, diff, onAcknowledge, onClose }: ProgramUpdateModalProps) {
+export default function ProgramUpdateModal({ change, diff, onAcknowledge, onApply, onClose }: ProgramUpdateModalProps) {
   return (
     <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 overflow-y-auto">
       <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-white/[0.08] bg-[#12121a]">
@@ -188,8 +189,13 @@ export default function ProgramUpdateModal({ change, diff, onAcknowledge, onClos
 
         {/* Footer */}
         <div className="sticky bottom-0 bg-[#12121a] border-t border-white/[0.06] p-5 flex justify-end gap-3">
-          <Button variant="ghost" onClick={onClose}>Voir détail</Button>
-          <Button onClick={onAcknowledge}>C'est compris !</Button>
+          <Button variant="ghost" onClick={onClose}>Fermer</Button>
+          <Button variant="secondary" onClick={onAcknowledge}>Ignorer</Button>
+          {onApply && (
+            <Button onClick={onApply}>
+              Appliquer au programme
+            </Button>
+          )}
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Card, PageHeader, Badge, Button, SectionTitle, ProgressBar, InfoBox } from "@/components/ui";
 import { useStore } from "@/lib/store";
 import {
@@ -11,6 +12,7 @@ import {
   getPhase,
 } from "@/lib/running-science";
 import { HALF_MARATHON_PLAN } from "@/lib/constants";
+import type { CompletedRunningSession } from "@/types";
 import Link from "next/link";
 
 const BASE_VOLUME = 20;
@@ -173,8 +175,145 @@ function getSessionTypeLabel(type: string): string {
   }
 }
 
+function SessionTrackingForm({
+  weekNumber,
+  sessionIndex,
+  plannedDistance,
+  onSave,
+  onCancel,
+}: {
+  weekNumber: number;
+  sessionIndex: number;
+  plannedDistance: number;
+  onSave: (session: CompletedRunningSession) => void;
+  onCancel: () => void;
+}) {
+  const [distance, setDistance] = useState(plannedDistance.toString());
+  const [duration, setDuration] = useState("");
+  const [glucoseBefore, setGlucoseBefore] = useState("");
+  const [glucoseAfter, setGlucoseAfter] = useState("");
+  const [feeling, setFeeling] = useState<CompletedRunningSession["feeling"]>("good");
+  const [notes, setNotes] = useState("");
+
+  const feelings: { value: CompletedRunningSession["feeling"]; label: string }[] = [
+    { value: "great", label: "Super" },
+    { value: "good", label: "Bien" },
+    { value: "ok", label: "OK" },
+    { value: "hard", label: "Dur" },
+    { value: "bad", label: "Difficile" },
+  ];
+
+  const handleSubmit = () => {
+    const dist = parseFloat(distance);
+    const dur = parseFloat(duration);
+    if (!dist || !dur) return;
+    onSave({
+      id: `run-${Date.now()}`,
+      weekNumber,
+      sessionIndex,
+      date: new Date().toISOString(),
+      plannedDistance,
+      actualDistance: dist,
+      actualDuration: dur,
+      avgPace: dur / dist,
+      glucoseBefore: glucoseBefore ? parseFloat(glucoseBefore) : null,
+      glucoseAfter: glucoseAfter ? parseFloat(glucoseAfter) : null,
+      feeling,
+      notes,
+    });
+  };
+
+  return (
+    <div className="mt-4 space-y-3 border-t border-white/[0.06] pt-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs text-white/40 mb-1 block">Distance (km)</label>
+          <input
+            type="number"
+            step="0.1"
+            value={distance}
+            onChange={(e) => setDistance(e.target.value)}
+            className="w-full bg-white/[0.06] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-white/40 mb-1 block">Duree (min)</label>
+          <input
+            type="number"
+            step="1"
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+            placeholder="ex: 45"
+            className="w-full bg-white/[0.06] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white"
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs text-white/40 mb-1 block">Glycemie avant (mg/dL)</label>
+          <input
+            type="number"
+            value={glucoseBefore}
+            onChange={(e) => setGlucoseBefore(e.target.value)}
+            placeholder="opt."
+            className="w-full bg-white/[0.06] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-white/40 mb-1 block">Glycemie apres (mg/dL)</label>
+          <input
+            type="number"
+            value={glucoseAfter}
+            onChange={(e) => setGlucoseAfter(e.target.value)}
+            placeholder="opt."
+            className="w-full bg-white/[0.06] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="text-xs text-white/40 mb-1.5 block">Ressenti</label>
+        <div className="flex gap-2">
+          {feelings.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setFeeling(f.value)}
+              style={{ touchAction: "manipulation" }}
+              className={`flex-1 py-1.5 text-xs rounded-lg border transition-all cursor-pointer select-none ${
+                feeling === f.value
+                  ? "bg-[#00d4ff]/15 border-[#00d4ff]/40 text-[#00d4ff]"
+                  : "bg-white/[0.03] border-white/[0.06] text-white/50 hover:bg-white/[0.06]"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <label className="text-xs text-white/40 mb-1 block">Notes</label>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={2}
+          placeholder="Sensations, meteo, remarques..."
+          className="w-full bg-white/[0.06] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white resize-none"
+        />
+      </div>
+      <div className="flex gap-2">
+        <Button variant="primary" size="sm" onClick={handleSubmit} disabled={!distance || !duration}>
+          Enregistrer
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          Annuler
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function RunningPage() {
-  const { currentRunningWeek, setRunningWeek, profile } = useStore();
+  const { currentRunningWeek, setRunningWeek, profile, completedRunningSessions, addCompletedRunningSession, deleteCompletedRunningSession } = useStore();
+  const [trackingSession, setTrackingSession] = useState<number | null>(null);
 
   const vma = calculateVMA(VO2MAX);
   const zones = calculateZones(vma);
@@ -189,6 +328,23 @@ export default function RunningPage() {
   });
 
   const currentWeekData = weeks[currentRunningWeek - 1];
+
+  // Completed sessions for current week
+  const weekCompletedSessions = completedRunningSessions.filter(
+    (s) => s.weekNumber === currentRunningWeek
+  );
+  const getSessionCompletion = (sessionIdx: number) =>
+    weekCompletedSessions.find((s) => s.sessionIndex === sessionIdx);
+
+  const weekTotalPlanned = currentWeekData.sessions.reduce((sum, s) => sum + s.distance, 0);
+  const weekTotalDone = weekCompletedSessions.reduce((sum, s) => sum + s.actualDistance, 0);
+  const weekSessionsDone = weekCompletedSessions.length;
+  const weekSessionsTotal = currentWeekData.sessions.length;
+
+  // Overall plan progress
+  const allCompletedWeeks = new Set(completedRunningSessions.map((s) => s.weekNumber));
+  const totalCompletedSessions = completedRunningSessions.length;
+  const totalPlannedSessions = weeks.reduce((sum, w) => sum + w.sessions.length, 0);
 
   const races = [
     { label: "5K", dist: 5 },
@@ -247,6 +403,42 @@ export default function RunningPage() {
         </div>
       </Card>
 
+      {/* Weekly Progress */}
+      <Card className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <SectionTitle className="!mb-0">Progression semaine</SectionTitle>
+          <span className="text-xs text-white/40">
+            Plan: {totalCompletedSessions}/{totalPlannedSessions} seances
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-4 mb-3">
+          <div className="text-center">
+            <p className="text-2xl font-bold text-[#00ff94]">
+              {weekSessionsDone}/{weekSessionsTotal}
+            </p>
+            <p className="text-xs text-white/40">Seances</p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-bold text-[#00d4ff]">
+              {weekTotalDone.toFixed(1)}
+            </p>
+            <p className="text-xs text-white/40">km realises</p>
+          </div>
+          <div className="text-center">
+            <p className={`text-2xl font-bold ${weekTotalDone >= weekTotalPlanned ? "text-[#00ff94]" : "text-white/60"}`}>
+              {weekTotalPlanned > 0 ? Math.round((weekTotalDone / weekTotalPlanned) * 100) : 0}%
+            </p>
+            <p className="text-xs text-white/40">du volume</p>
+          </div>
+        </div>
+        <ProgressBar
+          value={weekTotalDone}
+          max={weekTotalPlanned || 1}
+          color={weekTotalDone >= weekTotalPlanned ? "#00ff94" : "#00d4ff"}
+          showValue={false}
+        />
+      </Card>
+
       {/* Pace Zones Summary */}
       <Card className="mb-6">
         <SectionTitle>Allures par zone</SectionTitle>
@@ -285,55 +477,124 @@ export default function RunningPage() {
       {/* Current Week Detail */}
       <SectionTitle>Detail Semaine {currentRunningWeek} — {currentWeekData.phase}</SectionTitle>
       <div className="grid sm:grid-cols-2 gap-4 mb-8">
-        {currentWeekData.sessions.map((session, idx) => (
-          <Card key={idx} glow={session.type === "intervals" ? "orange" : "blue"}>
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <h3 className="font-semibold text-white">{session.name}</h3>
-                <p className="text-white/40 text-xs mt-0.5">Seance {idx + 1}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge color={session.type === "intervals" ? "orange" : session.type === "tempo" ? "purple" : "blue"}>
-                  {getSessionTypeLabel(session.type)}
-                </Badge>
-                <Badge color="gray">{session.zone}</Badge>
-              </div>
-            </div>
+        {currentWeekData.sessions.map((session, idx) => {
+          const completed = getSessionCompletion(idx);
+          const isTracking = trackingSession === idx;
 
-            <div className="space-y-3">
-              <div className="flex items-center gap-4">
+          return (
+            <Card key={idx} glow={completed ? "green" : session.type === "intervals" ? "orange" : "blue"}>
+              <div className="flex items-start justify-between mb-3">
                 <div>
-                  <p className="text-xs text-white/40">Distance</p>
-                  <p className="text-lg font-bold text-[#00d4ff]">{session.distance} km</p>
+                  <h3 className="font-semibold text-white">{session.name}</h3>
+                  <p className="text-white/40 text-xs mt-0.5">Seance {idx + 1}</p>
                 </div>
-                {session.paceRange && (
+                <div className="flex items-center gap-2">
+                  {completed && <Badge color="green">Fait</Badge>}
+                  <Badge color={session.type === "intervals" ? "orange" : session.type === "tempo" ? "purple" : "blue"}>
+                    {getSessionTypeLabel(session.type)}
+                  </Badge>
+                  <Badge color="gray">{session.zone}</Badge>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-4">
                   <div>
-                    <p className="text-xs text-white/40">Allure</p>
-                    <p className="text-sm text-white/80">{session.paceRange}</p>
+                    <p className="text-xs text-white/40">Distance</p>
+                    <p className="text-lg font-bold text-[#00d4ff]">{session.distance} km</p>
+                  </div>
+                  {session.paceRange && (
+                    <div>
+                      <p className="text-xs text-white/40">Allure</p>
+                      <p className="text-sm text-white/80">{session.paceRange}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-white/[0.03] rounded-lg p-3">
+                  <p className="text-xs text-white/40 mb-1">Structure</p>
+                  <p className="text-sm text-white/70">{session.details}</p>
+                </div>
+
+                {session.intervals && (
+                  <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-3">
+                    <p className="text-xs text-orange-400 font-semibold mb-1">Fractionne</p>
+                    <p className="text-sm text-white/70">
+                      {session.intervals.reps} x {session.intervals.distance}m
+                      <span className="text-white/40"> | Recup: {session.intervals.recovery}m trot</span>
+                    </p>
+                    <p className="text-xs text-white/40 mt-1">
+                      Allure rapide: {formatPace(zones.z4.paceMinKm.min)} - {formatPace(zones.z5.paceMinKm.max)} /km
+                    </p>
                   </div>
                 )}
               </div>
 
-              <div className="bg-white/[0.03] rounded-lg p-3">
-                <p className="text-xs text-white/40 mb-1">Structure</p>
-                <p className="text-sm text-white/70">{session.details}</p>
-              </div>
-
-              {session.intervals && (
-                <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-3">
-                  <p className="text-xs text-orange-400 font-semibold mb-1">Fractionne</p>
-                  <p className="text-sm text-white/70">
-                    {session.intervals.reps} x {session.intervals.distance}m
-                    <span className="text-white/40"> | Recup: {session.intervals.recovery}m trot</span>
-                  </p>
-                  <p className="text-xs text-white/40 mt-1">
-                    Allure rapide: {formatPace(zones.z4.paceMinKm.min)} - {formatPace(zones.z5.paceMinKm.max)} /km
-                  </p>
+              {/* Completed session summary */}
+              {completed && !isTracking && (
+                <div className="mt-4 border-t border-white/[0.06] pt-3">
+                  <div className="grid grid-cols-3 gap-2 text-center mb-2">
+                    <div>
+                      <p className="text-xs text-white/40">Realise</p>
+                      <p className="text-sm font-semibold text-[#00ff94]">{completed.actualDistance} km</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-white/40">Duree</p>
+                      <p className="text-sm font-semibold text-white">{completed.actualDuration} min</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-white/40">Allure moy.</p>
+                      <p className="text-sm font-semibold text-[#00d4ff]">{formatPace(completed.avgPace)}/km</p>
+                    </div>
+                  </div>
+                  {(completed.glucoseBefore || completed.glucoseAfter) && (
+                    <div className="flex items-center gap-3 text-xs text-white/50">
+                      {completed.glucoseBefore && <span>Glycemie avant: <span className="text-white/70">{completed.glucoseBefore} mg/dL</span></span>}
+                      {completed.glucoseAfter && <span>Apres: <span className="text-white/70">{completed.glucoseAfter} mg/dL</span></span>}
+                    </div>
+                  )}
+                  {completed.notes && (
+                    <p className="text-xs text-white/40 mt-1 italic">{completed.notes}</p>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2 !text-[#ff4757]"
+                    onClick={() => deleteCompletedRunningSession(completed.id)}
+                  >
+                    Supprimer
+                  </Button>
                 </div>
               )}
-            </div>
-          </Card>
-        ))}
+
+              {/* Tracking form */}
+              {isTracking && (
+                <SessionTrackingForm
+                  weekNumber={currentRunningWeek}
+                  sessionIndex={idx}
+                  plannedDistance={session.distance}
+                  onSave={(s) => {
+                    addCompletedRunningSession(s);
+                    setTrackingSession(null);
+                  }}
+                  onCancel={() => setTrackingSession(null)}
+                />
+              )}
+
+              {/* Log button */}
+              {!completed && !isTracking && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="mt-4 w-full"
+                  onClick={() => setTrackingSession(idx)}
+                >
+                  Logger cette seance
+                </Button>
+              )}
+            </Card>
+          );
+        })}
       </div>
 
       {/* 14-Week Plan Overview */}
@@ -343,6 +604,9 @@ export default function RunningPage() {
           {weeks.map((week) => {
             const isCurrent = week.weekNum === currentRunningWeek;
             const sessionTypes = week.sessions.map((s) => getSessionTypeLabel(s.type)).join(" + ");
+            const weekDone = completedRunningSessions.filter((s) => s.weekNumber === week.weekNum).length;
+            const weekTotal = week.sessions.length;
+            const weekFullyDone = weekDone >= weekTotal;
             return (
               <button
                 key={week.weekNum}
@@ -350,13 +614,15 @@ export default function RunningPage() {
                 className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left ${
                   isCurrent
                     ? "bg-[#00d4ff]/10 border border-[#00d4ff]/30"
+                    : weekFullyDone
+                    ? "bg-[#00ff94]/5 border border-[#00ff94]/15"
                     : "hover:bg-white/[0.03] border border-transparent"
                 }`}
               >
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
-                  isCurrent ? "bg-[#00d4ff] text-black" : "bg-white/[0.06] text-white/60"
+                  weekFullyDone ? "bg-[#00ff94] text-black" : isCurrent ? "bg-[#00d4ff] text-black" : "bg-white/[0.06] text-white/60"
                 }`}>
-                  {week.weekNum}
+                  {weekFullyDone ? "✓" : week.weekNum}
                 </div>
 
                 <Badge color={getPhaseColor(week.phase)}>{week.phase}</Badge>
@@ -367,12 +633,12 @@ export default function RunningPage() {
                       <ProgressBar
                         value={week.volume}
                         max={maxVolume}
-                        color={isCurrent ? "#00d4ff" : "#ffffff30"}
+                        color={weekFullyDone ? "#00ff94" : isCurrent ? "#00d4ff" : "#ffffff30"}
                         showValue={false}
                       />
                     </div>
                     <span className={`text-xs font-medium min-w-[50px] text-right ${
-                      isCurrent ? "text-[#00d4ff]" : "text-white/50"
+                      weekFullyDone ? "text-[#00ff94]" : isCurrent ? "text-[#00d4ff]" : "text-white/50"
                     }`}>
                       {week.volume} km
                     </span>
@@ -380,10 +646,10 @@ export default function RunningPage() {
                 </div>
 
                 <span className="text-xs text-white/35 min-w-[120px] text-right hidden md:block">
-                  {sessionTypes}
+                  {weekDone > 0 ? `${weekDone}/${weekTotal}` : sessionTypes}
                 </span>
 
-                {isCurrent && (
+                {isCurrent && !weekFullyDone && (
                   <span className="text-[#00d4ff] text-xs font-semibold">EN COURS</span>
                 )}
               </button>

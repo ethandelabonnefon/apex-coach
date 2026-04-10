@@ -246,6 +246,7 @@ export default function DiagnosticPage() {
     programChanges, addProgramChange, acknowledgeProgramChange,
     muscuProgram,
     muscuDiagnosticCompleted, runningDiagnosticCompleted,
+    activeProgram, setActiveProgram,
   } = useStore();
   const height = profile.height || 180;
 
@@ -276,6 +277,7 @@ export default function DiagnosticPage() {
   const [analyzingPhotos, setAnalyzingPhotos] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [updatingPrograms, setUpdatingPrograms] = useState(false);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
 
   // Pre-fill form from last diagnostic entry
   const lastEntry = diagnosticHistory[0] || null;
@@ -442,6 +444,48 @@ export default function DiagnosticPage() {
     }
   };
 
+  // Apply program changes from the update modal
+  const applyProgramChanges = (change: ProgramChange) => {
+    if (!activeProgram) return;
+
+    const updatedProgram = { ...activeProgram };
+    const updatedSessions = updatedProgram.sessions.map((session) => {
+      const updatedExercises = session.exercises.map((ex) => {
+        // Apply exercise swaps
+        const swap = change.exerciseChanges.find(
+          (c) => c.oldExercise.toLowerCase() === ex.name.toLowerCase()
+        );
+        if (swap) {
+          return { ...ex, name: swap.newExercise, reasoning: swap.reason };
+        }
+        return ex;
+      });
+      return { ...session, exercises: updatedExercises };
+    });
+
+    // Apply volume adjustments to distribution
+    const updatedVolume = { ...updatedProgram.volumeDistribution };
+    for (const [muscle, adj] of Object.entries(change.volumeAdjustments)) {
+      if (updatedVolume[muscle]) {
+        updatedVolume[muscle] = {
+          ...updatedVolume[muscle],
+          setsPerWeek: adj.after,
+          justification: adj.reason,
+        };
+      }
+    }
+
+    setActiveProgram({
+      ...updatedProgram,
+      sessions: updatedSessions,
+      volumeDistribution: updatedVolume,
+      version: updatedProgram.version + 1,
+    });
+
+    acknowledgeProgramChange(change.id);
+    setShowProgramModal(false);
+  };
+
   // Full form submit
   const handleSubmit = async () => {
     const result = computeAnalysis(mensurations, longueurs, mobilite, historique, weakPoints, height);
@@ -544,6 +588,7 @@ export default function DiagnosticPage() {
               acknowledgeProgramChange(latestProgramChange.id);
               setShowProgramModal(false);
             }}
+            onApply={activeProgram ? () => applyProgramChanges(latestProgramChange) : undefined}
             onClose={() => setShowProgramModal(false)}
           />
         )}
@@ -577,21 +622,82 @@ export default function DiagnosticPage() {
             <div className="space-y-2">
               {diagnosticHistory.map((entry, i) => {
                 const date = new Date(entry.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+                const isExpanded = expandedHistoryId === entry.id;
                 return (
                   <Card key={entry.id}>
-                    <div className="flex items-center justify-between">
+                    <button
+                      onClick={() => setExpandedHistoryId(isExpanded ? null : entry.id)}
+                      className="w-full flex items-center justify-between cursor-pointer"
+                      style={{ touchAction: "manipulation" }}
+                    >
                       <div className="flex items-center gap-3">
                         <div className={`w-2 h-2 rounded-full ${i === 0 ? "bg-[#00ff94]" : "bg-white/20"}`} />
-                        <div>
+                        <div className="text-left">
                           <p className="text-sm text-white/80">{date}</p>
                           <p className="text-xs text-white/35">
                             {entry.photos?.length ? `${entry.photos.length} photos` : "Sans photos"}
                             {entry.weakPoints?.length ? ` · ${entry.weakPoints.length} points faibles` : ""}
+                            {entry.photoAnalysis ? " · Analyse IA" : ""}
                           </p>
                         </div>
                       </div>
-                      {i === 0 && <Badge color="green">Actuel</Badge>}
-                    </div>
+                      <div className="flex items-center gap-2">
+                        {i === 0 && <Badge color="green">Actuel</Badge>}
+                        <span className={`text-white/30 text-xs transition-transform ${isExpanded ? "rotate-180" : ""}`}>▼</span>
+                      </div>
+                    </button>
+                    {isExpanded && (
+                      <div className="mt-4 pt-4 border-t border-white/[0.06] space-y-4">
+                        {/* Photos thumbnails */}
+                        {entry.photos && entry.photos.length > 0 && (
+                          <div className="flex gap-3 overflow-x-auto pb-2">
+                            {entry.photos.map((photo, pi) => (
+                              <img
+                                key={pi}
+                                src={photo}
+                                alt={`Photo ${pi + 1}`}
+                                className="w-20 h-28 object-cover rounded-lg border border-white/10 shrink-0"
+                              />
+                            ))}
+                          </div>
+                        )}
+                        {/* Photo analysis */}
+                        {entry.photoAnalysis && (
+                          <div>
+                            <p className="text-xs text-white/40 font-semibold mb-2">Analyse visuelle IA</p>
+                            <div className="text-xs text-white/60 leading-relaxed whitespace-pre-line bg-white/[0.02] rounded-lg p-3 max-h-64 overflow-y-auto">
+                              {entry.photoAnalysis}
+                            </div>
+                          </div>
+                        )}
+                        {/* Weak points */}
+                        {entry.weakPoints && entry.weakPoints.length > 0 && (
+                          <div>
+                            <p className="text-xs text-white/40 font-semibold mb-2">Points faibles</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {entry.weakPoints.map((wp) => <Badge key={wp} color="orange">{wp}</Badge>)}
+                            </div>
+                          </div>
+                        )}
+                        {/* Key measurements */}
+                        {entry.mensurations && (
+                          <div>
+                            <p className="text-xs text-white/40 font-semibold mb-2">Mensurations</p>
+                            <div className="grid grid-cols-4 gap-2">
+                              {Object.entries(entry.mensurations)
+                                .filter(([, v]) => v)
+                                .slice(0, 8)
+                                .map(([k, v]) => (
+                                  <div key={k} className="text-center p-1.5 rounded bg-white/[0.03]">
+                                    <p className="text-[10px] text-white/30">{k}</p>
+                                    <p className="text-xs text-white/70 font-mono">{v} cm</p>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </Card>
                 );
               })}
@@ -644,6 +750,7 @@ export default function DiagnosticPage() {
               acknowledgeProgramChange(latestProgramChange.id);
               setShowProgramModal(false);
             }}
+            onApply={activeProgram ? () => applyProgramChanges(latestProgramChange) : undefined}
             onClose={() => setShowProgramModal(false)}
           />
         )}

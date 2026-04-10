@@ -198,4 +198,19 @@ export interface WeekPlan {
   sessions: RunningSession[];
 }
 
+export interface CompletedRunningSession {
+  id: string;
+  weekNumber: number;
+  sessionIndex: number;
+  date: string;
+  plannedDistance: number;
+  actualDistance: number;
+  actualDuration: number; // minutes
+  avgPace: number; // min/km
+  glucoseBefore: number | null;
+  glucoseAfter: number | null;
+  feeling: 'great' | 'good' | 'ok' | 'hard' | 'bad';
+  notes: string;
+}
+
 export type MealTime = 'morning' | 'lunch' | 'snack' | 'dinner';

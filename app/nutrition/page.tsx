@@ -234,6 +234,51 @@ export default function NutritionPage() {
     fat: profile.targetFat || 85,
   };
 
+  // ---- Active meal plan (rebuild from targets if diagnostic done) ----
+  const activeMealPlan = useMemo(() => {
+    if (nutritionDiagnosticData) {
+      const diagData = nutritionDiagnosticData as Record<string, unknown>;
+      return distributeMacrosToMeals(
+        { protein: targets.protein, carbs: targets.carbs, fat: targets.fat },
+        (diagData.mealsPerDay as number) || 4,
+        (diagData.carbTiming as string) || "balanced"
+      );
+    }
+    // Default 4-meal plan from targets
+    return distributeMacrosToMeals(
+      { protein: targets.protein, carbs: targets.carbs, fat: targets.fat },
+      4,
+      "balanced"
+    );
+  }, [nutritionDiagnosticData, targets]);
+
+  // Match logged meals to plan slots
+  const mealSlotMatch = useMemo(() => {
+    const SLOT_TO_TYPE: Record<string, string[]> = {
+      "Petit-déjeuner": ["petit-dejeuner"],
+      "Déjeuner": ["dejeuner"],
+      "Dîner": ["diner"],
+      "Post-workout / Dîner": ["diner"],
+      "Pré-workout / Collation": ["collation"],
+      "Collation matin": ["collation"],
+      "Collation 1": ["collation"],
+      "Collation 2": ["collation"],
+      "Collation soir": ["collation"],
+      "Pré-workout": ["collation"],
+    };
+    return activeMealPlan.meals.map((slot) => {
+      const matchTypes = SLOT_TO_TYPE[slot.name] || [];
+      const matched = todayMeals.filter((m) => matchTypes.includes(m.mealType));
+      const totalCals = matched.reduce((s, m) => s + m.calories, 0);
+      const totalProt = matched.reduce((s, m) => s + m.protein, 0);
+      const totalCarbs = matched.reduce((s, m) => s + m.carbs, 0);
+      const totalFat = matched.reduce((s, m) => s + m.fat, 0);
+      return { slot, matched, totalCals, totalProt, totalCarbs, totalFat };
+    });
+  }, [activeMealPlan, todayMeals]);
+
+  const [showMealPlan, setShowMealPlan] = useState(false);
+
   // ──────────────────────────────────────────────
   // DIAGNOSTIC VIEW
   // ──────────────────────────────────────────────
@@ -581,8 +626,68 @@ export default function NutritionPage() {
           </Card>
         </div>
 
-        {/* ========== Right column: Today's Meals ========== */}
+        {/* ========== Right column: Meal Plan + Today's Meals ========== */}
         <div className="space-y-6">
+          {/* Meal Plan Distribution */}
+          <Card>
+            <div className="flex items-center justify-between mb-3">
+              <SectionTitle className="!mb-0">Plan de repas</SectionTitle>
+              <Button variant="ghost" size="sm" onClick={() => setShowMealPlan(!showMealPlan)}>
+                {showMealPlan ? "Masquer" : "Détails"}
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {mealSlotMatch.map(({ slot, matched, totalCals }, i) => {
+                const adherence = slot.calories > 0 ? Math.min(100, Math.round((totalCals / slot.calories) * 100)) : 0;
+                const filled = matched.length > 0;
+                return (
+                  <div key={i} className={`p-3 rounded-xl border transition-all ${
+                    filled
+                      ? "bg-[#00ff94]/[0.04] border-[#00ff94]/15"
+                      : "bg-white/[0.02] border-white/[0.06]"
+                  }`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${filled ? "bg-[#00ff94]" : "bg-white/20"}`} />
+                        <span className="text-sm text-white/80 font-medium">{slot.name}</span>
+                        <span className="text-[10px] text-white/30">{slot.time}</span>
+                        {slot.isAroundWorkout && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#ff9500]/15 text-[#ff9500]">workout</span>
+                        )}
+                      </div>
+                      <span className={`text-xs font-semibold ${
+                        filled ? "text-[#00ff94]" : "text-white/30"
+                      }`}>
+                        {filled ? `${adherence}%` : `${slot.calories} kcal`}
+                      </span>
+                    </div>
+                    {showMealPlan && (
+                      <div className="mt-2 grid grid-cols-3 gap-2 text-[10px]">
+                        <div className="text-center p-1.5 rounded bg-white/[0.03]">
+                          <span className="text-[#00d4ff]">{slot.protein}g</span>
+                          <span className="text-white/25 ml-1">prot</span>
+                        </div>
+                        <div className="text-center p-1.5 rounded bg-white/[0.03]">
+                          <span className="text-[#ff9500]">{slot.carbs}g</span>
+                          <span className="text-white/25 ml-1">gluc</span>
+                        </div>
+                        <div className="text-center p-1.5 rounded bg-white/[0.03]">
+                          <span className="text-[#a855f7]">{slot.fat}g</span>
+                          <span className="text-white/25 ml-1">lip</span>
+                        </div>
+                        {slot.suggestions.length > 0 && (
+                          <div className="col-span-3 text-white/30 italic">
+                            {slot.suggestions[0]}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+
           <Card>
             <SectionTitle>Repas du jour</SectionTitle>
             {todayMeals.length === 0 ? (

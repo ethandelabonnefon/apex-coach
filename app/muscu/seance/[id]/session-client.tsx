@@ -136,8 +136,26 @@ function ExerciseCard({
         ))}
       </div>
 
-      {/* Weight suggestion */}
-      {suggestion && (
+      {/* Last session + weight suggestion */}
+      {lastSets && lastSets.length > 0 && (
+        <div className="mb-3 p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+          <p className="text-[10px] text-white/40 mb-1">Derniere seance</p>
+          <div className="flex flex-wrap gap-2">
+            {lastSets.map((s, i) => (
+              <span key={i} className="text-xs text-white/60 font-mono">
+                S{i + 1}: {s.weight}kg x {s.reps}
+              </span>
+            ))}
+          </div>
+          {suggestion && (
+            <p className="text-xs text-[#a855f7] mt-1.5">
+              Suggestion: <span className="font-semibold">{suggestion.suggestedWeight} kg</span>
+              <span className="text-white/30 ml-1">— {suggestion.reasoning}</span>
+            </p>
+          )}
+        </div>
+      )}
+      {!lastSets && suggestion && (
         <div className="mb-3 p-2.5 rounded-lg bg-[#a855f7]/5 border border-[#a855f7]/10">
           <p className="text-xs text-[#a855f7]">
             Suggestion: <span className="font-semibold">{suggestion.suggestedWeight} kg</span>
@@ -306,16 +324,29 @@ export function SessionClient({ sessionId }: { sessionId: string }) {
 
   useEffect(() => {
     if (session) {
+      // Find last completed workout for this session to pre-fill weights
+      const lastWorkout = completedWorkouts.find((w) => w.sessionId === session.id);
+
       setExerciseLogs(
-        session.exercises.map((ex) => ({
-          name: ex.name,
-          sets: Array.from({ length: ex.sets }, () => ({ reps: 0, weight: 0, rir: ex.rir })),
-          difficulty: 0,
-          pumpRating: 0,
-        }))
+        session.exercises.map((ex) => {
+          const lastExercise = lastWorkout?.exercises.find((e) => e.name === ex.name);
+          return {
+            name: ex.name,
+            sets: Array.from({ length: ex.sets }, (_, i) => {
+              const lastSet = lastExercise?.sets[i];
+              return {
+                reps: lastSet?.reps || 0,
+                weight: lastSet?.weight || 0,
+                rir: lastSet?.rir ?? ex.rir,
+              };
+            }),
+            difficulty: 0,
+            pumpRating: 0,
+          };
+        })
       );
     }
-  }, [session]);
+  }, [session, completedWorkouts]);
 
   if (!session) {
     return (

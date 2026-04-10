@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { USER_PROFILE, DIABETES_CONFIG, MUSCU_PROGRAM } from './constants';
-import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise } from '@/types';
+import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession } from '@/types';
 
 interface CompletedWorkout {
   id: string;
@@ -93,6 +93,9 @@ interface AppState {
   // Running
   currentRunningWeek: number;
   setRunningWeek: (week: number) => void;
+  completedRunningSessions: CompletedRunningSession[];
+  addCompletedRunningSession: (session: CompletedRunningSession) => void;
+  deleteCompletedRunningSession: (id: string) => void;
 
   // Diagnostic
   diagnosticCompleted: boolean;
@@ -159,6 +162,13 @@ export const useStore = create<AppState>()(
 
       currentRunningWeek: 1,
       setRunningWeek: (week) => set({ currentRunningWeek: week }),
+      completedRunningSessions: [],
+      addCompletedRunningSession: (session) => set((s) => ({
+        completedRunningSessions: [session, ...s.completedRunningSessions].slice(0, 500),
+      })),
+      deleteCompletedRunningSession: (id) => set((s) => ({
+        completedRunningSessions: s.completedRunningSessions.filter((r) => r.id !== id),
+      })),
 
       diagnosticCompleted: false,
       setDiagnosticCompleted: (val) => set({ diagnosticCompleted: val }),
