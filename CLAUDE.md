@@ -114,6 +114,11 @@ apex-coach/
 ### Generation de Programmes
 - **Strategie hybride** : API Claude d'abord, fallback generateur local si echec
 - **Muscu** : split personnalise (PPL/Upper-Lower/Full Body/Bro), volume par muscle, exercices adaptes a la morphologie/mobilite/equipement, protocole T1D
+- **Hard limits enforces** : MAX 6 exercices et MAX 20 sets par seance (valide cote API, cote client, et generateur local)
+- **Suggestions de charges** : basees sur les 1RM du diagnostic (ex: 77% du 1RM pour hypertrophie 6-8 reps)
+- **Split templates simplifies** : groupes musculaires parents uniquement (evite explosion exercices)
+- **Volume calculator** : cap par muscle selon nombre de muscles dans la seance (5+ muscles → max 4 sets, 4 → max 5, 3 → max 6)
+- **Affichage volume** : utilise `volumeDistribution` du programme genere quand disponible, fallback sur calcul par keyword matching
 - **Running** : plan 14 semaines semi-marathon, 5 zones (VMA), periodisation (Base/Build/Peak/Taper), protocole T1D par type de seance
 - Retry automatique sur erreurs 529/503 (backoff exponentiel)
 

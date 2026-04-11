@@ -217,7 +217,24 @@ function generateFromTemplates(
       return 0;
     });
 
-    // Re-number after sorting
+    // HARD LIMIT: max 6 exercises per session
+    if (exercises.length > 6) {
+      exercises.splice(6);
+    }
+
+    // HARD LIMIT: max 20 sets per session
+    let totalSets = exercises.reduce((sum, ex) => sum + ex.sets, 0);
+    while (totalSets > 20 && exercises.length > 0) {
+      const lastEx = exercises[exercises.length - 1];
+      if (lastEx.sets > 2) {
+        lastEx.sets--;
+        totalSets--;
+      } else {
+        break;
+      }
+    }
+
+    // Re-number after sorting and trimming
     exercises.forEach((ex, idx) => { ex.order = idx + 1; });
 
     // Estimate session duration

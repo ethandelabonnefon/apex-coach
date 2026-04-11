@@ -68,7 +68,16 @@ export default function MuscuPage() {
   const displayDaysPerWeek = program?.daysPerWeek || muscuProgram.daysPerWeek;
   const currentWeek = program?.currentWeek || muscuProgram.currentWeek;
   const phase = getCurrentPhaseInfo(currentWeek);
-  const weeklyVolume = computeWeeklyVolume(displaySessions);
+  const weeklyVolume = program?.volumeDistribution
+    ? Object.fromEntries(
+        Object.entries(program.volumeDistribution).map(([k, v]) => [
+          k,
+          typeof v === 'object' && v !== null && 'setsPerWeek' in v
+            ? (v as { setsPerWeek: number }).setsPerWeek
+            : v,
+        ])
+      )
+    : computeWeeklyVolume(displaySessions);
 
   const totalSets = displaySessions.reduce(
     (sum, s) => sum + s.exercises.reduce((es, e) => es + e.sets, 0),

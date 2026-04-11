@@ -1,5 +1,6 @@
 // ============================================
 // APEX Coach — Split Templates
+// Simplified: max 4 muscle groups per session to stay under 6 exercises
 // ============================================
 
 import type { MuscleGroup } from './exercises-database';
@@ -17,29 +18,29 @@ export const SPLIT_TEMPLATES: Record<string, Record<number, SessionTemplate[]>> 
   // ═══════════════════════════════════════════════════════
   ppl: {
     3: [
-      { name: 'Push', focus: ['chest', 'chest_upper', 'shoulders', 'side_delts', 'front_delts', 'triceps'] },
-      { name: 'Pull', focus: ['back', 'lats', 'rear_delts', 'traps', 'biceps'] },
+      { name: 'Push', focus: ['chest', 'shoulders', 'triceps'] },
+      { name: 'Pull', focus: ['back', 'rear_delts', 'biceps'] },
       { name: 'Legs', focus: ['quads', 'hamstrings', 'glutes', 'calves'] },
     ],
     4: [
-      { name: 'Push A', focus: ['chest', 'chest_upper', 'shoulders', 'side_delts', 'triceps'] },
-      { name: 'Pull A', focus: ['back', 'lats', 'rear_delts', 'traps', 'biceps'] },
+      { name: 'Push A', focus: ['chest', 'shoulders', 'triceps'] },
+      { name: 'Pull A', focus: ['back', 'rear_delts', 'biceps'] },
       { name: 'Legs', focus: ['quads', 'hamstrings', 'glutes', 'calves'] },
-      { name: 'Push B + Pull B', focus: ['chest', 'shoulders', 'side_delts', 'triceps', 'lats', 'rear_delts', 'biceps'] },
+      { name: 'Push B + Pull B', focus: ['chest', 'shoulders', 'back', 'biceps'] },
     ],
     5: [
-      { name: 'Push A', focus: ['chest', 'chest_upper', 'shoulders', 'side_delts', 'triceps'] },
-      { name: 'Pull A', focus: ['back', 'lats', 'rear_delts', 'traps', 'biceps'] },
+      { name: 'Push A', focus: ['chest', 'shoulders', 'triceps'] },
+      { name: 'Pull A', focus: ['back', 'rear_delts', 'biceps'] },
       { name: 'Legs A', focus: ['quads', 'hamstrings', 'glutes', 'calves'] },
-      { name: 'Push B', focus: ['chest', 'chest_upper', 'front_delts', 'side_delts', 'triceps'] },
-      { name: 'Pull B', focus: ['lats', 'back', 'rear_delts', 'biceps'] },
+      { name: 'Push B', focus: ['chest', 'shoulders', 'triceps'] },
+      { name: 'Pull B', focus: ['back', 'rear_delts', 'biceps'] },
     ],
     6: [
-      { name: 'Push A', focus: ['chest', 'chest_upper', 'shoulders', 'side_delts', 'triceps'] },
-      { name: 'Pull A', focus: ['back', 'lats', 'rear_delts', 'traps', 'biceps'] },
+      { name: 'Push A', focus: ['chest', 'shoulders', 'triceps'] },
+      { name: 'Pull A', focus: ['back', 'rear_delts', 'biceps'] },
       { name: 'Legs A', focus: ['quads', 'hamstrings', 'glutes', 'calves'] },
-      { name: 'Push B', focus: ['chest', 'chest_upper', 'front_delts', 'side_delts', 'triceps'] },
-      { name: 'Pull B', focus: ['lats', 'back', 'rear_delts', 'biceps'] },
+      { name: 'Push B', focus: ['chest', 'shoulders', 'triceps'] },
+      { name: 'Pull B', focus: ['back', 'rear_delts', 'biceps'] },
       { name: 'Legs B', focus: ['quads', 'hamstrings', 'glutes', 'calves'] },
     ],
   },
@@ -49,22 +50,22 @@ export const SPLIT_TEMPLATES: Record<string, Record<number, SessionTemplate[]>> 
   // ═══════════════════════════════════════════════════════
   upper_lower: {
     3: [
-      { name: 'Upper', focus: ['chest', 'chest_upper', 'back', 'lats', 'shoulders', 'side_delts', 'biceps', 'triceps'] },
+      { name: 'Upper', focus: ['chest', 'back', 'shoulders', 'biceps', 'triceps'] },
       { name: 'Lower', focus: ['quads', 'hamstrings', 'glutes', 'calves'] },
-      { name: 'Upper B', focus: ['chest', 'lats', 'rear_delts', 'side_delts', 'biceps', 'triceps'] },
+      { name: 'Upper B', focus: ['chest', 'back', 'shoulders', 'biceps'] },
     ],
     4: [
-      { name: 'Upper A', focus: ['chest', 'chest_upper', 'back', 'lats', 'shoulders', 'side_delts', 'biceps', 'triceps'] },
+      { name: 'Upper A', focus: ['chest', 'back', 'shoulders', 'biceps', 'triceps'] },
       { name: 'Lower A', focus: ['quads', 'hamstrings', 'glutes', 'calves'] },
-      { name: 'Upper B', focus: ['chest', 'lats', 'rear_delts', 'side_delts', 'biceps', 'triceps'] },
-      { name: 'Lower B', focus: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
+      { name: 'Upper B', focus: ['chest', 'back', 'shoulders', 'biceps'] },
+      { name: 'Lower B', focus: ['quads', 'hamstrings', 'glutes', 'calves'] },
     ],
     5: [
-      { name: 'Upper A', focus: ['chest', 'chest_upper', 'back', 'lats', 'shoulders', 'side_delts', 'biceps', 'triceps'] },
+      { name: 'Upper A', focus: ['chest', 'back', 'shoulders', 'biceps', 'triceps'] },
       { name: 'Lower A', focus: ['quads', 'hamstrings', 'glutes', 'calves'] },
-      { name: 'Upper B', focus: ['chest', 'lats', 'rear_delts', 'side_delts', 'biceps', 'triceps'] },
-      { name: 'Lower B', focus: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
-      { name: 'Upper C', focus: ['chest_upper', 'lats', 'shoulders', 'rear_delts', 'biceps', 'triceps'] },
+      { name: 'Upper B', focus: ['chest', 'back', 'shoulders', 'biceps'] },
+      { name: 'Lower B', focus: ['quads', 'hamstrings', 'glutes', 'calves'] },
+      { name: 'Upper C', focus: ['chest', 'back', 'shoulders', 'triceps'] },
     ],
   },
 
@@ -73,19 +74,19 @@ export const SPLIT_TEMPLATES: Record<string, Record<number, SessionTemplate[]>> 
   // ═══════════════════════════════════════════════════════
   full_body: {
     2: [
-      { name: 'Full Body A', focus: ['chest', 'lats', 'shoulders', 'quads', 'hamstrings', 'abs'] },
-      { name: 'Full Body B', focus: ['chest_upper', 'back', 'side_delts', 'quads', 'glutes', 'biceps', 'triceps'] },
+      { name: 'Full Body A', focus: ['chest', 'back', 'shoulders', 'quads', 'hamstrings'] },
+      { name: 'Full Body B', focus: ['chest', 'back', 'shoulders', 'quads', 'glutes'] },
     ],
     3: [
-      { name: 'Full Body A', focus: ['chest', 'lats', 'shoulders', 'quads', 'hamstrings', 'abs'] },
-      { name: 'Full Body B', focus: ['chest_upper', 'back', 'side_delts', 'glutes', 'quads', 'biceps', 'triceps'] },
-      { name: 'Full Body C', focus: ['chest', 'lats', 'rear_delts', 'hamstrings', 'quads', 'calves', 'abs'] },
+      { name: 'Full Body A', focus: ['chest', 'back', 'shoulders', 'quads', 'hamstrings'] },
+      { name: 'Full Body B', focus: ['chest', 'back', 'shoulders', 'glutes', 'quads'] },
+      { name: 'Full Body C', focus: ['chest', 'back', 'shoulders', 'hamstrings', 'calves'] },
     ],
     4: [
-      { name: 'Full Body A', focus: ['chest', 'lats', 'shoulders', 'quads', 'hamstrings'] },
-      { name: 'Full Body B', focus: ['chest_upper', 'back', 'side_delts', 'glutes', 'quads'] },
-      { name: 'Full Body C', focus: ['chest', 'lats', 'rear_delts', 'hamstrings', 'calves'] },
-      { name: 'Full Body D', focus: ['chest_upper', 'back', 'shoulders', 'quads', 'glutes', 'abs'] },
+      { name: 'Full Body A', focus: ['chest', 'back', 'shoulders', 'quads', 'hamstrings'] },
+      { name: 'Full Body B', focus: ['chest', 'back', 'shoulders', 'glutes', 'quads'] },
+      { name: 'Full Body C', focus: ['chest', 'back', 'shoulders', 'hamstrings', 'calves'] },
+      { name: 'Full Body D', focus: ['chest', 'back', 'shoulders', 'quads', 'glutes'] },
     ],
   },
 
@@ -94,16 +95,16 @@ export const SPLIT_TEMPLATES: Record<string, Record<number, SessionTemplate[]>> 
   // ═══════════════════════════════════════════════════════
   bro_split: {
     4: [
-      { name: 'Pecs / Triceps', focus: ['chest', 'chest_upper', 'chest_lower', 'triceps'] },
-      { name: 'Dos / Biceps', focus: ['back', 'lats', 'traps', 'rear_delts', 'biceps'] },
-      { name: 'Épaules / Abdos', focus: ['shoulders', 'front_delts', 'side_delts', 'rear_delts', 'abs', 'obliques'] },
+      { name: 'Pecs / Triceps', focus: ['chest', 'triceps'] },
+      { name: 'Dos / Biceps', focus: ['back', 'rear_delts', 'biceps'] },
+      { name: 'Épaules / Abdos', focus: ['shoulders', 'rear_delts'] },
       { name: 'Jambes', focus: ['quads', 'hamstrings', 'glutes', 'calves'] },
     ],
     5: [
-      { name: 'Pecs', focus: ['chest', 'chest_upper', 'chest_lower'] },
-      { name: 'Dos', focus: ['back', 'lats', 'traps', 'rhomboids', 'rear_delts'] },
-      { name: 'Épaules', focus: ['shoulders', 'front_delts', 'side_delts', 'rear_delts'] },
-      { name: 'Bras', focus: ['biceps', 'triceps', 'forearms'] },
+      { name: 'Pecs', focus: ['chest'] },
+      { name: 'Dos', focus: ['back', 'rear_delts'] },
+      { name: 'Épaules', focus: ['shoulders', 'rear_delts'] },
+      { name: 'Bras', focus: ['biceps', 'triceps'] },
       { name: 'Jambes', focus: ['quads', 'hamstrings', 'glutes', 'calves'] },
     ],
   },

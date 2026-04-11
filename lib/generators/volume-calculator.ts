@@ -124,6 +124,9 @@ export function calculateSessionVolume(
     return true;
   });
 
+  // Count muscles in this session to cap total
+  const muscleCount = uniqueMuscles.length;
+
   for (const muscle of uniqueMuscles) {
     const baseVolume = BASE_VOLUME[muscle] ?? 6;
     const status = getMuscleStatus(muscle, bodyMap);
@@ -137,7 +140,12 @@ export function calculateSessionVolume(
     const frequency = Math.max(1, Math.round(totalSessionsPerWeek / 3));
 
     // Sets for this session
-    const sessionSets = Math.max(2, Math.round(weeklyVolume / frequency));
+    let sessionSets = Math.max(2, Math.round(weeklyVolume / frequency));
+
+    // Cap per-muscle sets to keep total session under 20 sets
+    // With 4+ muscles, limit each to 4-6 sets
+    const maxPerMuscle = muscleCount >= 5 ? 4 : muscleCount >= 4 ? 5 : 6;
+    sessionSets = Math.min(sessionSets, maxPerMuscle);
 
     result[muscle] = sessionSets;
   }

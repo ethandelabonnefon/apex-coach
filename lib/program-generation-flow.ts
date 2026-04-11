@@ -223,6 +223,21 @@ export async function generatePersonalizedProgram(params: {
     if (res.ok) {
       const ai = (await res.json()) as AIProgramResponse;
       if (ai.sessions && ai.sessions.length > 0) {
+        // Validate: enforce hard limits on AI output
+        for (const session of ai.sessions) {
+          if (session.exercises.length > 6) {
+            session.exercises = session.exercises.slice(0, 6);
+          }
+          let totalSets = session.exercises.reduce((sum, ex) => sum + (ex.sets || 0), 0);
+          while (totalSets > 20) {
+            const lastEx = session.exercises[session.exercises.length - 1];
+            if (lastEx.sets > 2) { lastEx.sets--; totalSets--; }
+            else break;
+          }
+          if (!session.duration || isNaN(session.duration)) {
+            session.duration = 55;
+          }
+        }
         console.log("[program-gen] AI generation succeeded");
         return aiResponseToActiveProgram(ai, daysPerWeek, morphologyEntry);
       }
