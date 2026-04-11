@@ -86,7 +86,7 @@ function ExerciseCard({
   onUpdatePump,
   completedWorkouts,
 }: {
-  exercise: (typeof MUSCU_PROGRAM.sessions)[0]["exercises"][0];
+  exercise: { order: number; name: string; sets: number; reps: string; rir: number; rest: number; weight?: unknown; reasoning?: string; cues?: string[]; alternatives?: (string | { name: string; reason: string })[] };
   exerciseIndex: number;
   log: ExerciseLog;
   onUpdateSet: (setIndex: number, field: keyof SetLog, value: number) => void;
@@ -129,7 +129,7 @@ function ExerciseCard({
 
       {/* Cues */}
       <div className="mb-3 flex flex-wrap gap-1.5">
-        {exercise.cues.map((cue, i) => (
+        {(exercise.cues || []).map((cue, i) => (
           <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.05] text-white/50">
             {cue}
           </span>
@@ -296,13 +296,15 @@ function ExerciseCard({
       </button>
       {showAlternatives && (
         <div className="mt-1.5 space-y-1 animate-slide-up">
-          {exercise.alternatives.map((alt) => (
-            <div key={alt.name} className="flex items-center gap-2 text-xs p-2 rounded-lg bg-white/[0.02]">
-              <span className="text-white/60">{alt.name}</span>
-              <span className="text-white/25">--</span>
-              <span className="text-white/35">{alt.reason}</span>
-            </div>
-          ))}
+          {(exercise.alternatives || []).map((alt, altIdx) => {
+            const altObj = typeof alt === "string" ? { name: alt, reason: "" } : alt;
+            return (
+              <div key={altObj.name || altIdx} className="flex items-center gap-2 text-xs p-2 rounded-lg bg-white/[0.02]">
+                <span className="text-white/60">{altObj.name}</span>
+                {altObj.reason && <><span className="text-white/25">--</span><span className="text-white/35">{altObj.reason}</span></>}
+              </div>
+            );
+          })}
         </div>
       )}
     </Card>
@@ -310,10 +312,14 @@ function ExerciseCard({
 }
 
 export function SessionClient({ sessionId }: { sessionId: string }) {
-  const { muscuProgram, completedWorkouts, addCompletedWorkout } = useStore();
-  const session = muscuProgram.sessions.find((s) => s.id === sessionId);
+  const { muscuProgram, completedWorkouts, addCompletedWorkout, activeProgram } = useStore();
+  // Check active (AI-generated) program first, then fall back to static program
+  const session =
+    activeProgram?.sessions.find((s) => s.id === sessionId) ||
+    muscuProgram.sessions.find((s) => s.id === sessionId);
 
-  const phase = getCurrentPhaseInfo(muscuProgram.currentWeek);
+  const currentWeek = activeProgram?.currentWeek || muscuProgram.currentWeek;
+  const phase = getCurrentPhaseInfo(currentWeek);
 
   const [exerciseLogs, setExerciseLogs] = useState<ExerciseLog[]>([]);
   const [glucoseBefore, setGlucoseBefore] = useState<string>("");
@@ -479,7 +485,7 @@ export function SessionClient({ sessionId }: { sessionId: string }) {
             </span>
           )}
         </div>
-        <p className="text-[10px] text-white/30 mt-2">{session.notes.glycemia}</p>
+        <p className="text-[10px] text-white/30 mt-2">{(session.notes as { glycemia?: string } | undefined)?.glycemia || ""}</p>
       </Card>
 
       {/* Exercises */}
@@ -528,10 +534,10 @@ export function SessionClient({ sessionId }: { sessionId: string }) {
         />
         <div className="mt-3 space-y-1">
           <p className="text-xs text-white/30">
-            <span className="text-white/50">Recuperation:</span> {session.notes.recovery}
+            <span className="text-white/50">Recuperation:</span> {(session.notes as { recovery?: string } | undefined)?.recovery || ""}
           </p>
           <p className="text-xs text-white/30">
-            <span className="text-white/50">Progression:</span> {session.notes.progression}
+            <span className="text-white/50">Progression:</span> {(session.notes as { progression?: string } | undefined)?.progression || ""}
           </p>
         </div>
       </Card>

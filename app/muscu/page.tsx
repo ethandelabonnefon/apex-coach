@@ -151,6 +151,36 @@ export default function MuscuPage() {
             <p className="text-xs text-white/30 mb-4">
               En attendant ton diagnostic, voici le programme template. Il sera remplacé par un programme personnalisé.
             </p>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {muscuProgram.sessions.map((session) => {
+                const sessionSets = session.exercises.reduce((s, e) => s + e.sets, 0);
+                return (
+                  <Link key={session.id} href={`/muscu/seance/${session.id}`}>
+                    <Card className="h-full hover:border-[#a855f7]/30 transition-colors cursor-pointer">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h3 className="font-semibold text-sm">{session.name}</h3>
+                          <p className="text-xs text-white/35 mt-0.5">{session.day} -- {session.duration} min</p>
+                        </div>
+                        <Badge color="purple">{sessionSets} sets</Badge>
+                      </div>
+                      <p className="text-xs text-[#a855f7]/70 mb-3">{session.focus}</p>
+                      <div className="space-y-1.5">
+                        {session.exercises.map((ex) => (
+                          <div key={ex.order} className="flex items-center justify-between text-xs">
+                            <span className="text-white/60">{ex.name}</span>
+                            <span className="text-white/30">{ex.sets}x{ex.reps} RIR{ex.rir}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-white/[0.06] flex items-center justify-end">
+                        <span className="text-[#a855f7] text-xs font-medium">Commencer &rarr;</span>
+                      </div>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>

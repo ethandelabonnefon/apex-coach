@@ -163,6 +163,12 @@ apex-coach/
 - ~~Analyse photos~~ : **FAIT** — flux E2E operationnel (capture → API Claude Vision → affichage BodyAnalysisResult → persistence dans historique diagnostics avec photos et analyse consultables)
 - ~~Mise a jour programme post-diagnostic~~ : **FAIT** — modal avec bouton "Appliquer au programme" qui met a jour exercices et volumes dans le programme actif, versioning automatique
 
+## Audit UX (avril 2026)
+- **Programme par defaut** : CAS 1 (pas de diagnostic) affiche desormais les cartes sessions avec exercices, sets, et liens "Commencer"
+- **Seance dynamique** : page seance supporte les programmes AI-generes (activeProgram) en plus du programme statique, plus de "Seance introuvable"
+- **Types session-client** : ExerciseCard accepte les types flexibles (cues/alternatives optionnels, notes unknown safe)
+- **Pages verifiees** : Dashboard, Muscu, Running, Nutrition, Diabete (bolus + parametres), Profil, Diagnostic — aucun crash, pas de NaN/undefined affiche
+
 ## Conventions de Code
 
 - **Langue** : interface 100% francais, code en anglais, commentaires mixtes
