@@ -3,48 +3,78 @@
 
 @layer base {
   :root {
-    /* ============ NEW DESIGN SYSTEM (Phase 1) ============ */
-    /* Backgrounds - Tons sombres profonds */
+    /* ============ APEX v2 — "Precision Instrument" ============ */
+
+    /* Surfaces : noir chaud zinc + 3 niveaux de profondeur */
     --bg-primary: #0A0A0B;
     --bg-secondary: #111113;
     --bg-tertiary: #18181B;
-    --bg-hover: #1F1F23;
+    --bg-elevated: #1F1F23;
+    --bg-hover: #26262B;
 
-    /* Accent - Vert APEX signature */
-    --accent: #10B981;
-    --accent-hover: #059669;
-    --accent-subtle: rgba(16, 185, 129, 0.1);
-    --accent-glow: rgba(16, 185, 129, 0.4);
+    /* Accent primaire : Electric Lime — énergie, performance */
+    --accent: #D4FF4F;
+    --accent-hover: #C7F026;
+    --accent-pressed: #B8E01C;
+    --accent-subtle: rgba(212, 255, 79, 0.08);
+    --accent-glow: rgba(212, 255, 79, 0.32);
+    --accent-ink: #0A0A0B; /* text on accent bg */
 
-    /* Text */
+    /* Accent secondaire : Soft Lavender — recovery, T1D, calm data */
+    --accent-2: #B4A7FF;
+    --accent-2-hover: #A090FF;
+    --accent-2-subtle: rgba(180, 167, 255, 0.10);
+    --accent-2-glow: rgba(180, 167, 255, 0.30);
+
+    /* Typography hierarchy */
     --text-primary: #FAFAFA;
     --text-secondary: #A1A1AA;
-    --text-tertiary: #52525B;
+    --text-tertiary: #71717A;
     --text-disabled: #3F3F46;
+    --text-ink: #0A0A0B;
 
-    /* Borders */
-    --border-subtle: #27272A;
-    --border-default: #3F3F46;
+    /* Borders minimalistes */
+    --border-subtle: rgba(255, 255, 255, 0.06);
+    --border-default: rgba(255, 255, 255, 0.10);
+    --border-strong: rgba(255, 255, 255, 0.16);
 
-    /* States */
-    --success: #10B981;
-    --warning: #F59E0B;
-    --error: #EF4444;
-    --info: #3B82F6;
+    /* Semantic states — palette chaude cohérente */
+    --success: #7AE582;
+    --warning: #FFAE5C;
+    --error: #FF6B6B;
+    --info: #7FC7FF;
 
-    /* Categories */
-    --muscu: #10B981;
-    --running: #3B82F6;
-    --nutrition: #F59E0B;
-    --diabete: #8B5CF6;
+    /* Catégories (hue par domaine) */
+    --muscu: #D4FF4F;     /* lime = performance */
+    --running: #7FC7FF;   /* sky = cardio */
+    --nutrition: #FFAE5C; /* amber = fuel */
+    --diabete: #B4A7FF;   /* lavender = clinical */
+
+    /* Glucose scale — précision médicale */
+    --glucose-low: #FF6B6B;
+    --glucose-normal: #7AE582;
+    --glucose-high: #FFAE5C;
+    --glucose-critical: #FF3B3B;
+
+    /* Data chart accents */
+    --chart-1: #D4FF4F;
+    --chart-2: #7FC7FF;
+    --chart-3: #FFAE5C;
+    --chart-4: #B4A7FF;
+    --chart-5: #FF6B6B;
 
     /* Safe areas */
     --safe-area-inset-top: env(safe-area-inset-top);
     --safe-area-inset-bottom: env(safe-area-inset-bottom);
-    --safe-area-inset-left: env(safe-area-inset-left);
-    --safe-area-inset-right: env(safe-area-inset-right);
 
-    /* ============ LEGACY TOKENS (kept for compat) ============ */
+    /* Radii système */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-2xl: 24px;
+
+    /* ============ LEGACY TOKENS (back-compat pages pas encore migrées) ============ */
     --bg-card: rgba(255, 255, 255, 0.03);
     --text-muted: rgba(255, 255, 255, 0.35);
     --accent-green: #00ff94;
@@ -52,52 +82,57 @@
     --accent-purple: #a855f7;
     --accent-orange: #ff9500;
     --accent-red: #ff4757;
-    --glucose-low: #ff4757;
-    --glucose-normal: #00ff94;
-    --glucose-high: #ff9500;
   }
 }
 
-/* ============ TAILWIND 4 @theme - design tokens ============ */
+/* ============ Tailwind v4 @theme ============ */
 @theme inline {
-  /* Backgrounds : bg-bg-primary, bg-bg-secondary... */
   --color-bg-primary: var(--bg-primary);
   --color-bg-secondary: var(--bg-secondary);
   --color-bg-tertiary: var(--bg-tertiary);
+  --color-bg-elevated: var(--bg-elevated);
   --color-bg-hover: var(--bg-hover);
 
-  /* Text : text-text-primary, text-text-secondary... */
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
   --color-text-tertiary: var(--text-tertiary);
   --color-text-disabled: var(--text-disabled);
+  --color-text-ink: var(--text-ink);
 
-  /* Accent : bg-accent, text-accent, border-accent, bg-accent-hover, bg-accent-subtle */
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
+  --color-accent-pressed: var(--accent-pressed);
   --color-accent-subtle: var(--accent-subtle);
+  --color-accent-ink: var(--accent-ink);
 
-  /* Borders : border-border-subtle, border-border-default */
+  --color-accent-2: var(--accent-2);
+  --color-accent-2-hover: var(--accent-2-hover);
+  --color-accent-2-subtle: var(--accent-2-subtle);
+
   --color-border-subtle: var(--border-subtle);
   --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
 
-  /* States : text-success, bg-warning... */
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-error: var(--error);
   --color-info: var(--info);
 
-  /* Categories */
   --color-muscu: var(--muscu);
   --color-running: var(--running);
   --color-nutrition: var(--nutrition);
   --color-diabete: var(--diabete);
 
-  /* Fonts */
-  --font-sans: var(--font-inter), var(--font-geist-sans), system-ui, sans-serif;
+  --color-glucose-low: var(--glucose-low);
+  --color-glucose-normal: var(--glucose-normal);
+  --color-glucose-high: var(--glucose-high);
+  --color-glucose-critical: var(--glucose-critical);
+
+  /* Fonts — Inter pour UI, JetBrains Mono pour métriques = signature */
+  --font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", var(--font-geist-mono), "SF Mono", Consolas, monospace;
 
-  /* Legacy color aliases (to keep existing pages rendering) */
+  /* Legacy aliases (maintenu pour pages non migrées) */
   --color-background: var(--bg-primary);
   --color-foreground: var(--text-primary);
   --color-card: var(--bg-card);
@@ -108,9 +143,6 @@
   --color-accent-purple: var(--accent-purple);
   --color-accent-orange: var(--accent-orange);
   --color-accent-red: var(--accent-red);
-  --color-glucose-low: var(--glucose-low);
-  --color-glucose-normal: var(--glucose-normal);
-  --color-glucose-high: var(--glucose-high);
 }
 
 @layer base {
@@ -123,30 +155,29 @@
     background-color: var(--bg-primary);
     color: var(--text-primary);
     font-family: var(--font-sans);
-    font-feature-settings: "ss01", "ss02", "cv01";
+    font-feature-settings: "ss01", "ss02", "cv01", "cv11";
+    font-weight: 400;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.01em;
   }
 
-  /* Prevent iOS zoom on input focus */
-  input,
-  select,
-  textarea {
+  /* Empêche iOS de zoomer sur focus */
+  input, select, textarea {
     font-size: 16px;
   }
 
-  /* Smooth scroll */
   html {
     scroll-behavior: smooth;
+    background-color: var(--bg-primary);
   }
 
-  /* Scrollbar */
+  /* Scrollbar discrète */
   ::-webkit-scrollbar {
     width: 6px;
+    height: 6px;
   }
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
+  ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
     background: var(--border-default);
     border-radius: 3px;
@@ -154,85 +185,132 @@
   ::-webkit-scrollbar-thumb:hover {
     background: var(--text-tertiary);
   }
+
+  /* Selection = accent signature */
+  ::selection {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  /* Focus ring globale */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
 }
 
 @layer utilities {
-  /* Safe areas for PWA */
-  .pt-safe {
-    padding-top: max(1rem, var(--safe-area-inset-top));
+  /* Safe areas PWA */
+  .pt-safe { padding-top: max(1rem, var(--safe-area-inset-top)); }
+  .pb-safe { padding-bottom: max(1rem, var(--safe-area-inset-bottom)); }
+  .mt-safe { margin-top: var(--safe-area-inset-top); }
+  .mb-safe { margin-bottom: var(--safe-area-inset-bottom); }
+
+  /* Scrollbar hide */
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+
+  /* Touch targets 44px mini */
+  .touch-target { min-height: 44px; min-width: 44px; }
+
+  /* ============ SIGNATURE : typography tabulaire mono ============ */
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum", "ss01";
+    letter-spacing: -0.02em;
   }
-  .pb-safe {
-    padding-bottom: max(1rem, var(--safe-area-inset-bottom));
+  .num-hero {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+    letter-spacing: -0.04em;
+    font-weight: 500;
   }
 
-  /* Scrollbar hide utility */
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
-
-  /* Touch target minimum 44px */
-  .touch-target {
-    min-height: 44px;
-    min-width: 44px;
+  /* Label système — uppercase micro-tracking, signature cockpit */
+  .label {
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-tertiary);
   }
 
-  /* Glow accent */
-  .glow-accent {
-    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
-  }
-
-  /* Glass effect (headers, toolbars) */
+  /* Glass effect headers */
   .glass {
-    background: rgba(17, 17, 19, 0.8);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: rgba(10, 10, 11, 0.72);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: 1px solid var(--border-subtle);
   }
 
-  /* Tap scale feedback mobile */
-  .tap-scale {
-    transition: transform 0.1s ease-out;
+  /* Glow accent signature */
+  .glow-accent {
+    box-shadow: 0 0 32px -8px var(--accent-glow);
   }
-  .tap-scale:active {
-    transform: scale(0.98);
+  .glow-accent-2 {
+    box-shadow: 0 0 32px -8px var(--accent-2-glow);
+  }
+  .glow-ring {
+    box-shadow: 0 0 0 1px var(--accent), 0 0 24px -4px var(--accent-glow);
   }
 
-  /* Legacy glows (still used by existing pages) */
-  .glow-green {
-    box-shadow: 0 0 20px rgba(0, 255, 148, 0.15), 0 0 40px rgba(0, 255, 148, 0.05);
+  /* Surface levels — hiérarchie par profondeur, pas par border */
+  .surface-1 { background: var(--bg-secondary); border-radius: var(--radius-lg); }
+  .surface-2 { background: var(--bg-tertiary); border-radius: var(--radius-lg); }
+  .surface-3 { background: var(--bg-elevated); border-radius: var(--radius-lg); }
+
+  /* Tap feedback iOS */
+  .tap-scale { transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1); }
+  .tap-scale:active { transform: scale(0.97); }
+
+  /* Dot indicator pulsant (cockpit feel) */
+  .dot-pulse {
+    position: relative;
+    display: inline-block;
   }
-  .glow-blue {
-    box-shadow: 0 0 20px rgba(0, 212, 255, 0.15), 0 0 40px rgba(0, 212, 255, 0.05);
+  .dot-pulse::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: inherit;
+    animation: pulse-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
   }
-  .glow-purple {
-    box-shadow: 0 0 20px rgba(168, 85, 247, 0.15), 0 0 40px rgba(168, 85, 247, 0.05);
+
+  /* Divider vertical micro */
+  .divider-v {
+    width: 1px;
+    height: 100%;
+    background: var(--border-subtle);
   }
-  .glow-orange {
-    box-shadow: 0 0 20px rgba(255, 149, 0, 0.15), 0 0 40px rgba(255, 149, 0, 0.05);
+
+  /* Hover lift signature */
+  .hover-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
   }
+  .hover-lift:hover {
+    transform: translateY(-2px);
+  }
+
+  /* Legacy glows */
+  .glow-green { box-shadow: 0 0 20px rgba(0, 255, 148, 0.15); }
+  .glow-blue { box-shadow: 0 0 20px rgba(0, 212, 255, 0.15); }
+  .glow-purple { box-shadow: 0 0 20px rgba(168, 85, 247, 0.15); }
+  .glow-orange { box-shadow: 0 0 20px rgba(255, 149, 0, 0.15); }
 }
 
-/* ============ LEGACY HELPERS (old pages still reference them) ============ */
+/* ============ LEGACY HELPERS (pages non migrées) ============ */
 .card {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 16px;
-  backdrop-filter: blur(10px);
 }
-.card:hover {
-  border-color: rgba(255, 255, 255, 0.1);
-}
-.neon-green {
-  color: #00ff94;
-  text-shadow: 0 0 10px rgba(0, 255, 148, 0.5);
-}
-.neon-blue {
-  color: #00d4ff;
-  text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
-}
+.card:hover { border-color: rgba(255, 255, 255, 0.1); }
+.neon-green { color: #00ff94; text-shadow: 0 0 10px rgba(0, 255, 148, 0.5); }
+.neon-blue { color: #00d4ff; text-shadow: 0 0 10px rgba(0, 212, 255, 0.5); }
 .progress-bar {
   height: 6px;
   border-radius: 3px;
@@ -254,67 +332,40 @@
 }
 
 /* ============ ANIMATIONS ============ */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-.animate-in {
-  animation: fadeIn 0.3s ease-out;
-}
+.animate-in { animation: fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
 
 @keyframes slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-.animate-slide-up {
-  animation: slide-up 0.3s ease-out;
-}
+.animate-slide-up { animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
 
 @keyframes pulse-subtle {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
 }
-.animate-pulse-subtle {
-  animation: pulse-subtle 2s ease-in-out infinite;
-}
+.animate-pulse-subtle { animation: pulse-subtle 2.4s ease-in-out infinite; }
 
 @keyframes pulse-glow {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 currentColor; }
+  50% { opacity: 0.8; box-shadow: 0 0 0 6px transparent; }
 }
-.animate-pulse-glow {
-  animation: pulse-glow 2s ease-in-out infinite;
+.animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+
+@keyframes pulse-ping {
+  75%, 100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
 }
 
 @keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 .skeleton {
   background: linear-gradient(
@@ -324,5 +375,16 @@
     var(--bg-tertiary) 75%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
+  animation: shimmer 1.6s infinite;
 }
+
+/* Stagger children animate-in */
+.stagger > * { animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+.stagger > *:nth-child(1) { animation-delay: 0.04s; }
+.stagger > *:nth-child(2) { animation-delay: 0.08s; }
+.stagger > *:nth-child(3) { animation-delay: 0.12s; }
+.stagger > *:nth-child(4) { animation-delay: 0.16s; }
+.stagger > *:nth-child(5) { animation-delay: 0.20s; }
+.stagger > *:nth-child(6) { animation-delay: 0.24s; }
+.stagger > *:nth-child(7) { animation-delay: 0.28s; }
+.stagger > *:nth-child(8) { animation-delay: 0.32s; }

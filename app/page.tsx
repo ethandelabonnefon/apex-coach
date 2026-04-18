@@ -1,17 +1,55 @@
 "use client";
 
-import { Card, StatCard, Badge, PageHeader, GlucoseIndicator, ProgressBar, SectionTitle } from "@/components/ui";
+import Link from "next/link";
 import { useStore } from "@/lib/store";
 import { calculateVMA, predictRaceTime, formatPace, formatTime } from "@/lib/running-science";
 import { getCurrentPhaseInfo } from "@/lib/muscu-science";
-import Link from "next/link";
+import { HeroMetric } from "@/components/ui/HeroMetric";
+import { MetricCard } from "@/components/ui/MetricCard";
+import { Ring } from "@/components/ui/Ring";
+import { Sparkline } from "@/components/ui/Sparkline";
+import { Pulse } from "@/components/ui/Pulse";
+import {
+  ArrowUpRight,
+  Dumbbell,
+  Footprints,
+  Apple,
+  Droplet,
+  Target,
+  ChevronRight,
+} from "lucide-react";
+
+function glucoseTone(value: number): "error" | "warning" | "success" {
+  if (value < 70 || value > 250) return "error";
+  if (value > 180) return "warning";
+  return "success";
+}
+
+function glucoseStatus(value: number): string {
+  if (value < 70) return "Hypoglycémie";
+  if (value > 250) return "Très élevée";
+  if (value > 180) return "Élevée";
+  if (value >= 70 && value <= 140) return "En plage";
+  return "Normale";
+}
 
 export default function Dashboard() {
-  const { profile, diabetesConfig, glucoseReadings, meals, completedWorkouts, currentRunningWeek, muscuProgram } = useStore();
+  const {
+    profile,
+    diabetesConfig,
+    glucoseReadings,
+    meals,
+    completedWorkouts,
+    currentRunningWeek,
+    muscuProgram,
+  } = useStore();
 
   const vma = calculateVMA(profile.vo2max);
-  const semiPrediction = predictRaceTime(profile.vo2max, 21.1);
+  const semi = predictRaceTime(profile.vo2max, 21.1);
   const phase = getCurrentPhaseInfo(1);
+
+  const lastGlucose = glucoseReadings[0];
+  const glucoseSeries = glucoseReadings.slice(0, 24).map((r) => r.value).reverse();
 
   const todayMeals = meals.filter((m) => {
     const d = new Date(m.eatenAt);
@@ -23,196 +61,438 @@ export default function Dashboard() {
   const todayCarbs = todayMeals.reduce((s, m) => s + m.carbs, 0);
   const todayFat = todayMeals.reduce((s, m) => s + m.fat, 0);
 
-  const lastGlucose = glucoseReadings[0];
+  const caloriesPct = profile.targetCalories > 0 ? todayCalories / profile.targetCalories : 0;
+  const proteinPct = profile.targetProtein > 0 ? todayProtein / profile.targetProtein : 0;
+
+  // Mini weight trend — placeholder à partir du poids actuel si pas d'historique
+  const weightSeries = Array.from({ length: 10 }, (_, i) => profile.weight - (10 - i) * 0.08 + Math.sin(i) * 0.2);
+
+  const now = new Date();
+  const hours = now.getHours();
+  const greeting = hours < 5 ? "Bonne nuit" : hours < 12 ? "Bonjour" : hours < 18 ? "Bel après-midi" : "Bonsoir";
+
+  const completedThisWeek = completedWorkouts.filter((w) => {
+    const d = new Date(w.date);
+    const diff = (Date.now() - d.getTime()) / 86400000;
+    return diff < 7;
+  }).length;
+
+  const nextSessions = muscuProgram.sessions.slice(0, 3);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
-      <PageHeader
-        title={`Salut ${profile.name}`}
-        subtitle="Voici ton tableau de bord APEX"
-      />
+    <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
 
-      {/* Quick stats */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 mb-6 sm:mb-8">
-        <StatCard label="Poids" value={profile.weight} unit="kg" icon="⚖️" color="text-white" />
-        <StatCard label="VO2max" value={profile.vo2max} unit="ml/kg/min" icon="❤️" color="text-[#00d4ff]" />
-        <StatCard label="DC 1RM" value={profile.benchPress1RM} unit="kg" icon="🏋️" color="text-[#a855f7]" />
-        <StatCard
-          label="Glycémie"
-          value={lastGlucose ? lastGlucose.value : "—"}
-          unit={lastGlucose ? "mg/dL" : ""}
-          icon="💉"
-          color={
-            lastGlucose
-              ? lastGlucose.value < 70
-                ? "text-[#ff4757]"
-                : lastGlucose.value > 180
-                  ? "text-[#ff9500]"
-                  : "text-[#00ff94]"
-              : "text-white/40"
-          }
-        />
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 md:gap-6">
-        {/* Colonne 1: Diabète & Nutrition */}
-        <div className="space-y-6">
-          <Card glow="green">
-            <div className="flex items-center justify-between mb-4">
-              <SectionTitle className="mb-0">Diabète T1</SectionTitle>
-              <Link href="/diabete" className="text-xs text-[#00ff94] hover:underline">Voir tout →</Link>
-            </div>
-            {lastGlucose ? (
-              <GlucoseIndicator value={lastGlucose.value} />
-            ) : (
-              <p className="text-white/35 text-sm">Aucune lecture récente</p>
-            )}
-            <div className="mt-4 space-y-2">
-              <p className="text-xs text-white/40">Patterns connus</p>
-              {diabetesConfig.knownPatterns.slice(0, 2).map((p) => (
-                <div key={p.name} className="flex items-start gap-2 text-xs">
-                  <span className="text-[#ff9500]">⚠</span>
-                  <div>
-                    <span className="text-white/70 font-medium">{p.name}:</span>{" "}
-                    <span className="text-white/40">{p.suggestion}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 grid grid-cols-3 gap-3 text-center">
-              <div>
-                <p className="text-xs text-white/35">Ratio matin</p>
-                <p className="text-sm font-semibold text-[#ff9500]">1:{diabetesConfig.ratios.morning}</p>
-              </div>
-              <div>
-                <p className="text-xs text-white/35">Ratio midi</p>
-                <p className="text-sm font-semibold text-[#00d4ff]">1:{diabetesConfig.ratios.lunch}</p>
-              </div>
-              <div>
-                <p className="text-xs text-white/35">Ratio soir</p>
-                <p className="text-sm font-semibold text-[#a855f7]">1:{diabetesConfig.ratios.dinner}</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card>
-            <div className="flex items-center justify-between mb-4">
-              <SectionTitle className="mb-0">Nutrition du jour</SectionTitle>
-              <Link href="/nutrition" className="text-xs text-[#00ff94] hover:underline">Logger →</Link>
-            </div>
-            <div className="space-y-3">
-              <ProgressBar value={todayCalories} max={profile.targetCalories} color="#00ff94" label="Calories" />
-              <ProgressBar value={Math.round(todayProtein)} max={profile.targetProtein} color="#00d4ff" label="Protéines (g)" />
-              <ProgressBar value={Math.round(todayCarbs)} max={profile.targetCarbs} color="#ff9500" label="Glucides (g)" />
-              <ProgressBar value={Math.round(todayFat)} max={profile.targetFat} color="#a855f7" label="Lipides (g)" />
-            </div>
-          </Card>
+      {/* ==================== HERO ==================== */}
+      <section className="mb-8 lg:mb-12 animate-in">
+        <div className="flex items-center gap-2 mb-2">
+          <Pulse tone="accent" size="sm" />
+          <span className="label">Session active · {now.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</span>
         </div>
+        <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight mb-1">
+          {greeting}, {profile.name}.
+        </h1>
+        <p className="text-sm sm:text-base text-text-secondary max-w-xl">
+          Voici l'état de ton instrument aujourd'hui — glycémie, training load, fuel.
+        </p>
+      </section>
 
-        {/* Colonne 2: Muscu */}
-        <div className="space-y-6">
-          <Card glow="purple">
-            <div className="flex items-center justify-between mb-4">
-              <SectionTitle className="mb-0">Musculation</SectionTitle>
-              <Link href="/muscu" className="text-xs text-[#a855f7] hover:underline">Programme →</Link>
-            </div>
-            <div className="flex items-center gap-2 mb-3">
-              <Badge color="purple">{muscuProgram.name}</Badge>
-              <Badge color="gray">{phase.name}</Badge>
-            </div>
-            <p className="text-xs text-white/40 mb-4">{phase.focus} · RIR cible: {phase.rirTarget}</p>
+      {/* ==================== HERO METRIC : GLUCOSE ==================== */}
+      <section className="mb-8">
+        <div className="surface-1 p-6 sm:p-8 relative overflow-hidden">
+          <div
+            aria-hidden
+            className="absolute -top-24 -right-24 h-64 w-64 rounded-full opacity-[0.08] blur-3xl"
+            style={{
+              background: lastGlucose
+                ? `var(--glucose-${glucoseTone(lastGlucose.value) === "success" ? "normal" : glucoseTone(lastGlucose.value) === "warning" ? "high" : "low"})`
+                : "var(--accent)",
+            }}
+          />
 
-            <p className="text-xs text-white/40 mb-2">Prochaines séances</p>
-            <div className="space-y-2">
-              {muscuProgram.sessions.slice(0, 3).map((s) => (
-                <Link key={s.id} href={`/muscu/seance/${s.id}`} className="block">
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] transition-colors">
-                    <div>
-                      <p className="text-sm font-medium">{s.name}</p>
-                      <p className="text-xs text-white/35">{s.day} · {s.duration}min</p>
-                    </div>
-                    <span className="text-white/20">→</span>
-                  </div>
+          <div className="relative grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <Droplet size={14} className="text-diabete" />
+                <span className="label">Glycémie temps réel</span>
+                {lastGlucose && (
+                  <span className="text-[11px] text-text-tertiary ml-auto">
+                    il y a {Math.round((Date.now() - new Date(lastGlucose.readAt).getTime()) / 60000)}min
+                  </span>
+                )}
+              </div>
+
+              <HeroMetric
+                label=""
+                value={lastGlucose ? lastGlucose.value : "—"}
+                unit={lastGlucose ? "mg/dL" : ""}
+                size="xl"
+                tone={
+                  !lastGlucose
+                    ? "default"
+                    : glucoseTone(lastGlucose.value) === "success"
+                    ? "accent"
+                    : glucoseTone(lastGlucose.value) === "warning"
+                    ? "warning"
+                    : "error"
+                }
+                subtitle={lastGlucose ? `${glucoseStatus(lastGlucose.value)} · Cible ${diabetesConfig.targetGlucose} · Plage ${diabetesConfig.targetRange.min}–${diabetesConfig.targetRange.max}` : "Aucune lecture"}
+              />
+
+              <div className="mt-6 flex flex-wrap items-center gap-2">
+                <Link
+                  href="/diabete"
+                  className="inline-flex items-center gap-2 px-4 h-10 rounded-lg bg-accent text-accent-ink text-sm font-semibold hover:bg-accent-hover transition-colors tap-scale"
+                >
+                  Calculer bolus
+                  <ArrowUpRight size={16} strokeWidth={2.5} />
                 </Link>
-              ))}
+                <Link
+                  href="/diabete"
+                  className="inline-flex items-center gap-2 px-4 h-10 rounded-lg bg-bg-tertiary text-text-primary text-sm hover:bg-bg-hover transition-colors tap-scale"
+                >
+                  Logger glucose
+                </Link>
+              </div>
             </div>
 
-            <div className="mt-4 pt-4 border-t border-white/[0.06]">
-              <p className="text-xs text-white/40 mb-2">Points faibles ciblés</p>
-              <div className="flex gap-2 flex-wrap">
+            {/* Sparkline glucose 24 dernières lectures */}
+            <div className="min-w-[200px]">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="label">Tendance · {glucoseSeries.length} pts</span>
+              </div>
+              {glucoseSeries.length > 1 ? (
+                <Sparkline
+                  data={glucoseSeries}
+                  color={
+                    lastGlucose && glucoseTone(lastGlucose.value) === "success"
+                      ? "var(--accent)"
+                      : lastGlucose && glucoseTone(lastGlucose.value) === "warning"
+                      ? "var(--warning)"
+                      : "var(--error)"
+                  }
+                  width={260}
+                  height={80}
+                  strokeWidth={2}
+                />
+              ) : (
+                <div className="h-20 flex items-center text-xs text-text-tertiary">
+                  Pas assez de données
+                </div>
+              )}
+              <div className="mt-2 flex justify-between num text-[10px] text-text-tertiary">
+                <span>24h</span>
+                <span>maintenant</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Ratios mini — signature cockpit */}
+          <div className="relative mt-8 pt-6 border-t border-border-subtle grid grid-cols-3 gap-4">
+            <div>
+              <span className="label">Ratio matin</span>
+              <p className="num text-xl mt-1 text-text-primary">
+                1:<span className="text-accent-2">{diabetesConfig.ratios.morning}</span>
+              </p>
+            </div>
+            <div>
+              <span className="label">Ratio midi</span>
+              <p className="num text-xl mt-1 text-text-primary">
+                1:<span className="text-accent-2">{diabetesConfig.ratios.lunch}</span>
+              </p>
+            </div>
+            <div>
+              <span className="label">Ratio soir</span>
+              <p className="num text-xl mt-1 text-text-primary">
+                1:<span className="text-accent-2">{diabetesConfig.ratios.dinner}</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ==================== METRIC GRID ==================== */}
+      <section className="mb-10">
+        <div className="flex items-baseline justify-between mb-4">
+          <h2 className="text-sm font-semibold tracking-tight">Indicateurs</h2>
+          <span className="label">4 métriques</span>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 stagger">
+          <MetricCard
+            label="Poids"
+            value={profile.weight.toFixed(1)}
+            unit="kg"
+            sparkline={weightSeries}
+            tone="default"
+          />
+          <MetricCard
+            label="VO₂ max"
+            value={profile.vo2max.toFixed(0)}
+            unit="ml/kg/min"
+            hint={`VMA ${vma.toFixed(1)} km/h`}
+            tone="running"
+          />
+          <MetricCard
+            label="Bench 1RM"
+            value={profile.benchPress1RM}
+            unit="kg"
+            tone="muscu"
+          />
+          <MetricCard
+            label="Semaine"
+            value={`${completedThisWeek}`}
+            unit="séances"
+            hint={`Phase ${phase.name} · RIR ${phase.rirTarget}`}
+            tone="accent-2"
+          />
+        </div>
+      </section>
+
+      {/* ==================== MAIN 3-COL ==================== */}
+      <div className="grid gap-4 lg:gap-6 lg:grid-cols-3">
+
+        {/* --- MUSCU --- */}
+        <section className="surface-1 p-5 lg:p-6 animate-slide-up">
+          <header className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2">
+              <Dumbbell size={16} className="text-muscu" />
+              <h3 className="text-sm font-semibold tracking-tight">Musculation</h3>
+            </div>
+            <Link
+              href="/muscu"
+              className="text-[11px] text-text-tertiary hover:text-text-primary inline-flex items-center gap-1 transition-colors"
+            >
+              Programme <ChevronRight size={12} />
+            </Link>
+          </header>
+
+          <div className="mb-4">
+            <span className="label">Programme actif</span>
+            <p className="text-base font-medium mt-1 truncate">{muscuProgram.name}</p>
+            <p className="text-[11px] text-text-tertiary mt-1">
+              {phase.focus}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <span className="label mb-2 block">Prochaines séances</span>
+            {nextSessions.map((s) => (
+              <Link
+                key={s.id}
+                href={`/muscu/seance/${s.id}`}
+                className="group flex items-center justify-between gap-3 p-3 rounded-lg bg-bg-tertiary hover:bg-bg-hover transition-colors tap-scale"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{s.name}</p>
+                  <p className="text-[11px] text-text-tertiary mt-0.5">
+                    {s.day} · <span className="num">{s.duration}</span>min
+                  </p>
+                </div>
+                <ChevronRight
+                  size={16}
+                  className="text-text-tertiary group-hover:text-accent transition-colors flex-shrink-0"
+                />
+              </Link>
+            ))}
+          </div>
+
+          {profile.weakPoints && profile.weakPoints.length > 0 && (
+            <div className="mt-5 pt-4 border-t border-border-subtle">
+              <span className="label mb-2 block">Points faibles ciblés</span>
+              <div className="flex gap-1.5 flex-wrap">
                 {profile.weakPoints.map((wp) => (
-                  <Badge key={wp} color="orange">{wp}</Badge>
+                  <span
+                    key={wp}
+                    className="text-[11px] px-2 py-1 rounded-md bg-muscu/10 text-muscu"
+                  >
+                    {wp}
+                  </span>
                 ))}
               </div>
             </div>
-          </Card>
+          )}
+        </section>
 
-          <Card>
-            <p className="text-xs text-white/40 mb-2">Séances complétées</p>
-            <p className="text-3xl font-bold">{completedWorkouts.length}</p>
-            <p className="text-xs text-white/35 mt-1">
-              {completedWorkouts.length > 0
-                ? `Dernière: ${new Date(completedWorkouts[0].date).toLocaleDateString("fr-FR")}`
-                : "Commence ta première séance !"}
+        {/* --- RUNNING --- */}
+        <section className="surface-1 p-5 lg:p-6 animate-slide-up">
+          <header className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2">
+              <Footprints size={16} className="text-running" />
+              <h3 className="text-sm font-semibold tracking-tight">Running</h3>
+            </div>
+            <Link
+              href="/running"
+              className="text-[11px] text-text-tertiary hover:text-text-primary inline-flex items-center gap-1 transition-colors"
+            >
+              Plan <ChevronRight size={12} />
+            </Link>
+          </header>
+
+          <div className="mb-5">
+            <span className="label">Semi-marathon</span>
+            <p className="num text-3xl font-semibold mt-1 text-running leading-none">
+              {formatTime(semi.predictedTimeMinutes)}
             </p>
-          </Card>
-        </div>
+            <p className="text-[11px] text-text-tertiary mt-1.5">
+              Prédit · confiance {semi.confidence}
+            </p>
+          </div>
 
-        {/* Colonne 3: Running */}
-        <div className="space-y-6">
-          <Card glow="blue">
-            <div className="flex items-center justify-between mb-4">
-              <SectionTitle className="mb-0">Running</SectionTitle>
-              <Link href="/running" className="text-xs text-[#00d4ff] hover:underline">Plan →</Link>
+          <div className="grid grid-cols-2 gap-2 mb-5">
+            <div className="surface-2 p-3">
+              <span className="label">VMA</span>
+              <p className="num text-lg mt-1 font-semibold">
+                {vma.toFixed(1)}
+                <span className="text-[10px] text-text-tertiary ml-1 font-normal">km/h</span>
+              </p>
             </div>
-            <div className="flex items-center gap-2 mb-3">
-              <Badge color="blue">Semi-marathon</Badge>
-              <Badge color="gray">Semaine {currentRunningWeek}/14</Badge>
+            <div className="surface-2 p-3">
+              <span className="label">Allure cible</span>
+              <p className="num text-lg mt-1 font-semibold">
+                {formatPace(semi.predictedPace)}
+                <span className="text-[10px] text-text-tertiary ml-1 font-normal">/km</span>
+              </p>
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="p-3 rounded-lg bg-white/[0.03]">
-                <p className="text-xs text-white/35">VMA</p>
-                <p className="text-lg font-bold text-[#00d4ff]">{vma.toFixed(1)} <span className="text-xs font-normal text-white/35">km/h</span></p>
+          <div>
+            <div className="flex justify-between mb-1.5">
+              <span className="label">Semaine {currentRunningWeek} / 14</span>
+              <span className="num text-[11px] text-text-tertiary">
+                {Math.round((currentRunningWeek / 14) * 100)}%
+              </span>
+            </div>
+            <div className="h-1 rounded-full bg-bg-tertiary overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{
+                  width: `${(currentRunningWeek / 14) * 100}%`,
+                  background: "var(--running)",
+                }}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* --- NUTRITION --- */}
+        <section className="surface-1 p-5 lg:p-6 animate-slide-up">
+          <header className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2">
+              <Apple size={16} className="text-nutrition" />
+              <h3 className="text-sm font-semibold tracking-tight">Nutrition</h3>
+            </div>
+            <Link
+              href="/nutrition"
+              className="text-[11px] text-text-tertiary hover:text-text-primary inline-flex items-center gap-1 transition-colors"
+            >
+              Logger <ChevronRight size={12} />
+            </Link>
+          </header>
+
+          <div className="flex items-center gap-5 mb-5">
+            <Ring
+              value={caloriesPct * 100}
+              max={100}
+              size={88}
+              strokeWidth={7}
+              color="var(--nutrition)"
+            >
+              <span className="num text-lg font-semibold leading-none">
+                {Math.round(todayCalories)}
+              </span>
+              <span className="label mt-0.5">kcal</span>
+            </Ring>
+
+            <div className="flex-1 space-y-2.5">
+              <MacroLine
+                label="Protéines"
+                value={Math.round(todayProtein)}
+                max={profile.targetProtein}
+                color="var(--running)"
+              />
+              <MacroLine
+                label="Glucides"
+                value={Math.round(todayCarbs)}
+                max={profile.targetCarbs}
+                color="var(--nutrition)"
+              />
+              <MacroLine
+                label="Lipides"
+                value={Math.round(todayFat)}
+                max={profile.targetFat}
+                color="var(--accent-2)"
+              />
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-border-subtle">
+            <span className="label">Objectif</span>
+            <p className="text-[11px] text-text-secondary mt-1">
+              <span className="num font-medium text-text-primary">{Math.round(todayCalories)}</span> / {profile.targetCalories} kcal ·{" "}
+              <span className="num font-medium" style={{ color: "var(--running)" }}>
+                {Math.round(proteinPct * 100)}%
+              </span>{" "}
+              protéines
+            </p>
+          </div>
+        </section>
+      </div>
+
+      {/* ==================== GOALS STRIP ==================== */}
+      {profile.goals && profile.goals.length > 0 && (
+        <section className="mt-10 surface-1 p-5 lg:p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Target size={14} className="text-accent" />
+            <span className="label">Objectifs actifs</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {profile.goals.map((g) => (
+              <div
+                key={g}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-tertiary text-sm"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                <span>{g}</span>
               </div>
-              <div className="p-3 rounded-lg bg-white/[0.03]">
-                <p className="text-xs text-white/35">Temps prédit semi</p>
-                <p className="text-lg font-bold text-[#00d4ff]">{formatTime(semiPrediction.predictedTimeMinutes)}</p>
-              </div>
-            </div>
+            ))}
+          </div>
+        </section>
+      )}
 
-            <div className="p-3 rounded-lg bg-white/[0.03] mb-4">
-              <p className="text-xs text-white/35">Allure cible semi</p>
-              <p className="text-2xl font-bold text-[#00d4ff]">{formatPace(semiPrediction.predictedPace)}<span className="text-sm font-normal text-white/35"> /km</span></p>
-              <p className="text-xs text-white/30 mt-1">Confiance: {semiPrediction.confidence}</p>
-            </div>
+      <footer className="mt-10 text-center text-[11px] text-text-tertiary">
+        <p>
+          APEX · <span className="num">v2</span> ·
+          <span className="text-text-secondary ml-1">Precision Coach</span>
+        </p>
+      </footer>
+    </div>
+  );
+}
 
-            <ProgressBar value={currentRunningWeek} max={14} color="#00d4ff" label="Progression du plan" />
-          </Card>
-
-          <Card>
-            <SectionTitle>Objectifs</SectionTitle>
-            <div className="space-y-3">
-              {profile.goals.map((goal) => (
-                <div key={goal} className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-[#00ff94]" />
-                  <span className="text-sm text-white/70">{goal}</span>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card>
-            <SectionTitle>Profil</SectionTitle>
-            <div className="grid grid-cols-2 gap-y-2 text-sm">
-              <span className="text-white/35">Taille</span><span>{profile.height} cm</span>
-              <span className="text-white/35">Morphotype</span><span>{profile.bodyType}</span>
-              <span className="text-white/35">Insuline</span><span>{profile.insulinRapid}</span>
-              <span className="text-white/35">CGM</span><span>{profile.cgmType}</span>
-              <span className="text-white/35">Basale</span><span>{profile.basalDose} U/jour</span>
-            </div>
-          </Card>
-        </div>
+function MacroLine({
+  label,
+  value,
+  max,
+  color,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  color: string;
+}) {
+  const pct = max > 0 ? Math.min(1, value / max) : 0;
+  return (
+    <div>
+      <div className="flex justify-between mb-1">
+        <span className="text-[11px] text-text-secondary">{label}</span>
+        <span className="num text-[11px] text-text-tertiary">
+          {value} / {max}g
+        </span>
+      </div>
+      <div className="h-1 rounded-full bg-bg-tertiary overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{ width: `${pct * 100}%`, background: color }}
+        />
       </div>
     </div>
   );

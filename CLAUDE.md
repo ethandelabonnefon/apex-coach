@@ -98,43 +98,61 @@ apex-coach/
     └── icons/                    # Icônes app
 ```
 
-## Design System (Phase 1 — avril 2026)
+## Design System (Phase 2 — "Precision Instrument", avril 2026)
 
-Refonte UI inspirée Linear/Notion/Vercel. Fondations premium, minimalistes.
+Refonte créative après analyse de Linear, Raycast, Arc, Strava, MacroFactor. Identité **Precise. Athletic. Clinical.** — instrument de performance médicale, pas un tracker amateur.
+
+### Direction créative
+- **Signature typographique** : JetBrains Mono tabular-nums pour TOUS les chiffres. Les métriques sont les héros.
+- **Label cockpit** : uppercase 10px tracking-wide (`.label` utility) — feel instrument de précision
+- **Hiérarchie par surfaces, pas par borders** : `surface-1 / surface-2 / surface-3` au lieu d'empiler des bordures
+- **Accent primaire Electric Lime** `#D4FF4F` — énergie contenue (remplace l'ancien `#10B981`)
+- **Accent secondaire Soft Lavender** `#B4A7FF` — recovery, T1D, données cliniques
 
 ### Tokens (globals.css `@theme`)
-- **Backgrounds** : `bg-bg-primary` (#0A0A0B), `bg-bg-secondary` (#111113), `bg-bg-tertiary` (#18181B), `bg-bg-hover` (#1F1F23)
-- **Texte** : `text-text-primary` (#FAFAFA), `text-text-secondary` (#A1A1AA), `text-text-tertiary` (#52525B)
-- **Accent** : `bg-accent` / `text-accent` (#10B981), `bg-accent-hover` (#059669), `bg-accent-subtle`
-- **Bordures** : `border-border-subtle` (#27272A), `border-border-default` (#3F3F46)
-- **États** : `success`, `warning` (#F59E0B), `error` (#EF4444), `info` (#3B82F6)
-- **Catégories** : `muscu` (vert), `running` (bleu), `nutrition` (orange), `diabete` (violet)
-- **Fonts** : `font-sans` → Inter, `font-mono` → JetBrains Mono
+- **Backgrounds** : `bg-bg-primary` (#0A0A0B), `bg-bg-secondary` (#111113), `bg-bg-tertiary` (#18181B), `bg-bg-elevated` (#1F1F23), `bg-bg-hover` (#26262B)
+- **Texte** : `text-text-primary` (#FAFAFA), `text-text-secondary` (#A1A1AA), `text-text-tertiary` (#71717A), `text-text-disabled` (#3F3F46), `text-ink` (inverse pour texte sur accent)
+- **Accent primaire** : `bg-accent` (#D4FF4F), `bg-accent-hover` (#C7F026), `bg-accent-pressed`, `bg-accent-subtle`, `text-accent-ink` (noir sur lime)
+- **Accent secondaire** : `bg-accent-2` (#B4A7FF), `bg-accent-2-hover`, `bg-accent-2-subtle`
+- **Bordures** : `border-border-subtle` (6% white), `border-border-default` (10%), `border-border-strong` (16%) — rgba au lieu de hex
+- **États** : `success` (#7AE582), `warning` (#FFAE5C), `error` (#FF6B6B), `info` (#7FC7FF) — palette chaude cohérente
+- **Catégories** : `muscu` (lime), `running` (sky #7FC7FF), `nutrition` (amber #FFAE5C), `diabete` (lavender #B4A7FF)
+- **Glucose** : `glucose-low` (#FF6B6B), `glucose-normal` (#7AE582), `glucose-high` (#FFAE5C), `glucose-critical` (#FF3B3B)
+- **Fonts** : `font-sans` → Inter (letter-spacing -0.01em), `font-mono` → JetBrains Mono
 
 ### Composants UI (`components/ui/`)
-- **Button** : variants `primary | secondary | ghost | danger` ; sizes `sm | md | lg | xl` ; `isLoading`, `leftIcon`, `rightIcon`, `fullWidth`
-- **Card** : variants `default | elevated | bordered | gradient` ; paddings `none | sm | md | lg` ; `interactive` pour hover+tap-scale ; sous-composants `CardHeader / CardTitle / CardDescription / CardContent / CardFooter`
-- **Input** : `label`, `error`, `hint`, `icon`, `suffix` ; aria-describedby auto, focus ring accent
-- **NumberInput** : stats (sizes `md | lg | xl`), `unit`, `min/max/step`, font-mono tabular-nums
-- **StatCard** : `label`, `value`, `unit`, `icon`, `trend` (up/down/neutral), `color` (default/accent/warning/error/info)
-- **Badge** : variants 10 (default, success, warning, error, info, accent, muscu, running, nutrition, diabete) ; sizes `sm | md` ; `dot` optionnel
-- **Progress** : sizes `sm | md | lg` ; colors `accent | warning | error | info | success` ; `showLabel`, rôle ARIA progressbar
-- **Skeleton** : avec variante `circle` + helper `SkeletonText({ lines })`
+- **Button / Card / Input / NumberInput / StatCard / Badge / Progress / Skeleton** : Phase 1, inchangés mais récupèrent les nouveaux tokens via CSS variables
+- **HeroMetric** : métrique géante mono, avec label cockpit, delta directionnel (↑/↓/→), subtitle optionnel, tones (default/accent/accent-2/warning/error), sizes (md/lg/xl)
+- **MetricCard** : card 1-métrique avec label uppercase, valeur mono, unit discrète, delta, hint, sparkline intégrée
+- **Ring** : arc de progression SVG 0–100%, stroke animé cubic-bezier, children custom au centre (utilisé pour calories/adherence)
+- **Sparkline** : courbe SVG inline avec gradient area + dot terminal, dimensions custom, color via CSS var
+- **Pulse** : dot pulsant "vital signal" (tones accent/success/warning/error/info) — signature UI
 
-### Layout (`components/layout/`)
-- **PageLayout** : header sticky glass (backdrop-blur), `title / subtitle / action / backHref`, safe-area top, animate-in sur main
-- **Container** : sizes `sm (md) | md (lg) | lg (3xl) | xl (5xl)`, centré + padding horizontal
-- **Section** : `title` (uppercase tracking), `description`, `action` ; mb-8 par défaut
+### Layout & Navigation
+- **Sidebar desktop** (60 col, 240px) : logo lime carré "A", label "Precision Coach", nav avec active indicator latéral (barre lime verticale) + fond `accent-subtle`, bloc user en bas
+- **Bottom nav mobile** : 5 items avec active "dot indicator" coloré par catégorie au-dessus de l'icône + glow, tap-scale feedback
+- **Header mobile** : glass (saturate 180% + blur 20px), logo compact + bouton profil rond
+- **Icons** : `lucide-react` (Gauge, Dumbbell, Footprints, Apple, Droplet, UserRound, ArrowUpRight, ChevronRight, Target) — remplace les emojis
 
-### Utilitaires
-- `cn(...)` dans [lib/utils.ts](lib/utils.ts) — merge clsx + tailwind-merge
-- `glass` (backdrop-blur 12px), `glow-accent`, `tap-scale`, `animate-in`, `animate-slide-up`, `animate-pulse-subtle`, `skeleton` (shimmer)
-- Safe areas : `pt-safe`, `pb-safe` ; `scrollbar-hide`, `touch-target` (44px min)
+### Utilitaires signature
+- `.num` / `.num-hero` : mono tabular-nums avec letter-spacing -0.02em / -0.04em
+- `.label` : uppercase 10px tracking-wide text-tertiary (cockpit feel)
+- `.surface-1 / .surface-2 / .surface-3` : hiérarchie par profondeur (bg-secondary → tertiary → elevated)
+- `.glass` : backdrop saturate 180% + blur 20px (headers/toolbars)
+- `.glow-accent / .glow-accent-2 / .glow-ring` : ombres lime/lavender
+- `.dot-pulse` : animation ping pour status indicator
+- `.hover-lift` : translateY(-2px) transition 200ms
+- `.tap-scale` : scale 0.97 active (feedback iOS)
+- `.stagger > *` : animation slide-up décalée children 1-8 (entry sequence)
+- `.animate-in / .animate-slide-up / .animate-pulse-subtle / .skeleton` (shimmer)
+- `::selection` + `:focus-visible` globalement stylés avec l'accent lime
 
-### Compatibilité
+### Compatibilité & migration
 - `tailwind.config.ts` chargé via `@config` directive dans globals.css (Tailwind 4)
-- Legacy tokens (`--accent-green`, `card`, `neon-*`, `progress-bar`, etc.) conservés pour ne pas casser les pages existantes avant migration Phase 2+
-- Ancien `components/ui.tsx` coexiste avec le nouveau `components/ui/` (résolution TS : le fichier `.tsx` gagne sur les imports `@/components/ui`, le dossier est ciblé via `@/components/ui/Button`)
+- Legacy tokens (`--accent-green`, `card`, `neon-*`, `progress-bar`, etc.) **toujours conservés** pour ne pas casser pages non migrées
+- Ancien `components/ui.tsx` coexiste avec `components/ui/` (résolution TS : `.tsx` gagne sur `@/components/ui` — importer les nouveaux composants via `@/components/ui/HeroMetric` etc.)
+- viewport themeColor mis à jour : `#0A0A0B` (était `#00ff94`)
+- layout.tsx utilise `lg:ml-60` (sidebar 240px) et `pb-24` pour bottom nav mobile
 
 ## Fonctionnalites Implementees
 
@@ -277,6 +295,7 @@ Le projet est une PWA fonctionnelle deployee sur Vercel. **Toutes les fonctionna
 - Flux E2E analyse photos (capture → Claude Vision → affichage → historique)
 - Application des changements programme post-diagnostic au programme actif
 - **Design System Phase 1** : tokens `@theme` Tailwind 4, 8 composants UI + 3 layout, font Inter, utilitaires cn/glass/glow, legacy preserve (aucune regression sur pages existantes)
+- **Design System Phase 2 — Refonte "Precision Instrument"** : nouvelle palette Electric Lime + Soft Lavender, composants signature (HeroMetric, MetricCard, Ring, Sparkline, Pulse), typography mono tabular-nums pour toutes les métriques, navigation refaite avec icons lucide-react et active indicators, utilitaires `.surface-1/2/3`, `.label`, `.num`, `.stagger`, glass headers saturate 180%, Dashboard refondu en preview
 
 Le profil utilisateur par defaut est configure pour Ethan, 21 ans, 188cm, 85kg, DT1 sous Novorapid + FreeStyle Libre.
 

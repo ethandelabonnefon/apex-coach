@@ -2,99 +2,179 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  Gauge,
+  Dumbbell,
+  Footprints,
+  Apple,
+  Droplet,
+  UserRound,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
-const SIDEBAR_ITEMS = [
-  { href: "/", label: "Dashboard", icon: "⚡" },
-  { href: "/muscu", label: "Muscu", icon: "🏋️" },
-  { href: "/running", label: "Running", icon: "🏃" },
-  { href: "/nutrition", label: "Nutrition", icon: "🥗" },
-  { href: "/diabete", label: "Diabète", icon: "💉" },
-  { href: "/profil", label: "Profil", icon: "👤" },
+type NavItem = {
+  href: string;
+  label: string;
+  Icon: LucideIcon;
+  tone: string;
+};
+
+const NAV: NavItem[] = [
+  { href: "/", label: "Overview", Icon: Gauge, tone: "var(--accent)" },
+  { href: "/muscu", label: "Muscu", Icon: Dumbbell, tone: "var(--muscu)" },
+  { href: "/running", label: "Running", Icon: Footprints, tone: "var(--running)" },
+  { href: "/nutrition", label: "Nutrition", Icon: Apple, tone: "var(--nutrition)" },
+  { href: "/diabete", label: "T1D", Icon: Droplet, tone: "var(--diabete)" },
 ];
 
-const BOTTOM_NAV_ITEMS = [
-  { href: "/", label: "Dashboard", icon: "⚡" },
-  { href: "/muscu", label: "Muscu", icon: "🏋️" },
-  { href: "/running", label: "Running", icon: "🏃" },
-  { href: "/nutrition", label: "Nutrition", icon: "🥗" },
-  { href: "/diabete", label: "Diabète", icon: "💉" },
+const SIDEBAR_NAV: NavItem[] = [
+  ...NAV,
+  { href: "/profil", label: "Profil", Icon: UserRound, tone: "var(--text-secondary)" },
 ];
+
+function useActive(href: string) {
+  const pathname = usePathname();
+  return pathname === href || (href !== "/" && pathname.startsWith(href));
+}
+
+function ActiveDot({ color }: { color: string }) {
+  return (
+    <span
+      aria-hidden
+      className="absolute -top-0.5 left-1/2 h-[3px] w-6 -translate-x-1/2 rounded-full"
+      style={{ background: color, boxShadow: `0 0 10px ${color}` }}
+    />
+  );
+}
+
+function SidebarLink({ item }: { item: NavItem }) {
+  const active = useActive(item.href);
+  const { Icon } = item;
+  return (
+    <Link
+      href={item.href}
+      className="group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors"
+      style={{
+        color: active ? item.tone : "var(--text-secondary)",
+        background: active ? "var(--accent-subtle)" : "transparent",
+      }}
+    >
+      {active && (
+        <span
+          aria-hidden
+          className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r"
+          style={{ background: item.tone }}
+        />
+      )}
+      <Icon
+        size={18}
+        strokeWidth={active ? 2.25 : 1.75}
+        className="transition-transform group-hover:scale-110"
+      />
+      <span className={active ? "font-medium" : ""}>{item.label}</span>
+    </Link>
+  );
+}
+
+function BottomNavLink({ item }: { item: NavItem }) {
+  const active = useActive(item.href);
+  const { Icon } = item;
+  return (
+    <Link
+      href={item.href}
+      className="relative flex flex-1 flex-col items-center justify-center gap-1 py-2 touch-target tap-scale"
+      style={{ color: active ? item.tone : "var(--text-tertiary)" }}
+    >
+      {active && <ActiveDot color={item.tone} />}
+      <Icon size={22} strokeWidth={active ? 2.25 : 1.75} />
+      <span
+        className="text-[10px] leading-none tracking-wide"
+        style={{ fontWeight: active ? 600 : 500 }}
+      >
+        {item.label}
+      </span>
+    </Link>
+  );
+}
 
 export function Navigation() {
-  const pathname = usePathname();
-
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:flex fixed top-0 left-0 h-full w-64 flex-col bg-[#12121a] border-r border-white/[0.06] z-50">
-        <div className="p-6 border-b border-white/[0.06]">
-          <h1 className="text-xl font-bold">
-            <span className="neon-green">APEX</span>{" "}
-            <span className="text-white/60">Coach</span>
-          </h1>
-          <p className="text-xs text-white/35 mt-1">Fitness · Nutrition · T1D</p>
-        </div>
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto scrollbar-hide">
-          {SIDEBAR_ITEMS.map((item) => {
-            const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-all ${
-                  isActive
-                    ? "bg-[#00ff94]/10 text-[#00ff94] font-medium"
-                    : "text-white/50 hover:text-white/80 hover:bg-white/[0.03]"
-                }`}
-              >
-                <span className="text-base">{item.icon}</span>
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-        <div className="p-4 border-t border-white/[0.06]">
-          <div className="flex items-center gap-3 px-4 py-2">
-            <div className="w-8 h-8 rounded-full bg-[#00ff94]/20 flex items-center justify-center text-sm font-bold text-[#00ff94]">E</div>
+      {/* ============ Sidebar desktop ============ */}
+      <aside className="hidden lg:flex fixed top-0 left-0 h-full w-60 flex-col bg-bg-primary border-r border-border-subtle z-50">
+        {/* Logo block */}
+        <div className="px-5 pt-6 pb-4">
+          <div className="flex items-center gap-2.5">
+            <div
+              className="h-8 w-8 rounded-lg flex items-center justify-center"
+              style={{ background: "var(--accent)", color: "var(--accent-ink)" }}
+            >
+              <span className="text-sm font-black tracking-tight">A</span>
+            </div>
             <div>
-              <p className="text-sm font-medium">Ethan</p>
-              <p className="text-xs text-white/35">T1D · 21 ans</p>
+              <p className="text-sm font-semibold tracking-tight">APEX</p>
+              <p className="label mt-0">Precision Coach</p>
             </div>
           </div>
         </div>
+
+        {/* Nav */}
+        <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto scrollbar-hide">
+          <p className="label px-3 mb-2 mt-2">Modules</p>
+          {SIDEBAR_NAV.map((item) => (
+            <SidebarLink key={item.href} item={item} />
+          ))}
+        </nav>
+
+        {/* User block */}
+        <Link
+          href="/profil"
+          className="mx-3 mb-4 p-3 rounded-lg bg-bg-secondary hover:bg-bg-tertiary transition-colors flex items-center gap-3"
+        >
+          <div
+            className="h-9 w-9 rounded-full flex items-center justify-center text-sm font-semibold"
+            style={{ background: "var(--accent-2-subtle)", color: "var(--accent-2)" }}
+          >
+            E
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium truncate">Ethan</p>
+            <p className="text-[11px] text-text-tertiary">T1D · 21y</p>
+          </div>
+        </Link>
       </aside>
 
-      {/* Mobile header */}
-      <header className="lg:hidden sticky top-0 z-40 bg-[#12121a]/95 backdrop-blur-xl border-b border-white/[0.06] px-4 py-3 pt-safe">
+      {/* ============ Header mobile ============ */}
+      <header className="lg:hidden sticky top-0 z-40 glass px-4 py-3 pt-safe">
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-bold">
-            <span className="neon-green">APEX</span>{" "}
-            <span className="text-white/60">Coach</span>
-          </h1>
-          <Link href="/profil" className="p-2 text-white/40 hover:text-white transition-colors">
-            <span className="text-xl">👤</span>
+          <Link href="/" className="flex items-center gap-2">
+            <div
+              className="h-7 w-7 rounded-md flex items-center justify-center"
+              style={{ background: "var(--accent)", color: "var(--accent-ink)" }}
+            >
+              <span className="text-xs font-black tracking-tight">A</span>
+            </div>
+            <span className="text-sm font-semibold tracking-tight">APEX</span>
+          </Link>
+          <Link
+            href="/profil"
+            className="h-9 w-9 rounded-full flex items-center justify-center bg-bg-secondary touch-target"
+            aria-label="Profil"
+          >
+            <UserRound size={16} className="text-text-secondary" />
           </Link>
         </div>
       </header>
 
-      {/* Mobile bottom nav */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#12121a]/95 backdrop-blur-xl border-t border-white/[0.06] z-50">
-        <div className="flex justify-around py-2 pb-safe">
-          {BOTTOM_NAV_ITEMS.map((item) => {
-            const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors touch-target ${
-                  isActive ? "text-[#00ff94]" : "text-white/40"
-                }`}
-              >
-                <span className="text-lg">{item.icon}</span>
-                <span className="text-[10px]">{item.label}</span>
-              </Link>
-            );
-          })}
+      {/* ============ Bottom nav mobile ============ */}
+      <nav
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-50 glass pb-safe"
+        aria-label="Navigation principale"
+      >
+        <div className="flex items-stretch px-2">
+          {NAV.map((item) => (
+            <BottomNavLink key={item.href} item={item} />
+          ))}
         </div>
       </nav>
     </>

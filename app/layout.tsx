@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#00ff94",
+  themeColor: "#0A0A0B",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -42,10 +42,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="APEX Coach" />
       </head>
-      <body className="min-h-full bg-[#0a0a0f] text-white">
+      <body className="min-h-full bg-bg-primary text-text-primary">
         <OfflineIndicator />
         <Navigation />
-        <div className="lg:ml-64 min-h-screen pb-20 lg:pb-0">
+        <div className="lg:ml-60 min-h-screen pb-24 lg:pb-0">
           <main>{children}</main>
         </div>
         <CoachProvider />
