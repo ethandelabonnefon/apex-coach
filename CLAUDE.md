@@ -7,7 +7,9 @@
 - **Framework**: Next.js 16.2.1 (App Router, Turbopack)
 - **Runtime**: React 19.2.4, TypeScript (strict mode)
 - **State**: Zustand 5.0.12 avec persistence localStorage (`apex-coach-storage`)
-- **Styling**: Tailwind CSS 4 + PostCSS, dark theme glassmorphism
+- **Styling**: Tailwind CSS 4 + PostCSS, design system premium (tokens via `@theme`)
+- **Design System**: clsx 2.1.1, tailwind-merge 3.5, class-variance-authority 0.7.1
+- **Fonts**: Inter (primary, via `next/font`), Geist/Geist Mono (legacy), JetBrains Mono (stats)
 - **AI**: Anthropic Claude Sonnet 4 (`@anthropic-ai/sdk` v0.80.0) - toutes les routes API
 - **Charts**: Recharts 3.8.1
 - **Dates**: date-fns 4.1.0
@@ -46,7 +48,9 @@ apex-coach/
 │   └── diagnostic/               # Ancien formulaire diagnostic (legacy)
 │
 ├── components/
-│   ├── ui.tsx                    # Composants UI (Card, Button, Badge, Modal, etc.)
+│   ├── ui.tsx                    # LEGACY: anciens composants UI (Card, Button, Badge, Modal) — utilisés par pages existantes
+│   ├── ui/                       # DESIGN SYSTEM (Phase 1) : Button, Card, Input, NumberInput, StatCard, Badge, Progress, Skeleton
+│   ├── layout/                   # Layout primitives : PageLayout, Container, Section
 │   ├── navigation.tsx            # Sidebar desktop (64px) + bottom nav mobile
 │   ├── coach/
 │   │   ├── CoachButton.tsx       # FAB flottant draggable (z-40, safe zones)
@@ -64,6 +68,7 @@ apex-coach/
 │   └── programs/                 # ProgramUpdateModal
 │
 ├── lib/
+│   ├── utils.ts                  # cn() — merge Tailwind classes (clsx + tailwind-merge)
 │   ├── store.ts                  # Zustand store (profil, diabète, programmes, diagnostics)
 │   ├── constants.ts              # Defaults (USER_PROFILE, DIABETES_CONFIG, MUSCU_PROGRAM)
 │   ├── program-generation-flow.ts # Orchestrateur : AI-first + fallback local
@@ -92,6 +97,44 @@ apex-coach/
     ├── sw.js                     # Service worker
     └── icons/                    # Icônes app
 ```
+
+## Design System (Phase 1 — avril 2026)
+
+Refonte UI inspirée Linear/Notion/Vercel. Fondations premium, minimalistes.
+
+### Tokens (globals.css `@theme`)
+- **Backgrounds** : `bg-bg-primary` (#0A0A0B), `bg-bg-secondary` (#111113), `bg-bg-tertiary` (#18181B), `bg-bg-hover` (#1F1F23)
+- **Texte** : `text-text-primary` (#FAFAFA), `text-text-secondary` (#A1A1AA), `text-text-tertiary` (#52525B)
+- **Accent** : `bg-accent` / `text-accent` (#10B981), `bg-accent-hover` (#059669), `bg-accent-subtle`
+- **Bordures** : `border-border-subtle` (#27272A), `border-border-default` (#3F3F46)
+- **États** : `success`, `warning` (#F59E0B), `error` (#EF4444), `info` (#3B82F6)
+- **Catégories** : `muscu` (vert), `running` (bleu), `nutrition` (orange), `diabete` (violet)
+- **Fonts** : `font-sans` → Inter, `font-mono` → JetBrains Mono
+
+### Composants UI (`components/ui/`)
+- **Button** : variants `primary | secondary | ghost | danger` ; sizes `sm | md | lg | xl` ; `isLoading`, `leftIcon`, `rightIcon`, `fullWidth`
+- **Card** : variants `default | elevated | bordered | gradient` ; paddings `none | sm | md | lg` ; `interactive` pour hover+tap-scale ; sous-composants `CardHeader / CardTitle / CardDescription / CardContent / CardFooter`
+- **Input** : `label`, `error`, `hint`, `icon`, `suffix` ; aria-describedby auto, focus ring accent
+- **NumberInput** : stats (sizes `md | lg | xl`), `unit`, `min/max/step`, font-mono tabular-nums
+- **StatCard** : `label`, `value`, `unit`, `icon`, `trend` (up/down/neutral), `color` (default/accent/warning/error/info)
+- **Badge** : variants 10 (default, success, warning, error, info, accent, muscu, running, nutrition, diabete) ; sizes `sm | md` ; `dot` optionnel
+- **Progress** : sizes `sm | md | lg` ; colors `accent | warning | error | info | success` ; `showLabel`, rôle ARIA progressbar
+- **Skeleton** : avec variante `circle` + helper `SkeletonText({ lines })`
+
+### Layout (`components/layout/`)
+- **PageLayout** : header sticky glass (backdrop-blur), `title / subtitle / action / backHref`, safe-area top, animate-in sur main
+- **Container** : sizes `sm (md) | md (lg) | lg (3xl) | xl (5xl)`, centré + padding horizontal
+- **Section** : `title` (uppercase tracking), `description`, `action` ; mb-8 par défaut
+
+### Utilitaires
+- `cn(...)` dans [lib/utils.ts](lib/utils.ts) — merge clsx + tailwind-merge
+- `glass` (backdrop-blur 12px), `glow-accent`, `tap-scale`, `animate-in`, `animate-slide-up`, `animate-pulse-subtle`, `skeleton` (shimmer)
+- Safe areas : `pt-safe`, `pb-safe` ; `scrollbar-hide`, `touch-target` (44px min)
+
+### Compatibilité
+- `tailwind.config.ts` chargé via `@config` directive dans globals.css (Tailwind 4)
+- Legacy tokens (`--accent-green`, `card`, `neon-*`, `progress-bar`, etc.) conservés pour ne pas casser les pages existantes avant migration Phase 2+
+- Ancien `components/ui.tsx` coexiste avec le nouveau `components/ui/` (résolution TS : le fichier `.tsx` gagne sur les imports `@/components/ui`, le dossier est ciblé via `@/components/ui/Button`)
 
 ## Fonctionnalites Implementees
 
@@ -233,6 +276,7 @@ Le projet est une PWA fonctionnelle deployee sur Vercel. **Toutes les fonctionna
 - Plan de repas dynamique visible dans le tracker nutrition avec adherence par creneau
 - Flux E2E analyse photos (capture → Claude Vision → affichage → historique)
 - Application des changements programme post-diagnostic au programme actif
+- **Design System Phase 1** : tokens `@theme` Tailwind 4, 8 composants UI + 3 layout, font Inter, utilitaires cn/glass/glow, legacy preserve (aucune regression sur pages existantes)
 
 Le profil utilisateur par defaut est configure pour Ethan, 21 ans, 188cm, 85kg, DT1 sous Novorapid + FreeStyle Libre.
 

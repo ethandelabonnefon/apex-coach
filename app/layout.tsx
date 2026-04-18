@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { Navigation } from "@/components/navigation";
 import CoachProvider from "@/components/coach/CoachProvider";
@@ -7,6 +7,7 @@ import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { InstallBanner } from "@/components/InstallBanner";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
 
+const inter = Inter({ variable: "--font-inter", subsets: ["latin"], display: "swap" });
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
@@ -32,7 +33,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fr" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="fr" className={`${inter.variable} ${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <head>
         <link rel="icon" href="/favicon.ico" sizes="48x48" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
