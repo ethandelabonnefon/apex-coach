@@ -116,7 +116,7 @@ export default function Dashboard() {
                 <span className="label">Glycémie temps réel</span>
                 {lastGlucose && (
                   <span className="text-[11px] text-text-tertiary ml-auto">
-                    il y a {Math.round((Date.now() - new Date(lastGlucose.readAt).getTime()) / 60000)}min
+                    il y a {Math.round((Date.now() - new Date(lastGlucose.recordedAt).getTime()) / 60000)}min
                   </span>
                 )}
               </div>
