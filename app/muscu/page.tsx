@@ -1,19 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import { Card, PageHeader, Button, Badge, SectionTitle, ProgressBar, InfoBox } from "@/components/ui";
-import { useStore } from "@/lib/store";
-import type { ActiveProgram } from "@/lib/store";
-import { getCurrentPhaseInfo, VOLUME_LANDMARKS } from "@/lib/muscu-science";
-import { MUSCU_PROGRAM } from "@/lib/constants";
-import { generatePersonalizedProgram } from "@/lib/program-generation-flow";
 import Link from "next/link";
+import { useStore } from "@/lib/store";
+import { getCurrentPhaseInfo, VOLUME_LANDMARKS } from "@/lib/muscu-science";
+import { generatePersonalizedProgram } from "@/lib/program-generation-flow";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { MetricCard } from "@/components/ui/MetricCard";
+import { Pulse } from "@/components/ui/Pulse";
 import BodyAnalysisSection from "@/components/body-map/BodyAnalysisSection";
 import PersonalizationBadge from "@/components/musculation/PersonalizationBadge";
 import ModifyDaysModal from "@/components/musculation/ModifyDaysModal";
 import ReasoningModal from "@/components/musculation/ReasoningModal";
+import {
+  Dumbbell,
+  ChevronRight,
+  ArrowUpRight,
+  Calendar,
+  TrendingUp,
+  Target,
+  Sparkles,
+} from "lucide-react";
 
-// Calcul du volume hebdomadaire actuel par groupe musculaire
 function computeWeeklyVolume(sessions: { exercises: { name: string; sets: number }[] }[]): Record<string, number> {
   const muscleMap: Record<string, string[]> = {
     "Pectoraux": ["Développé couché", "Développé incliné", "Écarté", "Pec deck", "Dips"],
@@ -28,9 +37,7 @@ function computeWeeklyVolume(sessions: { exercises: { name: string; sets: number
   };
 
   const volume: Record<string, number> = {};
-  for (const muscle of Object.keys(muscleMap)) {
-    volume[muscle] = 0;
-  }
+  for (const muscle of Object.keys(muscleMap)) volume[muscle] = 0;
 
   for (const session of sessions) {
     for (const ex of session.exercises) {
@@ -58,11 +65,9 @@ export default function MuscuPage() {
   const [showReasoning, setShowReasoning] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
 
-  // Determine which program to show
   const program = activeProgram;
   const hasDiagnostic = muscuDiagnosticCompleted;
 
-  // Use active program's sessions or fallback to static
   const displaySessions = program?.sessions || muscuProgram.sessions;
   const displayName = program?.name || muscuProgram.name;
   const displayDaysPerWeek = program?.daysPerWeek || muscuProgram.daysPerWeek;
@@ -72,7 +77,7 @@ export default function MuscuPage() {
     ? Object.fromEntries(
         Object.entries(program.volumeDistribution).map(([k, v]) => [
           k,
-          typeof v === 'object' && v !== null && 'setsPerWeek' in v
+          typeof v === "object" && v !== null && "setsPerWeek" in v
             ? (v as { setsPerWeek: number }).setsPerWeek
             : v,
         ])
@@ -86,9 +91,7 @@ export default function MuscuPage() {
 
   const cycleWeek = ((currentWeek - 1) % 6) + 1;
 
-  // Generate program from diagnostic
   const handleGenerate = async () => {
-    console.log("[muscu] handleGenerate triggered");
     setGenerating(true);
     try {
       const morphologyEntry = diagnosticHistory[0] || null;
@@ -105,7 +108,6 @@ export default function MuscuPage() {
     }
   };
 
-  // Regenerate with new days
   const handleModifyDays = async (newDays: number) => {
     setRegenerating(true);
     try {
@@ -126,126 +128,144 @@ export default function MuscuPage() {
     }
   };
 
-  // ─── CAS 1 : Pas de diagnostic → Rediriger ────────────────────
+  // ─── CAS 1 : Pas de diagnostic ───────────────────────────
   if (!hasDiagnostic && !program) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
-        <PageHeader title="Musculation" subtitle="Programme personnalisé" />
-        <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
-          <div className="text-6xl mb-4">💪</div>
-          <h2 className="text-xl font-bold mb-2">Crée ton programme personnalisé</h2>
-          <p className="text-sm text-white/40 mb-6 max-w-md">
-            Complète le diagnostic musculation pour que l'IA génère un programme
-            adapté à tes objectifs, ta morphologie et ton emploi du temps.
-          </p>
-          <Link href="/profil/diagnostic">
-            <Button>Commencer le diagnostic</Button>
-          </Link>
-
-          {/* Fallback: show static program */}
-          <div className="mt-10 w-full text-left">
-            <div className="flex items-center justify-between mb-3">
-              <SectionTitle className="!mb-0">Programme par défaut</SectionTitle>
-              <Badge color="gray">Statique</Badge>
-            </div>
-            <p className="text-xs text-white/30 mb-4">
-              En attendant ton diagnostic, voici le programme template. Il sera remplacé par un programme personnalisé.
-            </p>
-            <div className="grid sm:grid-cols-2 gap-4">
-              {muscuProgram.sessions.map((session) => {
-                const sessionSets = session.exercises.reduce((s, e) => s + e.sets, 0);
-                return (
-                  <Link key={session.id} href={`/muscu/seance/${session.id}`}>
-                    <Card className="h-full hover:border-[#a855f7]/30 transition-colors cursor-pointer">
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <h3 className="font-semibold text-sm">{session.name}</h3>
-                          <p className="text-xs text-white/35 mt-0.5">{session.day} -- {session.duration} min</p>
-                        </div>
-                        <Badge color="purple">{sessionSets} sets</Badge>
-                      </div>
-                      <p className="text-xs text-[#a855f7]/70 mb-3">{session.focus}</p>
-                      <div className="space-y-1.5">
-                        {session.exercises.map((ex) => (
-                          <div key={ex.order} className="flex items-center justify-between text-xs">
-                            <span className="text-white/60">{ex.name}</span>
-                            <span className="text-white/30">{ex.sets}x{ex.reps} RIR{ex.rir}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="mt-3 pt-3 border-t border-white/[0.06] flex items-center justify-end">
-                        <span className="text-[#a855f7] text-xs font-medium">Commencer &rarr;</span>
-                      </div>
-                    </Card>
-                  </Link>
-                );
-              })}
-            </div>
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
+        <section className="mb-8 animate-in">
+          <div className="flex items-center gap-2 mb-2">
+            <Dumbbell size={14} className="text-muscu" />
+            <span className="label">Musculation</span>
           </div>
-        </div>
+          <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight mb-1">
+            Crée ton programme.
+          </h1>
+          <p className="text-sm sm:text-base text-text-secondary max-w-xl">
+            Complète le diagnostic pour que l&apos;IA génère un programme adapté à ta morphologie,
+            ton équipement et tes contraintes T1D.
+          </p>
+          <div className="mt-5">
+            <Link href="/profil/diagnostic">
+              <Button rightIcon={<ArrowUpRight size={16} strokeWidth={2.5} />}>
+                Commencer le diagnostic
+              </Button>
+            </Link>
+          </div>
+        </section>
+
+        <section className="mb-6">
+          <div className="flex items-baseline justify-between mb-4">
+            <h2 className="text-sm font-semibold tracking-tight">Programme par défaut</h2>
+            <Badge variant="default">Statique</Badge>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3 stagger">
+            {muscuProgram.sessions.map((session) => {
+              const sessionSets = session.exercises.reduce((s, e) => s + e.sets, 0);
+              return (
+                <Link
+                  key={session.id}
+                  href={`/muscu/seance/${session.id}`}
+                  className="group surface-1 p-5 hover:bg-bg-tertiary transition-colors tap-scale"
+                >
+                  <div className="flex items-start justify-between mb-3 gap-2">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-sm truncate">{session.name}</h3>
+                      <p className="text-[11px] text-text-tertiary mt-0.5">
+                        {session.day} · <span className="num">{session.duration}</span>min
+                      </p>
+                    </div>
+                    <Badge variant="muscu">{sessionSets} sets</Badge>
+                  </div>
+                  <p className="text-xs text-muscu mb-3">{session.focus}</p>
+                  <div className="space-y-1.5">
+                    {session.exercises.map((ex) => (
+                      <div key={ex.order} className="flex items-center justify-between text-xs">
+                        <span className="text-text-secondary truncate pr-2">{ex.name}</span>
+                        <span className="num text-text-tertiary whitespace-nowrap">
+                          {ex.sets}×{ex.reps} · RIR{ex.rir}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-end">
+                    <span className="text-muscu text-[11px] font-medium inline-flex items-center gap-1">
+                      Commencer <ChevronRight size={12} />
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
       </div>
     );
   }
 
-  // ─── CAS 2 : Diagnostic fait mais pas de programme → Générer ──
+  // ─── CAS 2 : Diagnostic fait, pas de programme ────────────
   if (hasDiagnostic && !program) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
-        <PageHeader title="Musculation" subtitle="Programme personnalisé" />
-        <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
+        <section className="animate-in flex flex-col items-center justify-center min-h-[60vh] text-center">
           {generating ? (
             <>
-              <div className="w-12 h-12 border-3 border-[#00ff94] border-t-transparent rounded-full animate-spin mb-4" />
-              <h2 className="text-xl font-bold mb-2">Génération en cours...</h2>
-              <p className="text-sm text-white/40 max-w-md">
-                L'IA analyse ton diagnostic et ta morphologie pour créer un programme sur mesure.
+              <div className="mb-5">
+                <Pulse tone="accent" size="lg" />
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-2">
+                Génération en cours.
+              </h1>
+              <p className="text-sm text-text-secondary max-w-md">
+                L&apos;IA analyse ton diagnostic et ta morphologie pour créer un programme sur mesure.
                 Ça peut prendre 15-30 secondes.
               </p>
             </>
           ) : (
             <>
-              <div className="text-6xl mb-4">🎯</div>
-              <h2 className="text-xl font-bold mb-2">Diagnostic complété !</h2>
-              <p className="text-sm text-white/40 mb-2 max-w-md">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles size={14} className="text-accent" />
+                <span className="label">Diagnostic complété</span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-2">
+                Prêt à générer.
+              </h1>
+              <p className="text-sm text-text-secondary mb-5 max-w-md">
                 Tes données sont prêtes. Génère maintenant ton programme personnalisé
                 basé sur ton diagnostic muscu{diagnosticHistory.length > 0 ? ", ta morphologie" : ""} et tes contraintes T1D.
               </p>
               <div className="flex flex-wrap gap-2 mb-6 justify-center">
                 {Boolean(muscuDiagnosticData.primaryGoal) && (
-                  <Badge color="purple">Objectif : {String(muscuDiagnosticData.primaryGoal).replace(/_/g, " ")}</Badge>
+                  <Badge variant="muscu" dot>
+                    {String(muscuDiagnosticData.primaryGoal).replace(/_/g, " ")}
+                  </Badge>
                 )}
                 {Boolean(muscuDiagnosticData.daysPerWeek) && (
-                  <Badge color="blue">{String(muscuDiagnosticData.daysPerWeek)} jours/sem</Badge>
+                  <Badge variant="running" dot>
+                    {String(muscuDiagnosticData.daysPerWeek)} jours/sem
+                  </Badge>
                 )}
                 {Boolean(muscuDiagnosticData.preferredSplit) && (
-                  <Badge color="gray">Split : {String(muscuDiagnosticData.preferredSplit).replace(/_/g, " ")}</Badge>
+                  <Badge variant="default">
+                    {String(muscuDiagnosticData.preferredSplit).replace(/_/g, " ")}
+                  </Badge>
                 )}
               </div>
-              <Button onClick={handleGenerate} size="lg" className="touch-target">Générer mon programme</Button>
+              <Button
+                onClick={handleGenerate}
+                size="lg"
+                rightIcon={<ArrowUpRight size={16} strokeWidth={2.5} />}
+              >
+                Générer mon programme
+              </Button>
             </>
           )}
-        </div>
+        </section>
       </div>
     );
   }
 
-  // ─── CAS 3 : Programme actif → Afficher ───────────────────────
+  // ─── CAS 3 : Programme actif ───────────────────────────
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
-      <PageHeader
-        title="Musculation"
-        subtitle="Programme, periodisation et volume"
-        action={
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setShowModifyDays(true)}>
-              Modifier jours
-            </Button>
-            <Link href="/muscu/progression">
-              <Button variant="secondary" size="sm">Progression</Button>
-            </Link>
-          </div>
-        }
-      />
+    <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
 
       {/* Modals */}
       {showModifyDays && (
@@ -260,6 +280,35 @@ export default function MuscuPage() {
         <ReasoningModal program={program} onClose={() => setShowReasoning(false)} />
       )}
 
+      {/* ============ HERO ============ */}
+      <section className="mb-8 animate-in">
+        <div className="flex items-center gap-2 mb-2">
+          <Dumbbell size={14} className="text-muscu" />
+          <span className="label">Musculation · Semaine {currentWeek} · {phase.name}</span>
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight mb-1 truncate">
+              {displayName}
+            </h1>
+            <p className="text-sm text-text-secondary">
+              {displayDaysPerWeek} séances/semaine · <span className="num">{totalSets}</span> sets hebdo ·{" "}
+              {program?.isGenerated ? "Généré par IA" : "Programme statique"}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setShowModifyDays(true)} leftIcon={<Calendar size={14} />}>
+              Modifier jours
+            </Button>
+            <Link href="/muscu/progression">
+              <Button variant="secondary" size="sm" leftIcon={<TrendingUp size={14} />}>
+                Progression
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* Personalization badge (only for generated programs) */}
       {program?.isGenerated && (
         <div className="mb-6">
@@ -267,189 +316,249 @@ export default function MuscuPage() {
         </div>
       )}
 
-      {/* Programme overview */}
-      <Card glow="purple" className="mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <h2 className="text-xl font-bold">{displayName}</h2>
-              <Badge color="purple">{phase.name}</Badge>
-              {program?.isGenerated && <Badge color="green">IA</Badge>}
-              {!program?.isGenerated && <Badge color="gray">Statique</Badge>}
-            </div>
-            <p className="text-sm text-white/40">
-              Semaine {currentWeek} -- {displayDaysPerWeek} seances/semaine -- {totalSets} sets/semaine
-            </p>
-          </div>
-          <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center sm:gap-3">
-            <div className="text-center px-3 sm:px-4 py-2 rounded-xl bg-white/[0.03]">
-              <p className="text-[10px] sm:text-xs text-white/35">RIR cible</p>
-              <p className="text-base sm:text-lg font-bold text-[#a855f7]">{phase.rirTarget}</p>
-            </div>
-            <div className="text-center px-3 sm:px-4 py-2 rounded-xl bg-white/[0.03]">
-              <p className="text-[10px] sm:text-xs text-white/35">Volume</p>
-              <p className="text-base sm:text-lg font-bold text-[#a855f7]">{Math.round(phase.volumeMultiplier * 100)}%</p>
-            </div>
-            <div className="text-center px-3 sm:px-4 py-2 rounded-xl bg-white/[0.03]">
-              <p className="text-[10px] sm:text-xs text-white/35">DC 1RM</p>
-              <p className="text-base sm:text-lg font-bold text-[#a855f7]">{profile.benchPress1RM} kg</p>
-            </div>
-          </div>
+      {/* ============ METRIC GRID ============ */}
+      <section className="mb-10">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 stagger">
+          <MetricCard
+            label="Phase active"
+            value={phase.name}
+            unit=""
+            hint={`Semaine ${cycleWeek}/6 du cycle`}
+            tone="muscu"
+          />
+          <MetricCard
+            label="RIR cible"
+            value={phase.rirTarget}
+            unit="reps"
+            tone="accent-2"
+          />
+          <MetricCard
+            label="Volume phase"
+            value={Math.round(phase.volumeMultiplier * 100)}
+            unit="%"
+            hint="vs base Accumulation"
+            tone="default"
+          />
+          <MetricCard
+            label="Bench 1RM"
+            value={profile.benchPress1RM}
+            unit="kg"
+            tone="muscu"
+          />
         </div>
-      </Card>
+      </section>
 
       {/* Body Map */}
-      <div className="mb-6">
+      <div className="mb-8">
         <BodyAnalysisSection />
       </div>
 
-      {/* Periodisation */}
-      <SectionTitle>Periodisation (cycle de 6 semaines)</SectionTitle>
-      <Card className="mb-6">
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-4">
-          {[1, 2, 3, 4, 5, 6].map((w) => {
-            const p = getCurrentPhaseInfo(w);
-            const isCurrent = w === cycleWeek;
-            const colors: Record<string, string> = {
-              Accumulation: "bg-[#a855f7]",
-              Intensification: "bg-[#ff9500]",
-              Deload: "bg-[#00ff94]",
-            };
+      {/* ============ PERIODISATION ============ */}
+      <section className="mb-10">
+        <div className="flex items-baseline justify-between mb-4">
+          <h2 className="text-sm font-semibold tracking-tight">Périodisation</h2>
+          <span className="label">Cycle de 6 semaines</span>
+        </div>
+
+        <div className="surface-1 p-5 lg:p-6">
+          <div className="grid grid-cols-6 gap-2 mb-5">
+            {[1, 2, 3, 4, 5, 6].map((w) => {
+              const p = getCurrentPhaseInfo(w);
+              const isCurrent = w === cycleWeek;
+              const toneVar =
+                p.name === "Accumulation"
+                  ? "var(--muscu)"
+                  : p.name === "Intensification"
+                  ? "var(--warning)"
+                  : "var(--accent-2)";
+              return (
+                <div
+                  key={w}
+                  className={`text-center py-3 rounded-lg transition-all ${
+                    isCurrent ? "text-ink font-bold" : "bg-bg-tertiary text-text-tertiary"
+                  }`}
+                  style={isCurrent ? { background: toneVar } : {}}
+                >
+                  <p className="num text-xs mb-0.5">S{w}</p>
+                  <p className="text-[9px] leading-tight uppercase tracking-wide">
+                    {p.name === "Accumulation" ? "Accum" : p.name === "Intensification" ? "Intens" : "Deload"}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+          <div className="grid sm:grid-cols-3 gap-3 text-xs">
+            <div className="surface-2 p-3 border-l-2 border-muscu">
+              <p className="font-semibold text-muscu mb-1">Accumulation · S1-S3</p>
+              <p className="text-text-tertiary leading-snug">
+                Volume élevé, intensité modérée. RIR 2-3. Focus : construire du volume d&apos;entraînement.
+              </p>
+            </div>
+            <div className="surface-2 p-3 border-l-2 border-warning">
+              <p className="font-semibold text-warning mb-1">Intensification · S4-S5</p>
+              <p className="text-text-tertiary leading-snug">
+                Volume réduit (-15%), intensité élevée. RIR 1-2. Focus : pousser les charges.
+              </p>
+            </div>
+            <div className="surface-2 p-3 border-l-2 border-accent-2">
+              <p className="font-semibold text-accent-2 mb-1">Deload · S6</p>
+              <p className="text-text-tertiary leading-snug">
+                Volume -50%, RIR 4-5. Focus : récupération, laisser le corps surcompenser.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ============ SESSIONS LIST ============ */}
+      <section className="mb-10">
+        <div className="flex items-baseline justify-between mb-4">
+          <h2 className="text-sm font-semibold tracking-tight">Séances de la semaine</h2>
+          <span className="label">{displaySessions.length} séances</span>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3 stagger">
+          {displaySessions.map((session) => {
+            const sessionSets = session.exercises.reduce((s, e) => s + e.sets, 0);
+            const completedCount = completedWorkouts.filter((w) => w.sessionId === session.id).length;
             return (
-              <div
-                key={w}
-                className={`text-center py-3 rounded-xl border transition-all ${
-                  isCurrent
-                    ? `${colors[p.name]} text-black font-bold border-transparent`
-                    : "bg-white/[0.03] border-white/[0.06] text-white/50"
-                }`}
+              <Link
+                key={session.id}
+                href={`/muscu/seance/${session.id}`}
+                className="group surface-1 p-5 hover:bg-bg-tertiary transition-colors tap-scale"
               >
-                <p className="text-xs mb-1">S{w}</p>
-                <p className="text-[10px] leading-tight">
-                  {p.name === "Accumulation" ? "Accum" : p.name === "Intensification" ? "Intens" : "Deload"}
+                <div className="flex items-start justify-between mb-3 gap-2">
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-sm truncate">{session.name}</h3>
+                    <p className="text-[11px] text-text-tertiary mt-0.5">
+                      {session.day} · <span className="num">{session.duration}</span>min
+                    </p>
+                  </div>
+                  <Badge variant="muscu">{sessionSets} sets</Badge>
+                </div>
+                <p className="text-xs text-muscu mb-3">{session.focus}</p>
+                <div className="space-y-1.5">
+                  {session.exercises.map((ex) => (
+                    <div key={ex.order} className="flex items-center justify-between text-xs">
+                      <span className="text-text-secondary truncate pr-2">{ex.name}</span>
+                      <span className="num text-text-tertiary whitespace-nowrap">
+                        {ex.sets}×{ex.reps} · RIR{ex.rir}
+                      </span>
+                    </div>
+                  ))}
+                  {session.exercises.length === 0 && (
+                    <p className="text-xs text-text-disabled italic">Exercices en attente de génération</p>
+                  )}
+                </div>
+                <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-between">
+                  <span className="num text-[11px] text-text-tertiary">
+                    {completedCount} complétée{completedCount !== 1 ? "s" : ""}
+                  </span>
+                  <span className="text-muscu text-[11px] font-medium inline-flex items-center gap-1">
+                    Commencer <ChevronRight size={12} />
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+
+        {hasDiagnostic && (
+          <div className="mt-6 flex justify-center">
+            <Button variant="ghost" size="sm" onClick={handleGenerate} disabled={generating} isLoading={generating}>
+              {generating ? "Régénération..." : "Régénérer depuis le diagnostic"}
+            </Button>
+          </div>
+        )}
+      </section>
+
+      {/* ============ VOLUME LANDMARKS ============ */}
+      <section className="mb-10">
+        <div className="flex items-baseline justify-between mb-2">
+          <h2 className="text-sm font-semibold tracking-tight">Volume Landmarks</h2>
+          <span className="label">Israetel · RP</span>
+        </div>
+        <p className="text-xs text-text-tertiary mb-5 max-w-2xl">
+          MEV = volume minimum efficace · MAV = volume adaptatif · MRV = volume maximum récupérable.
+          Les valeurs sont ajustées par le multiplicateur de phase (×{phase.volumeMultiplier}).
+        </p>
+
+        <div className="grid sm:grid-cols-2 gap-3">
+          {Object.entries(VOLUME_LANDMARKS).map(([muscle, landmarks]) => {
+            const current = weeklyVolume[muscle] || 0;
+            const adjustedCurrent = Math.round(current * phase.volumeMultiplier);
+            const isInMAV = adjustedCurrent >= landmarks.mav_low && adjustedCurrent <= landmarks.mav_high;
+            const isBelowMEV = adjustedCurrent < landmarks.mev;
+            const isAboveMRV = adjustedCurrent > landmarks.mrv;
+
+            let statusVariant: "success" | "error" | "warning" = "success";
+            let statusLabel = "Dans la MAV";
+            if (isBelowMEV) {
+              statusVariant = "error";
+              statusLabel = "Sous MEV";
+            } else if (isAboveMRV) {
+              statusVariant = "warning";
+              statusLabel = "Au-dessus MRV";
+            } else if (!isInMAV && adjustedCurrent < landmarks.mav_low) {
+              statusVariant = "warning";
+              statusLabel = "MEV→MAV";
+            } else if (!isInMAV && adjustedCurrent > landmarks.mav_high) {
+              statusVariant = "warning";
+              statusLabel = "MAV haute";
+            }
+
+            const pct = Math.min(100, (adjustedCurrent / landmarks.mrv) * 100);
+
+            return (
+              <div key={muscle} className="surface-1 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-medium">{muscle}</span>
+                  <Badge variant={statusVariant} size="sm">{statusLabel}</Badge>
+                </div>
+                <div className="h-1.5 rounded-full bg-bg-tertiary overflow-hidden mb-2">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: `${pct}%`,
+                      background:
+                        statusVariant === "error"
+                          ? "var(--error)"
+                          : statusVariant === "warning"
+                          ? "var(--warning)"
+                          : "var(--muscu)",
+                    }}
+                  />
+                </div>
+                <div className="flex justify-between num text-[10px] text-text-tertiary mb-1">
+                  <span>MEV {landmarks.mev}</span>
+                  <span>MAV {landmarks.mav_low}–{landmarks.mav_high}</span>
+                  <span>MRV {landmarks.mrv}</span>
+                </div>
+                <p className="text-[11px] text-text-secondary">
+                  Actuel · <span className="num font-medium text-text-primary">{adjustedCurrent}</span> sets/sem
+                  {phase.volumeMultiplier !== 1 && (
+                    <span className="text-text-disabled num"> (base {current}, ×{phase.volumeMultiplier})</span>
+                  )}
                 </p>
               </div>
             );
           })}
         </div>
-        <div className="grid sm:grid-cols-3 gap-3 sm:gap-4 text-sm">
-          <div className="p-3 rounded-xl bg-[#a855f7]/10 border border-[#a855f7]/20">
-            <p className="font-semibold text-[#a855f7] mb-1">Accumulation (S1-S3)</p>
-            <p className="text-white/50 text-xs">Volume eleve, intensite moderee. RIR 2-3. Focus : construire du volume d&apos;entrainement.</p>
-          </div>
-          <div className="p-3 rounded-xl bg-[#ff9500]/10 border border-[#ff9500]/20">
-            <p className="font-semibold text-[#ff9500] mb-1">Intensification (S4-S5)</p>
-            <p className="text-white/50 text-xs">Volume reduit (-15%), intensite elevee. RIR 1-2. Focus : pousser les charges.</p>
-          </div>
-          <div className="p-3 rounded-xl bg-[#00ff94]/10 border border-[#00ff94]/20">
-            <p className="font-semibold text-[#00ff94] mb-1">Deload (S6)</p>
-            <p className="text-white/50 text-xs">Volume -50%, RIR 4-5. Focus : recuperation, laisser le corps surcompenser.</p>
-          </div>
-        </div>
-      </Card>
+      </section>
 
-      {/* Sessions list */}
-      <SectionTitle>Seances de la semaine</SectionTitle>
-      <div className="grid sm:grid-cols-2 gap-4 mb-8">
-        {displaySessions.map((session) => {
-          const sessionSets = session.exercises.reduce((s, e) => s + e.sets, 0);
-          const completedCount = completedWorkouts.filter((w) => w.sessionId === session.id).length;
-          return (
-            <Link key={session.id} href={`/muscu/seance/${session.id}`}>
-              <Card className="h-full hover:border-[#a855f7]/30 transition-colors cursor-pointer">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="font-semibold text-sm">{session.name}</h3>
-                    <p className="text-xs text-white/35 mt-0.5">{session.day} -- {session.duration} min</p>
-                  </div>
-                  <Badge color="purple">{sessionSets} sets</Badge>
-                </div>
-                <p className="text-xs text-[#a855f7]/70 mb-3">{session.focus}</p>
-                <div className="space-y-1.5">
-                  {session.exercises.map((ex) => (
-                    <div key={ex.order} className="flex items-center justify-between text-xs">
-                      <span className="text-white/60">{ex.name}</span>
-                      <span className="text-white/30">
-                        {ex.sets}x{ex.reps} RIR{ex.rir}
-                      </span>
-                    </div>
-                  ))}
-                  {session.exercises.length === 0 && (
-                    <p className="text-xs text-white/25 italic">Exercices en attente de génération</p>
-                  )}
-                </div>
-                <div className="mt-3 pt-3 border-t border-white/[0.06] flex items-center justify-between">
-                  <span className="text-xs text-white/30">
-                    {completedCount} seance{completedCount !== 1 ? "s" : ""} completee{completedCount !== 1 ? "s" : ""}
-                  </span>
-                  <span className="text-[#a855f7] text-xs font-medium">Commencer &rarr;</span>
-                </div>
-              </Card>
-            </Link>
-          );
-        })}
-      </div>
-
-      {/* Regenerate button */}
-      {hasDiagnostic && (
-        <div className="mb-8 text-center">
-          <Button variant="ghost" onClick={handleGenerate} disabled={generating}>
-            {generating ? "Régénération en cours..." : "Régénérer le programme depuis le diagnostic"}
-          </Button>
-        </div>
+      {/* Goals footer */}
+      {profile.weakPoints && profile.weakPoints.length > 0 && (
+        <section className="mb-6 surface-1 p-5 lg:p-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Target size={14} className="text-muscu" />
+            <span className="label">Points faibles ciblés</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {profile.weakPoints.map((wp) => (
+              <Badge key={wp} variant="muscu" dot>{wp}</Badge>
+            ))}
+          </div>
+        </section>
       )}
-
-      {/* Volume landmarks */}
-      <SectionTitle>Volume Landmarks par groupe musculaire</SectionTitle>
-      <InfoBox variant="info">
-        Basé sur les recommandations de Mike Israetel (RP). MEV = volume minimum efficace, MAV = volume adaptatif, MRV = volume maximum recuperable.
-      </InfoBox>
-      <div className="grid sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
-        {Object.entries(VOLUME_LANDMARKS).map(([muscle, landmarks]) => {
-          const current = weeklyVolume[muscle] || 0;
-          const adjustedCurrent = Math.round(current * phase.volumeMultiplier);
-          const isInMAV = adjustedCurrent >= landmarks.mav_low && adjustedCurrent <= landmarks.mav_high;
-          const isBelowMEV = adjustedCurrent < landmarks.mev;
-          const isAboveMRV = adjustedCurrent > landmarks.mrv;
-
-          let statusColor = "text-[#00ff94]";
-          let statusLabel = "Dans la MAV";
-          if (isBelowMEV) {
-            statusColor = "text-[#ff4757]";
-            statusLabel = "Sous le MEV";
-          } else if (isAboveMRV) {
-            statusColor = "text-[#ff9500]";
-            statusLabel = "Au-dessus du MRV";
-          } else if (!isInMAV && adjustedCurrent < landmarks.mav_low) {
-            statusColor = "text-[#ff9500]";
-            statusLabel = "Entre MEV et MAV";
-          } else if (!isInMAV && adjustedCurrent > landmarks.mav_high) {
-            statusColor = "text-[#ff9500]";
-            statusLabel = "MAV haute - proche MRV";
-          }
-
-          return (
-            <Card key={muscle} className="!p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">{muscle}</span>
-                <span className={`text-xs font-medium ${statusColor}`}>{statusLabel}</span>
-              </div>
-              <ProgressBar value={adjustedCurrent} max={landmarks.mrv} color="#a855f7" />
-              <div className="flex justify-between text-[10px] text-white/30 mt-1">
-                <span>MEV: {landmarks.mev}</span>
-                <span>MAV: {landmarks.mav_low}-{landmarks.mav_high}</span>
-                <span>MRV: {landmarks.mrv}</span>
-              </div>
-              <p className="text-xs text-white/40 mt-1">
-                Actuel: <span className="text-white/70 font-medium">{adjustedCurrent} sets/sem</span>
-                {phase.volumeMultiplier !== 1 && (
-                  <span className="text-white/25"> (base {current}, x{phase.volumeMultiplier})</span>
-                )}
-              </p>
-            </Card>
-          );
-        })}
-      </div>
     </div>
   );
 }

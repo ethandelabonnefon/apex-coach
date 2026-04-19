@@ -295,7 +295,8 @@ Le projet est une PWA fonctionnelle deployee sur Vercel. **Toutes les fonctionna
 - Flux E2E analyse photos (capture → Claude Vision → affichage → historique)
 - Application des changements programme post-diagnostic au programme actif
 - **Design System Phase 1** : tokens `@theme` Tailwind 4, 8 composants UI + 3 layout, font Inter, utilitaires cn/glass/glow, legacy preserve (aucune regression sur pages existantes)
-- **Design System Phase 2 — Refonte "Precision Instrument"** : nouvelle palette Electric Lime + Soft Lavender, composants signature (HeroMetric, MetricCard, Ring, Sparkline, Pulse), typography mono tabular-nums pour toutes les métriques, navigation refaite avec icons lucide-react et active indicators, utilitaires `.surface-1/2/3`, `.label`, `.num`, `.stagger`, glass headers saturate 180%, Dashboard refondu en preview
+- **Design System Phase 2 — Refonte "Precision Instrument"** : nouvelle palette Electric Lime + Soft Lavender, composants signature (HeroMetric, MetricCard, Ring, Sparkline, Pulse), typography mono tabular-nums pour toutes les métriques, navigation refaite avec icons lucide-react et active indicators, utilitaires `.surface-1/2/3`, `.label`, `.num`, `.stagger`, glass headers saturate 180%
+- **Page Muscu migrée Phase 2** : 3 états (no diagnostic / diagnostic sans programme / programme actif) refondus avec hero label cockpit, MetricCard pour phase/RIR/volume/1RM, périodisation cycle 6 semaines colorée par tokens (muscu/warning/accent-2), sessions en `surface-1` avec Badge muscu et focus lime, volume landmarks MEV/MAV/MRV avec status Badge coloré et barres de progression. Icônes lucide (Dumbbell, Calendar, TrendingUp, Target, Sparkles). Composants legacy (PageHeader, Card, SectionTitle, ProgressBar, InfoBox) remplacés par le design system Phase 2
 
 Le profil utilisateur par defaut est configure pour Ethan, 21 ans, 188cm, 85kg, DT1 sous Novorapid + FreeStyle Libre.
 
