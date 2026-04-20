@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useStore } from "@/lib/store";
+import GlucoseStat from "@/components/glucose/GlucoseStat";
 import {
   ArrowUpRight,
   Dumbbell,
@@ -9,9 +10,6 @@ import {
   Apple,
   Droplet,
   ChevronRight,
-  TrendingUp,
-  TrendingDown,
-  Minus,
 } from "lucide-react";
 
 const DAYS_FR = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
@@ -51,13 +49,10 @@ export default function Dashboard() {
   const sessions = activeProgram?.sessions || muscuProgram.sessions;
   const todaySession = sessions.find((s) => s.day === todayName);
 
-  // ─── Stat 1 : Glycémie + tendance ───────────────────
+  // ─── Stat 1 : Glycémie (live FreeStyle Libre via GlucoseStat) ────
+  // Fallback sur les lectures manuelles si l'API LibreLink n'est pas dispo
   const lastGlucose = glucoseReadings[0];
   const prevGlucose = glucoseReadings[1];
-  const glucoseDelta =
-    lastGlucose && prevGlucose ? lastGlucose.value - prevGlucose.value : 0;
-  const trend: "up" | "down" | "flat" =
-    Math.abs(glucoseDelta) < 10 ? "flat" : glucoseDelta > 0 ? "up" : "down";
 
   // ─── Stat 2 : Calories jour ─────────────────────────
   const todayMeals = meals.filter((m) => {
@@ -164,46 +159,12 @@ export default function Dashboard() {
 
       {/* ============ 3 STATS MAX ============ */}
       <section className="mb-10 grid grid-cols-3 gap-2 sm:gap-3 stagger">
-        {/* Glycémie */}
-        <Link
+        {/* Glycémie — live FreeStyle Libre avec fallback manuel */}
+        <GlucoseStat
+          fallbackValue={lastGlucose?.value}
+          fallbackPrevValue={prevGlucose?.value}
           href="/diabete"
-          className="group surface-1 p-3 sm:p-4 tap-scale hover:bg-bg-tertiary transition-colors"
-        >
-          <div className="flex items-center gap-1.5 mb-2">
-            <Droplet size={12} className="text-diabete" />
-            <span className="label">Glycémie</span>
-          </div>
-          {lastGlucose ? (
-            <>
-              <div className="flex items-baseline gap-1.5">
-                <span
-                  className="num-hero text-2xl sm:text-3xl font-semibold leading-none"
-                  style={{
-                    color:
-                      glucoseTone(lastGlucose.value) === "success"
-                        ? "var(--success)"
-                        : glucoseTone(lastGlucose.value) === "warning"
-                        ? "var(--warning)"
-                        : "var(--error)",
-                  }}
-                >
-                  {lastGlucose.value}
-                </span>
-                {trend === "up" && <TrendingUp size={14} className="text-warning" />}
-                {trend === "down" && <TrendingDown size={14} className="text-info" />}
-                {trend === "flat" && <Minus size={14} className="text-text-tertiary" />}
-              </div>
-              <p className="text-[10px] text-text-tertiary mt-1">mg/dL</p>
-            </>
-          ) : (
-            <>
-              <p className="num-hero text-2xl sm:text-3xl font-semibold text-text-tertiary leading-none">
-                —
-              </p>
-              <p className="text-[10px] text-text-tertiary mt-1">aucune lecture</p>
-            </>
-          )}
-        </Link>
+        />
 
         {/* Calories */}
         <Link

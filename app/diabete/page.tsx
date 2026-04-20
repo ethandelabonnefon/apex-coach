@@ -7,7 +7,8 @@ import { calculateBolus, getInsulinOnBoard } from "@/lib/insulin-calculator";
 import { DIABETES_CONFIG } from "@/lib/constants";
 import type { MealTime } from "@/types";
 import { Badge } from "@/components/ui/Badge";
-import { Pulse } from "@/components/ui/Pulse";
+import { useGlucose } from "@/hooks/useGlucose";
+import GlucoseWidget from "@/components/glucose/GlucoseWidget";
 import {
   Droplet,
   Syringe,
@@ -42,14 +43,6 @@ function glucoseColor(tone: GlucoseTone): string {
     default:
       return "var(--glucose-normal)";
   }
-}
-
-function glucoseStatus(value: number): string {
-  if (value < 70) return "Hypoglycémie";
-  if (value > 250) return "Très élevée";
-  if (value > 180) return "Au-dessus";
-  if (value < 80) return "Bas";
-  return "En zone";
 }
 
 const MEAL_OPTIONS: { value: MealTime; label: string }[] = [
@@ -151,10 +144,14 @@ export default function DiabetePage() {
 
   const lastGlucose = glucoseReadings[0];
   const lastValue = lastGlucose?.value ?? currentGlucose;
-  const lastTone = glucoseTone(lastValue);
-  const lastColor = glucoseColor(lastTone);
   const iobTone: "info" | "warning" =
     iob.totalIOB > 2 ? "warning" : "info";
+
+  // ─── Raccourci "Utiliser la valeur live" pour le calculateur bolus ─────
+  // On n'auto-remplit PAS (T1D : explicite > implicite). L'utilisateur
+  // clique pour synchroniser depuis le capteur.
+  const { current: liveGlucose } = useGlucose({ mode: "current" });
+  const liveValueForBolus = liveGlucose?.value;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto stagger">
@@ -185,38 +182,11 @@ export default function DiabetePage() {
         </div>
 
         <div className="grid sm:grid-cols-2 gap-4">
-          {/* Glucose hero */}
-          <div className="surface-2 rounded-2xl p-5 flex items-center gap-5">
-            <div className="shrink-0">
-              <Pulse tone={lastTone === "normal" ? "success" : lastTone === "low" || lastTone === "critical" ? "error" : "warning"} size="lg" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="label mb-1">Glycémie</p>
-              <div className="flex items-baseline gap-1.5">
-                <span
-                  className="num-hero text-4xl sm:text-5xl font-semibold leading-none"
-                  style={{ color: lastColor }}
-                >
-                  {lastValue}
-                </span>
-                <span className="text-xs text-text-tertiary">mg/dL</span>
-              </div>
-              <p className="mt-1 text-xs text-text-secondary">
-                {glucoseStatus(lastValue)}
-                {lastGlucose && (
-                  <>
-                    {" · "}
-                    <span className="num text-text-tertiary">
-                      {new Date(lastGlucose.recordedAt).toLocaleTimeString("fr-FR", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </>
-                )}
-              </p>
-            </div>
-          </div>
+          {/* Glucose hero — live FreeStyle Libre avec fallback manuel */}
+          <GlucoseWidget
+            fallbackValue={lastValue}
+            fallbackRecordedAt={lastGlucose?.recordedAt}
+          />
 
           {/* IOB hero */}
           <div className="surface-2 rounded-2xl p-5 flex items-center gap-5">
@@ -271,6 +241,20 @@ export default function DiabetePage() {
             max={500}
           />
         </div>
+
+        {liveValueForBolus !== undefined && liveValueForBolus !== currentGlucose && (
+          <button
+            type="button"
+            onClick={() => setCurrentGlucose(liveValueForBolus)}
+            className="mb-5 w-full text-xs text-diabete hover:text-diabete/80 transition-colors py-2 rounded-lg border border-diabete/25 bg-diabete/5 tap-scale flex items-center justify-center gap-1.5"
+          >
+            <span
+              className="dot-pulse h-1.5 w-1.5 rounded-full bg-success"
+              aria-hidden
+            />
+            Utiliser la valeur live (<span className="num">{liveValueForBolus}</span> mg/dL)
+          </button>
+        )}
 
         {/* Meal selector */}
         <div className="mb-5">
