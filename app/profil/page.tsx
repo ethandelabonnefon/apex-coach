@@ -344,7 +344,7 @@ function MensurationsSection() {
 // ---------------------------------------------------------------------------
 
 export default function ProfilPage() {
-  const { profile, updateProfile } = useStore();
+  const { profile, updateProfile, diabetesConfig, updateDiabetesConfig } = useStore();
   const [saved, setSaved] = useState(false);
 
   const save = (updates: Partial<typeof profile>) => {
@@ -359,13 +359,38 @@ export default function ProfilPage() {
   const [height, setHeight] = useState(profile.height);
   const [weight, setWeight] = useState(profile.weight);
 
-  // Diabetes
-  const [ratioMorning, setRatioMorning] = useState(profile.basalDose); // placeholder; we read from diabetesConfig via store, but updateProfile handles UserProfile fields
-  const [isf, setIsf] = useState(35); // ISF is on diabetesConfig, but we expose it for display
-  const [targetGlucose, setTargetGlucose] = useState(110);
+  // Diabetes — lit depuis le store centralisé (plus de valeurs hardcodées)
+  const [isf, setIsf] = useState(diabetesConfig.insulinSensitivityFactor);
+  const [targetGlucose, setTargetGlucose] = useState(diabetesConfig.targetGlucose);
   const [basalDose, setBasalDose] = useState(profile.basalDose);
   const [insulinRapid, setInsulinRapid] = useState(profile.insulinRapid);
   const [insulinSystem, setInsulinSystem] = useState(profile.insulinSystem);
+
+  // Les 4 ratios affichés en lecture (édition dans /diabete/parametres)
+  const profileDiabeteSlots = [
+    {
+      key: "morning",
+      suffix: "le matin",
+      gPerU: diabetesConfig.ratios.morning,
+    },
+    {
+      key: "lunch",
+      suffix: "à midi",
+      gPerU: diabetesConfig.ratios.lunch,
+    },
+    {
+      key: "snack",
+      suffix: "au goûter",
+      gPerU:
+        diabetesConfig.insulinRatios?.find((r) => r.mealKey === "snack")?.ratio ??
+        diabetesConfig.ratios.lunch,
+    },
+    {
+      key: "dinner",
+      suffix: "au dîner",
+      gPerU: diabetesConfig.ratios.dinner,
+    },
+  ];
 
   // Training
   const [trainingDays, setTrainingDays] = useState(profile.trainingDaysPerWeek);
@@ -408,6 +433,11 @@ export default function ProfilPage() {
       weakPoints,
       cgmType,
       bodyType,
+    });
+    // Save diabetes config separately (ISF + cible)
+    updateDiabetesConfig({
+      insulinSensitivityFactor: Number(isf),
+      targetGlucose: Number(targetGlucose),
     });
   };
 
@@ -549,23 +579,35 @@ export default function ProfilPage() {
           <SectionTitle>Diabete T1 — Configuration</SectionTitle>
 
           <div className="space-y-4">
-            <p className="text-xs text-white/40">Ratios insuline / glucides</p>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="text-center p-3 rounded-lg bg-white/[0.03]">
-                <p className="text-xs text-white/35 mb-1">Matin</p>
-                <p className="text-lg font-bold text-[#ff9500]">1:{ratioMorning}</p>
-                <p className="text-[10px] text-white/25 mt-1">1U / {ratioMorning}g</p>
-              </div>
-              <div className="text-center p-3 rounded-lg bg-white/[0.03]">
-                <p className="text-xs text-white/35 mb-1">Midi</p>
-                <p className="text-lg font-bold text-[#00d4ff]">1:7</p>
-                <p className="text-[10px] text-white/25 mt-1">1U / 7g</p>
-              </div>
-              <div className="text-center p-3 rounded-lg bg-white/[0.03]">
-                <p className="text-xs text-white/35 mb-1">Soir</p>
-                <p className="text-lg font-bold text-[#a855f7]">1:9</p>
-                <p className="text-[10px] text-white/25 mt-1">1U / 9g</p>
-              </div>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-white/40">Mon programme d&apos;insuline</p>
+              <Link
+                href="/diabete/parametres"
+                className="text-xs text-[#a855f7] hover:text-[#a855f7]/80 transition-colors"
+              >
+                Modifier →
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {profileDiabeteSlots.map((slot) => {
+                const unitsPer10g = 10 / slot.gPerU;
+                const rounded = Math.round(unitsPer10g * 10) / 10;
+                const display =
+                  rounded === Math.floor(rounded)
+                    ? String(rounded)
+                    : rounded.toFixed(1).replace(".", ",");
+                const unitWord = rounded === 1 ? "unité" : "unités";
+                return (
+                  <div
+                    key={slot.key}
+                    className="p-3 rounded-lg bg-white/[0.03] text-sm text-white/80"
+                  >
+                    <span className="text-lg font-bold text-[#a855f7] mr-1">{display}</span>
+                    <span className="text-[#a855f7]/80">{unitWord} pour 10g de glucide</span>{" "}
+                    <span className="text-white">{slot.suffix}</span>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -575,7 +617,7 @@ export default function ProfilPage() {
                 type="number"
                 unit="mg/dL/U"
                 min={10}
-                max={100}
+                max={200}
                 onChange={(v) => setIsf(Number(v))}
               />
               <EditableField
