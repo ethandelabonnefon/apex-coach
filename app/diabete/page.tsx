@@ -59,6 +59,14 @@ const MEAL_OPTIONS: { value: MealTime; label: string }[] = [
   { value: "dinner", label: "Dîner" },
 ];
 
+// Conversion ratio interne (g par U) → format naturel "X,YU"
+function formatUper10g(gPerU: number): string {
+  const units = 10 / gPerU;
+  const rounded = Math.round(units * 10) / 10;
+  if (rounded === Math.floor(rounded)) return `${rounded}U`;
+  return `${rounded.toFixed(1).replace(".", ",")}U`;
+}
+
 export default function DiabetePage() {
   const {
     profile,
@@ -584,10 +592,10 @@ export default function DiabetePage() {
         </section>
       </div>
 
-      {/* ── Footer : ratios compacts + liens ── */}
+      {/* ── Footer : mon programme d'insuline (4 ratios) ── */}
       <section className="surface-1 rounded-3xl p-5">
         <div className="flex items-center justify-between mb-3">
-          <p className="label">Ratios actuels</p>
+          <p className="label">Mon programme</p>
           <Link
             href="/diabete/parametres"
             className="flex items-center gap-1 text-xs text-diabete hover:text-diabete/80 transition-colors"
@@ -595,15 +603,29 @@ export default function DiabetePage() {
             Modifier <ChevronRight className="w-3 h-3" />
           </Link>
         </div>
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-          <RatioChip label="Matin" value={`1:${diabetesConfig.ratios.morning}`} />
-          <RatioChip label="Midi" value={`1:${diabetesConfig.ratios.lunch}`} />
-          <RatioChip label="Soir" value={`1:${diabetesConfig.ratios.dinner}`} />
-          <RatioChip label="ISF" value={`${diabetesConfig.insulinSensitivityFactor}`} unit="mg/dL/U" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <RatioChip
-            label="Cible"
-            value={`${diabetesConfig.targetGlucose}`}
-            unit="mg/dL"
+            label="Le matin"
+            value={formatUper10g(diabetesConfig.ratios.morning)}
+            unit="pour 10g"
+          />
+          <RatioChip
+            label="À midi"
+            value={formatUper10g(diabetesConfig.ratios.lunch)}
+            unit="pour 10g"
+          />
+          <RatioChip
+            label="Au goûter"
+            value={formatUper10g(
+              diabetesConfig.insulinRatios?.find((r) => r.mealKey === "snack")?.ratio ??
+                diabetesConfig.ratios.lunch
+            )}
+            unit="pour 10g"
+          />
+          <RatioChip
+            label="Au dîner"
+            value={formatUper10g(diabetesConfig.ratios.dinner)}
+            unit="pour 10g"
           />
         </div>
       </section>
