@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Card, PageHeader, Badge, Button, SectionTitle, ProgressBar, InfoBox } from "@/components/ui";
+import Link from "next/link";
 import { useStore } from "@/lib/store";
 import {
   calculateVMA,
@@ -13,7 +13,19 @@ import {
 } from "@/lib/running-science";
 import { HALF_MARATHON_PLAN } from "@/lib/constants";
 import type { CompletedRunningSession } from "@/types";
-import Link from "next/link";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import {
+  Footprints,
+  ChevronLeft,
+  ChevronRight,
+  Play,
+  Check,
+  Trash2,
+  Droplet,
+  Activity,
+  Timer,
+} from "lucide-react";
 
 const BASE_VOLUME = 20;
 const VO2MAX = 49;
@@ -41,22 +53,8 @@ function generateSessions(
     const easyDist = +(totalVolume * 0.55).toFixed(1);
     const tempoDist = +(totalVolume * 0.45).toFixed(1);
     return [
-      {
-        name: "Footing facile",
-        type: "easy",
-        distance: easyDist,
-        zone: "Z2",
-        details: `${easyDist} km en endurance fondamentale`,
-        paceRange: `${formatPace(zones.z2.paceMinKm.min)} - ${formatPace(zones.z2.paceMinKm.max)}`,
-      },
-      {
-        name: "Tempo court",
-        type: "tempo",
-        distance: tempoDist,
-        zone: "Z3",
-        details: `10 min Z2 + ${(tempoDist - 3).toFixed(1)} km Z3 + 10 min Z2`,
-        paceRange: `${formatPace(zones.z3.paceMinKm.min)} - ${formatPace(zones.z3.paceMinKm.max)}`,
-      },
+      { name: "Footing facile", type: "easy", distance: easyDist, zone: "Z2", details: `${easyDist} km en endurance fondamentale`, paceRange: `${formatPace(zones.z2.paceMinKm.min)} – ${formatPace(zones.z2.paceMinKm.max)}` },
+      { name: "Tempo court", type: "tempo", distance: tempoDist, zone: "Z3", details: `10 min Z2 + ${(tempoDist - 3).toFixed(1)} km Z3 + 10 min Z2`, paceRange: `${formatPace(zones.z3.paceMinKm.min)} – ${formatPace(zones.z3.paceMinKm.max)}` },
     ];
   }
 
@@ -64,22 +62,8 @@ function generateSessions(
     const easyDist = +(totalVolume * 0.4).toFixed(1);
     const longDist = +(totalVolume * 0.6).toFixed(1);
     return [
-      {
-        name: "Footing facile",
-        type: "easy",
-        distance: easyDist,
-        zone: "Z2",
-        details: `${easyDist} km en endurance fondamentale`,
-        paceRange: `${formatPace(zones.z2.paceMinKm.min)} - ${formatPace(zones.z2.paceMinKm.max)}`,
-      },
-      {
-        name: "Sortie longue",
-        type: "long",
-        distance: longDist,
-        zone: "Z2",
-        details: `${longDist} km en Z1-Z2, allure conversationnelle`,
-        paceRange: `${formatPace(zones.z1.paceMinKm.min)} - ${formatPace(zones.z2.paceMinKm.max)}`,
-      },
+      { name: "Footing facile", type: "easy", distance: easyDist, zone: "Z2", details: `${easyDist} km en endurance fondamentale`, paceRange: `${formatPace(zones.z2.paceMinKm.min)} – ${formatPace(zones.z2.paceMinKm.max)}` },
+      { name: "Sortie longue", type: "long", distance: longDist, zone: "Z2", details: `${longDist} km en Z1-Z2, allure conversationnelle`, paceRange: `${formatPace(zones.z1.paceMinKm.min)} – ${formatPace(zones.z2.paceMinKm.max)}` },
     ];
   }
 
@@ -89,12 +73,12 @@ function generateSessions(
 
     const session1: Session = interval
       ? {
-          name: "Fractionne",
+          name: "Fractionné",
           type: "intervals",
           distance: session1Dist,
           zone: "Z4-Z5",
-          details: `Echauffement 15 min Z2 + ${interval.reps}x${interval.distance}m (rec ${interval.recovery}m) + retour 10 min Z1`,
-          paceRange: `Rapide: ${formatPace(zones.z4.paceMinKm.min)} - ${formatPace(zones.z5.paceMinKm.max)} | Rec: ${formatPace(zones.z1.paceMinKm.min)}`,
+          details: `Échauffement 15 min Z2 + ${interval.reps}×${interval.distance}m (rec ${interval.recovery}m) + retour 10 min Z1`,
+          paceRange: `${formatPace(zones.z4.paceMinKm.min)} – ${formatPace(zones.z5.paceMinKm.max)}`,
           intervals: interval,
         }
       : {
@@ -103,19 +87,12 @@ function generateSessions(
           distance: session1Dist,
           zone: "Z2",
           details: `${session1Dist} km en endurance fondamentale`,
-          paceRange: `${formatPace(zones.z2.paceMinKm.min)} - ${formatPace(zones.z2.paceMinKm.max)}`,
+          paceRange: `${formatPace(zones.z2.paceMinKm.min)} – ${formatPace(zones.z2.paceMinKm.max)}`,
         };
 
     return [
       session1,
-      {
-        name: "Sortie longue",
-        type: "long",
-        distance: longDist,
-        zone: "Z2",
-        details: `${longDist} km en Z1-Z2, allure progressive`,
-        paceRange: `${formatPace(zones.z1.paceMinKm.min)} - ${formatPace(zones.z2.paceMinKm.max)}`,
-      },
+      { name: "Sortie longue", type: "long", distance: longDist, zone: "Z2", details: `${longDist} km en Z1-Z2, progressive`, paceRange: `${formatPace(zones.z1.paceMinKm.min)} – ${formatPace(zones.z2.paceMinKm.max)}` },
     ];
   }
 
@@ -125,12 +102,12 @@ function generateSessions(
 
   const session1: Session = interval
     ? {
-        name: "Fractionne intensif",
+        name: "Fractionné intensif",
         type: "intervals",
         distance: session1Dist,
         zone: "Z4-Z5",
-        details: `Echauffement 15 min Z2 + ${interval.reps}x${interval.distance}m (rec ${interval.recovery}m) + retour 10 min Z1`,
-        paceRange: `Rapide: ${formatPace(zones.z4.paceMinKm.min)} - ${formatPace(zones.z5.paceMinKm.max)} | Rec: ${formatPace(zones.z1.paceMinKm.min)}`,
+        details: `Échauffement 15 min Z2 + ${interval.reps}×${interval.distance}m (rec ${interval.recovery}m) + retour 10 min Z1`,
+        paceRange: `${formatPace(zones.z4.paceMinKm.min)} – ${formatPace(zones.z5.paceMinKm.max)}`,
         intervals: interval,
       }
     : {
@@ -139,41 +116,372 @@ function generateSessions(
         distance: session1Dist,
         zone: "Z3",
         details: `10 min Z2 + ${(session1Dist - 3).toFixed(1)} km Z3 + 10 min Z2`,
-        paceRange: `${formatPace(zones.z3.paceMinKm.min)} - ${formatPace(zones.z3.paceMinKm.max)}`,
+        paceRange: `${formatPace(zones.z3.paceMinKm.min)} – ${formatPace(zones.z3.paceMinKm.max)}`,
       };
 
   return [
     session1,
-    {
-      name: "Sortie longue progressive",
-      type: "long",
-      distance: longDist,
-      zone: "Z2-Z3",
-      details: `${(longDist * 0.7).toFixed(1)} km Z2 + ${(longDist * 0.3).toFixed(1)} km Z3`,
-      paceRange: `${formatPace(zones.z2.paceMinKm.min)} - ${formatPace(zones.z3.paceMinKm.max)}`,
-    },
+    { name: "Sortie longue progressive", type: "long", distance: longDist, zone: "Z2-Z3", details: `${(longDist * 0.7).toFixed(1)} km Z2 + ${(longDist * 0.3).toFixed(1)} km Z3`, paceRange: `${formatPace(zones.z2.paceMinKm.min)} – ${formatPace(zones.z3.paceMinKm.max)}` },
   ];
 }
 
-function getPhaseColor(phase: string): "blue" | "green" | "orange" | "purple" | "red" {
+function phaseColor(phase: string): string {
   switch (phase) {
-    case "Base": return "green";
-    case "Build": return "blue";
-    case "Peak": return "orange";
-    case "Taper": return "purple";
-    default: return "blue";
+    case "Base": return "var(--success)";
+    case "Build": return "var(--running)";
+    case "Peak": return "var(--warning)";
+    case "Taper": return "var(--accent-2)";
+    default: return "var(--running)";
   }
 }
 
-function getSessionTypeLabel(type: string): string {
-  switch (type) {
-    case "easy": return "Footing";
-    case "long": return "Longue";
-    case "intervals": return "Fractionne";
-    case "tempo": return "Tempo";
-    default: return type;
+function phaseVariant(phase: string): "success" | "info" | "warning" | "accent" | "default" {
+  switch (phase) {
+    case "Base": return "success";
+    case "Build": return "info";
+    case "Peak": return "warning";
+    case "Taper": return "accent";
+    default: return "default";
   }
 }
+
+export default function RunningPage() {
+  const { currentRunningWeek, setRunningWeek, completedRunningSessions, addCompletedRunningSession, deleteCompletedRunningSession } = useStore();
+  const [trackingSession, setTrackingSession] = useState<number | null>(null);
+
+  const vma = calculateVMA(VO2MAX);
+  const zones = calculateZones(vma);
+
+  const weeks = Array.from({ length: HALF_MARATHON_PLAN.duration }, (_, i) => {
+    const weekNum = i + 1;
+    const volume = +(BASE_VOLUME * HALF_MARATHON_PLAN.volumeProgression[i]).toFixed(1);
+    const phase = getPhase(weekNum);
+    const interval = HALF_MARATHON_PLAN.intervalProgression[i] ?? null;
+    const sessions = generateSessions(weekNum, volume, vma, zones, interval);
+    return { weekNum, volume, phase, sessions, interval };
+  });
+
+  const currentWeekData = weeks[currentRunningWeek - 1];
+  const weekCompletedSessions = completedRunningSessions.filter((s) => s.weekNumber === currentRunningWeek);
+  const getSessionCompletion = (sessionIdx: number) => weekCompletedSessions.find((s) => s.sessionIndex === sessionIdx);
+
+  const weekTotalPlanned = currentWeekData.sessions.reduce((sum, s) => sum + s.distance, 0);
+  const weekTotalDone = weekCompletedSessions.reduce((sum, s) => sum + s.actualDistance, 0);
+  const weekSessionsDone = weekCompletedSessions.length;
+  const weekSessionsTotal = currentWeekData.sessions.length;
+
+  const semiPred = predictRaceTime(VO2MAX, 21.1);
+
+  return (
+    <div className="max-w-[960px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
+
+      {/* ============ HERO : Semaine courante ============ */}
+      <section className="mb-8 animate-in">
+        <div className="flex items-center gap-2 mb-2">
+          <Footprints size={14} className="text-running" />
+          <span className="label">
+            Semi-marathon · S{currentRunningWeek}/14 · {currentWeekData.phase}
+          </span>
+        </div>
+
+        <div className="surface-1 p-6 lg:p-8 relative overflow-hidden">
+          <div
+            aria-hidden
+            className="absolute -top-24 -right-24 h-64 w-64 rounded-full opacity-[0.10] blur-3xl"
+            style={{ background: phaseColor(currentWeekData.phase) }}
+          />
+          <div className="relative">
+            <div className="flex items-start justify-between gap-3 mb-5">
+              <div>
+                <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight mb-1">
+                  Semaine <span className="num">{currentRunningWeek}</span>
+                </h1>
+                <p className="text-sm text-text-secondary">
+                  <span className="num">{currentWeekData.volume}</span> km prévus ·{" "}
+                  <span className="num">{weekSessionsTotal}</span> séances
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setRunningWeek(Math.max(1, currentRunningWeek - 1))}
+                  disabled={currentRunningWeek <= 1}
+                >
+                  <ChevronLeft size={16} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setRunningWeek(Math.min(14, currentRunningWeek + 1))}
+                  disabled={currentRunningWeek >= 14}
+                >
+                  <ChevronRight size={16} />
+                </Button>
+              </div>
+            </div>
+
+            {/* 3 key numbers */}
+            <div className="grid grid-cols-3 gap-3 mb-5">
+              <div>
+                <span className="label">Séances</span>
+                <p className="num text-2xl font-semibold mt-1">
+                  <span className="text-running">{weekSessionsDone}</span>
+                  <span className="text-text-tertiary text-lg">/{weekSessionsTotal}</span>
+                </p>
+              </div>
+              <div>
+                <span className="label">Km réalisés</span>
+                <p className="num text-2xl font-semibold mt-1">
+                  <span className="text-running">{weekTotalDone.toFixed(1)}</span>
+                  <span className="text-text-tertiary text-lg">/{weekTotalPlanned.toFixed(0)}</span>
+                </p>
+              </div>
+              <div>
+                <span className="label">VMA</span>
+                <p className="num text-2xl font-semibold mt-1 text-running">
+                  {vma.toFixed(1)}
+                  <span className="text-text-tertiary text-sm ml-1">km/h</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            <div className="h-1 rounded-full bg-bg-tertiary overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{
+                  width: `${weekTotalPlanned > 0 ? Math.min(100, (weekTotalDone / weekTotalPlanned) * 100) : 0}%`,
+                  background: "var(--running)",
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ============ Séances de la semaine ============ */}
+      <section className="mb-8">
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-sm font-semibold tracking-tight">Séances cette semaine</h2>
+          <span className="label">{currentWeekData.phase}</span>
+        </div>
+
+        <div className="space-y-3">
+          {currentWeekData.sessions.map((session, idx) => {
+            const completed = getSessionCompletion(idx);
+            const isTracking = trackingSession === idx;
+            return (
+              <div
+                key={idx}
+                className={`surface-1 p-5 transition-colors ${completed ? "ring-1 ring-success/20" : ""}`}
+              >
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-base truncate">{session.name}</h3>
+                      {completed && <Badge variant="success" size="sm" dot>Fait</Badge>}
+                    </div>
+                    <p className="text-[11px] text-text-tertiary">
+                      Séance {idx + 1} · Zone {session.zone}
+                    </p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="num text-2xl font-semibold text-running leading-none">
+                      {session.distance}
+                      <span className="text-sm text-text-tertiary ml-1">km</span>
+                    </p>
+                    {session.paceRange && (
+                      <p className="num text-[11px] text-text-tertiary mt-1">{session.paceRange}</p>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-[13px] text-text-secondary leading-snug mb-3">
+                  {session.details}
+                </p>
+
+                {session.intervals && (
+                  <div className="bg-warning/8 rounded-lg px-3 py-2 mb-3 border-l-2 border-warning">
+                    <p className="text-xs text-warning font-medium">
+                      <span className="num">{session.intervals.reps}</span>×<span className="num">{session.intervals.distance}</span>m
+                      <span className="text-text-tertiary"> · récup <span className="num">{session.intervals.recovery}</span>m trot</span>
+                    </p>
+                  </div>
+                )}
+
+                {completed && !isTracking && (
+                  <div className="mt-3 pt-3 border-t border-border-subtle">
+                    <div className="grid grid-cols-3 gap-2 text-center mb-2">
+                      <div>
+                        <span className="label">Réalisé</span>
+                        <p className="num text-sm font-semibold text-success mt-0.5">{completed.actualDistance} km</p>
+                      </div>
+                      <div>
+                        <span className="label">Durée</span>
+                        <p className="num text-sm font-semibold mt-0.5">{completed.actualDuration} min</p>
+                      </div>
+                      <div>
+                        <span className="label">Allure</span>
+                        <p className="num text-sm font-semibold text-running mt-0.5">{formatPace(completed.avgPace)}/km</p>
+                      </div>
+                    </div>
+                    {(completed.glucoseBefore || completed.glucoseAfter) && (
+                      <p className="text-[11px] text-text-tertiary flex items-center gap-2">
+                        <Droplet size={10} className="text-diabete" />
+                        {completed.glucoseBefore && <>avant <span className="num text-text-secondary">{completed.glucoseBefore}</span></>}
+                        {completed.glucoseAfter && <>· après <span className="num text-text-secondary">{completed.glucoseAfter}</span></>}
+                      </p>
+                    )}
+                    {completed.notes && (
+                      <p className="text-[11px] text-text-tertiary italic mt-1">{completed.notes}</p>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt-2 !text-error"
+                      onClick={() => deleteCompletedRunningSession(completed.id)}
+                      leftIcon={<Trash2 size={12} />}
+                    >
+                      Supprimer
+                    </Button>
+                  </div>
+                )}
+
+                {isTracking && (
+                  <SessionTrackingForm
+                    weekNumber={currentRunningWeek}
+                    sessionIndex={idx}
+                    plannedDistance={session.distance}
+                    onSave={(s) => { addCompletedRunningSession(s); setTrackingSession(null); }}
+                    onCancel={() => setTrackingSession(null)}
+                  />
+                )}
+
+                {!completed && !isTracking && (
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    fullWidth
+                    className="mt-2"
+                    leftIcon={<Play size={14} />}
+                    onClick={() => setTrackingSession(idx)}
+                  >
+                    Logger cette séance
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ============ Prédiction semi + VMA quick stats ============ */}
+      <section className="mb-8 grid grid-cols-2 gap-3">
+        <div className="surface-1 p-4">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Timer size={12} className="text-running" />
+            <span className="label">Prédit semi</span>
+          </div>
+          <p className="num text-2xl font-semibold text-running mt-1">{formatTime(semiPred.predictedTimeMinutes)}</p>
+          <p className="text-[11px] text-text-tertiary mt-0.5">
+            <span className="num">{formatPace(semiPred.predictedPace)}</span>/km · {semiPred.confidence}
+          </p>
+        </div>
+        <div className="surface-1 p-4">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Activity size={12} className="text-running" />
+            <span className="label">Zones</span>
+          </div>
+          <p className="text-sm font-medium mt-1 truncate">
+            Z2 <span className="num text-text-secondary text-[11px]">{formatPace(zones.z2.paceMinKm.min)}–{formatPace(zones.z2.paceMinKm.max)}</span>
+          </p>
+          <Link href="/running/zones" className="text-[11px] text-running hover:underline inline-flex items-center gap-0.5 mt-1">
+            Détail Z1-Z5 <ChevronRight size={10} />
+          </Link>
+        </div>
+      </section>
+
+      {/* ============ 14 semaines overview ============ */}
+      <section className="mb-8">
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-sm font-semibold tracking-tight">Plan 14 semaines</h2>
+          <span className="label">
+            <span className="num">{completedRunningSessions.length}</span>/<span className="num">{weeks.reduce((s, w) => s + w.sessions.length, 0)}</span> séances
+          </span>
+        </div>
+
+        <div className="surface-1 p-4">
+          <div className="space-y-1.5">
+            {weeks.map((week) => {
+              const isCurrent = week.weekNum === currentRunningWeek;
+              const weekDone = completedRunningSessions.filter((s) => s.weekNumber === week.weekNum).length;
+              const weekTotal = week.sessions.length;
+              const weekFullyDone = weekDone >= weekTotal;
+              return (
+                <button
+                  key={week.weekNum}
+                  onClick={() => setRunningWeek(week.weekNum)}
+                  className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all text-left tap-scale ${
+                    isCurrent ? "bg-running/10" : "hover:bg-bg-tertiary"
+                  }`}
+                >
+                  <div
+                    className="h-7 w-7 rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                    style={{
+                      background: weekFullyDone
+                        ? "var(--success)"
+                        : isCurrent
+                        ? "var(--running)"
+                        : "var(--bg-tertiary)",
+                      color: weekFullyDone || isCurrent ? "var(--text-ink)" : "var(--text-tertiary)",
+                    }}
+                  >
+                    {weekFullyDone ? <Check size={14} strokeWidth={3} /> : <span className="num">{week.weekNum}</span>}
+                  </div>
+
+                  <Badge variant={phaseVariant(week.phase)} size="sm">{week.phase}</Badge>
+
+                  <div className="flex-1 h-1 rounded-full bg-bg-tertiary overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${(week.volume / Math.max(...weeks.map((w) => w.volume))) * 100}%`,
+                        background: weekFullyDone ? "var(--success)" : isCurrent ? "var(--running)" : "rgba(255,255,255,0.12)",
+                      }}
+                    />
+                  </div>
+
+                  <span className={`num text-[11px] font-medium min-w-[44px] text-right ${
+                    weekFullyDone ? "text-success" : isCurrent ? "text-running" : "text-text-tertiary"
+                  }`}>
+                    {week.volume} km
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ============ T1D tip compact ============ */}
+      <section className="mb-6 surface-1 p-5 border-l-2 border-diabete">
+        <div className="flex items-center gap-2 mb-2">
+          <Droplet size={14} className="text-diabete" />
+          <span className="label">Glycémie avant course</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div><Badge variant="error" size="sm" dot>&lt;100</Badge><p className="text-text-tertiary mt-1">20-30g glucides · attendre 15min</p></div>
+          <div><Badge variant="warning" size="sm" dot>100-120</Badge><p className="text-text-tertiary mt-1">15g glucides · partir après 10min</p></div>
+          <div><Badge variant="success" size="sm" dot>120-180</Badge><p className="text-text-tertiary mt-1">Zone idéale · c&apos;est parti</p></div>
+          <div><Badge variant="error" size="sm" dot>&gt;250</Badge><p className="text-text-tertiary mt-1">Vérifier cétones avant</p></div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// ========== Tracking Form ==========
 
 function SessionTrackingForm({
   weekNumber,
@@ -223,65 +531,42 @@ function SessionTrackingForm({
     });
   };
 
+  const inputClass = "w-full bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:ring-2 focus:ring-running/40 num";
+
   return (
-    <div className="mt-4 space-y-3 border-t border-white/[0.06] pt-4">
+    <div className="mt-4 space-y-3 border-t border-border-subtle pt-4">
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs text-white/40 mb-1 block">Distance (km)</label>
-          <input
-            type="number"
-            step="0.1"
-            value={distance}
-            onChange={(e) => setDistance(e.target.value)}
-            className="w-full bg-white/[0.06] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white"
-          />
+          <label className="label block mb-1">Distance (km)</label>
+          <input type="number" step="0.1" inputMode="decimal" value={distance} onChange={(e) => setDistance(e.target.value)} className={inputClass} />
         </div>
         <div>
-          <label className="text-xs text-white/40 mb-1 block">Duree (min)</label>
-          <input
-            type="number"
-            step="1"
-            value={duration}
-            onChange={(e) => setDuration(e.target.value)}
-            placeholder="ex: 45"
-            className="w-full bg-white/[0.06] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white"
-          />
+          <label className="label block mb-1">Durée (min)</label>
+          <input type="number" step="1" inputMode="numeric" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="45" className={inputClass} />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs text-white/40 mb-1 block">Glycemie avant (mg/dL)</label>
-          <input
-            type="number"
-            value={glucoseBefore}
-            onChange={(e) => setGlucoseBefore(e.target.value)}
-            placeholder="opt."
-            className="w-full bg-white/[0.06] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white"
-          />
+          <label className="label block mb-1">Glucose avant</label>
+          <input type="number" inputMode="numeric" value={glucoseBefore} onChange={(e) => setGlucoseBefore(e.target.value)} placeholder="opt." className={inputClass} />
         </div>
         <div>
-          <label className="text-xs text-white/40 mb-1 block">Glycemie apres (mg/dL)</label>
-          <input
-            type="number"
-            value={glucoseAfter}
-            onChange={(e) => setGlucoseAfter(e.target.value)}
-            placeholder="opt."
-            className="w-full bg-white/[0.06] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white"
-          />
+          <label className="label block mb-1">Glucose après</label>
+          <input type="number" inputMode="numeric" value={glucoseAfter} onChange={(e) => setGlucoseAfter(e.target.value)} placeholder="opt." className={inputClass} />
         </div>
       </div>
       <div>
-        <label className="text-xs text-white/40 mb-1.5 block">Ressenti</label>
-        <div className="flex gap-2">
+        <label className="label block mb-1.5">Ressenti</label>
+        <div className="flex gap-1.5">
           {feelings.map((f) => (
             <button
               key={f.value}
               onClick={() => setFeeling(f.value)}
               style={{ touchAction: "manipulation" }}
-              className={`flex-1 py-1.5 text-xs rounded-lg border transition-all cursor-pointer select-none ${
+              className={`flex-1 py-2 text-xs rounded-lg transition-all tap-scale ${
                 feeling === f.value
-                  ? "bg-[#00d4ff]/15 border-[#00d4ff]/40 text-[#00d4ff]"
-                  : "bg-white/[0.03] border-white/[0.06] text-white/50 hover:bg-white/[0.06]"
+                  ? "bg-running/15 text-running ring-1 ring-running/40"
+                  : "bg-bg-tertiary text-text-tertiary hover:bg-bg-hover"
               }`}
             >
               {f.label}
@@ -290,533 +575,19 @@ function SessionTrackingForm({
         </div>
       </div>
       <div>
-        <label className="text-xs text-white/40 mb-1 block">Notes</label>
+        <label className="label block mb-1">Notes</label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={2}
-          placeholder="Sensations, meteo, remarques..."
-          className="w-full bg-white/[0.06] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white resize-none"
+          placeholder="Sensations, météo..."
+          className={`${inputClass} resize-none`}
         />
       </div>
       <div className="flex gap-2">
-        <Button variant="primary" size="sm" onClick={handleSubmit} disabled={!distance || !duration}>
-          Enregistrer
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onCancel}>
-          Annuler
-        </Button>
+        <Button size="sm" onClick={handleSubmit} disabled={!distance || !duration}>Enregistrer</Button>
+        <Button variant="ghost" size="sm" onClick={onCancel}>Annuler</Button>
       </div>
-    </div>
-  );
-}
-
-export default function RunningPage() {
-  const { currentRunningWeek, setRunningWeek, profile, completedRunningSessions, addCompletedRunningSession, deleteCompletedRunningSession } = useStore();
-  const [trackingSession, setTrackingSession] = useState<number | null>(null);
-
-  const vma = calculateVMA(VO2MAX);
-  const zones = calculateZones(vma);
-
-  const weeks = Array.from({ length: HALF_MARATHON_PLAN.duration }, (_, i) => {
-    const weekNum = i + 1;
-    const volume = +(BASE_VOLUME * HALF_MARATHON_PLAN.volumeProgression[i]).toFixed(1);
-    const phase = getPhase(weekNum);
-    const interval = HALF_MARATHON_PLAN.intervalProgression[i] ?? null;
-    const sessions = generateSessions(weekNum, volume, vma, zones, interval);
-    return { weekNum, volume, phase, sessions, interval };
-  });
-
-  const currentWeekData = weeks[currentRunningWeek - 1];
-
-  // Completed sessions for current week
-  const weekCompletedSessions = completedRunningSessions.filter(
-    (s) => s.weekNumber === currentRunningWeek
-  );
-  const getSessionCompletion = (sessionIdx: number) =>
-    weekCompletedSessions.find((s) => s.sessionIndex === sessionIdx);
-
-  const weekTotalPlanned = currentWeekData.sessions.reduce((sum, s) => sum + s.distance, 0);
-  const weekTotalDone = weekCompletedSessions.reduce((sum, s) => sum + s.actualDistance, 0);
-  const weekSessionsDone = weekCompletedSessions.length;
-  const weekSessionsTotal = currentWeekData.sessions.length;
-
-  // Overall plan progress
-  const allCompletedWeeks = new Set(completedRunningSessions.map((s) => s.weekNumber));
-  const totalCompletedSessions = completedRunningSessions.length;
-  const totalPlannedSessions = weeks.reduce((sum, w) => sum + w.sessions.length, 0);
-
-  const races = [
-    { label: "5K", dist: 5 },
-    { label: "10K", dist: 10 },
-    { label: "Semi-marathon", dist: 21.1 },
-    { label: "Marathon", dist: 42.2 },
-  ];
-
-  const maxVolume = Math.max(...weeks.map((w) => w.volume));
-
-  return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
-      <PageHeader
-        title="Plan Semi-Marathon"
-        subtitle={`14 semaines | VMA ${vma.toFixed(1)} km/h | VO2max ${VO2MAX} ml/kg/min`}
-        action={
-          <Link href="/running/zones">
-            <Button variant="secondary" size="sm">
-              Zones detaillees
-            </Button>
-          </Link>
-        }
-      />
-
-      {/* Week Selector */}
-      <Card className="mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <SectionTitle className="!mb-0">Semaine en cours</SectionTitle>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setRunningWeek(Math.max(1, currentRunningWeek - 1))}
-              disabled={currentRunningWeek <= 1}
-            >
-              ←
-            </Button>
-            <span className="text-[#00d4ff] font-bold text-lg min-w-[80px] text-center">
-              S{currentRunningWeek}/14
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setRunningWeek(Math.min(14, currentRunningWeek + 1))}
-              disabled={currentRunningWeek >= 14}
-            >
-              →
-            </Button>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge color={getPhaseColor(currentWeekData.phase)}>{currentWeekData.phase}</Badge>
-          <span className="text-white/40 text-sm">
-            Volume: {currentWeekData.volume} km
-          </span>
-        </div>
-      </Card>
-
-      {/* Weekly Progress */}
-      <Card className="mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <SectionTitle className="!mb-0">Progression semaine</SectionTitle>
-          <span className="text-xs text-white/40">
-            Plan: {totalCompletedSessions}/{totalPlannedSessions} seances
-          </span>
-        </div>
-        <div className="grid grid-cols-3 gap-4 mb-3">
-          <div className="text-center">
-            <p className="text-2xl font-bold text-[#00ff94]">
-              {weekSessionsDone}/{weekSessionsTotal}
-            </p>
-            <p className="text-xs text-white/40">Seances</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-[#00d4ff]">
-              {weekTotalDone.toFixed(1)}
-            </p>
-            <p className="text-xs text-white/40">km realises</p>
-          </div>
-          <div className="text-center">
-            <p className={`text-2xl font-bold ${weekTotalDone >= weekTotalPlanned ? "text-[#00ff94]" : "text-white/60"}`}>
-              {weekTotalPlanned > 0 ? Math.round((weekTotalDone / weekTotalPlanned) * 100) : 0}%
-            </p>
-            <p className="text-xs text-white/40">du volume</p>
-          </div>
-        </div>
-        <ProgressBar
-          value={weekTotalDone}
-          max={weekTotalPlanned || 1}
-          color={weekTotalDone >= weekTotalPlanned ? "#00ff94" : "#00d4ff"}
-          showValue={false}
-        />
-      </Card>
-
-      {/* Pace Zones Summary */}
-      <Card className="mb-6">
-        <SectionTitle>Allures par zone</SectionTitle>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-          {(["z1", "z2", "z3", "z4", "z5"] as const).map((zKey, i) => {
-            const z = zones[zKey];
-            const zoneColors = [
-              "border-green-500/30 bg-green-500/5",
-              "border-[#00d4ff]/30 bg-[#00d4ff]/5",
-              "border-yellow-500/30 bg-yellow-500/5",
-              "border-orange-500/30 bg-orange-500/5",
-              "border-red-500/30 bg-red-500/5",
-            ];
-            const textColors = [
-              "text-green-400",
-              "text-[#00d4ff]",
-              "text-yellow-400",
-              "text-orange-400",
-              "text-red-400",
-            ];
-            return (
-              <div key={zKey} className={`p-3 rounded-xl border ${zoneColors[i]}`}>
-                <div className={`text-xs font-bold uppercase ${textColors[i]} mb-1`}>
-                  Z{i + 1}
-                </div>
-                <div className="text-white text-sm font-semibold">
-                  {formatPace(z.paceMinKm.min)} - {formatPace(z.paceMinKm.max)}
-                </div>
-                <div className="text-white/35 text-xs">/km</div>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-
-      {/* Current Week Detail */}
-      <SectionTitle>Detail Semaine {currentRunningWeek} — {currentWeekData.phase}</SectionTitle>
-      <div className="grid sm:grid-cols-2 gap-4 mb-8">
-        {currentWeekData.sessions.map((session, idx) => {
-          const completed = getSessionCompletion(idx);
-          const isTracking = trackingSession === idx;
-
-          return (
-            <Card key={idx} glow={completed ? "green" : session.type === "intervals" ? "orange" : "blue"}>
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="font-semibold text-white">{session.name}</h3>
-                  <p className="text-white/40 text-xs mt-0.5">Seance {idx + 1}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {completed && <Badge color="green">Fait</Badge>}
-                  <Badge color={session.type === "intervals" ? "orange" : session.type === "tempo" ? "purple" : "blue"}>
-                    {getSessionTypeLabel(session.type)}
-                  </Badge>
-                  <Badge color="gray">{session.zone}</Badge>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center gap-4">
-                  <div>
-                    <p className="text-xs text-white/40">Distance</p>
-                    <p className="text-lg font-bold text-[#00d4ff]">{session.distance} km</p>
-                  </div>
-                  {session.paceRange && (
-                    <div>
-                      <p className="text-xs text-white/40">Allure</p>
-                      <p className="text-sm text-white/80">{session.paceRange}</p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="bg-white/[0.03] rounded-lg p-3">
-                  <p className="text-xs text-white/40 mb-1">Structure</p>
-                  <p className="text-sm text-white/70">{session.details}</p>
-                </div>
-
-                {session.intervals && (
-                  <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-3">
-                    <p className="text-xs text-orange-400 font-semibold mb-1">Fractionne</p>
-                    <p className="text-sm text-white/70">
-                      {session.intervals.reps} x {session.intervals.distance}m
-                      <span className="text-white/40"> | Recup: {session.intervals.recovery}m trot</span>
-                    </p>
-                    <p className="text-xs text-white/40 mt-1">
-                      Allure rapide: {formatPace(zones.z4.paceMinKm.min)} - {formatPace(zones.z5.paceMinKm.max)} /km
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Completed session summary */}
-              {completed && !isTracking && (
-                <div className="mt-4 border-t border-white/[0.06] pt-3">
-                  <div className="grid grid-cols-3 gap-2 text-center mb-2">
-                    <div>
-                      <p className="text-xs text-white/40">Realise</p>
-                      <p className="text-sm font-semibold text-[#00ff94]">{completed.actualDistance} km</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-white/40">Duree</p>
-                      <p className="text-sm font-semibold text-white">{completed.actualDuration} min</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-white/40">Allure moy.</p>
-                      <p className="text-sm font-semibold text-[#00d4ff]">{formatPace(completed.avgPace)}/km</p>
-                    </div>
-                  </div>
-                  {(completed.glucoseBefore || completed.glucoseAfter) && (
-                    <div className="flex items-center gap-3 text-xs text-white/50">
-                      {completed.glucoseBefore && <span>Glycemie avant: <span className="text-white/70">{completed.glucoseBefore} mg/dL</span></span>}
-                      {completed.glucoseAfter && <span>Apres: <span className="text-white/70">{completed.glucoseAfter} mg/dL</span></span>}
-                    </div>
-                  )}
-                  {completed.notes && (
-                    <p className="text-xs text-white/40 mt-1 italic">{completed.notes}</p>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="mt-2 !text-[#ff4757]"
-                    onClick={() => deleteCompletedRunningSession(completed.id)}
-                  >
-                    Supprimer
-                  </Button>
-                </div>
-              )}
-
-              {/* Tracking form */}
-              {isTracking && (
-                <SessionTrackingForm
-                  weekNumber={currentRunningWeek}
-                  sessionIndex={idx}
-                  plannedDistance={session.distance}
-                  onSave={(s) => {
-                    addCompletedRunningSession(s);
-                    setTrackingSession(null);
-                  }}
-                  onCancel={() => setTrackingSession(null)}
-                />
-              )}
-
-              {/* Log button */}
-              {!completed && !isTracking && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="mt-4 w-full"
-                  onClick={() => setTrackingSession(idx)}
-                >
-                  Logger cette seance
-                </Button>
-              )}
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* 14-Week Plan Overview */}
-      <SectionTitle>Progression 14 semaines</SectionTitle>
-      <Card className="mb-8">
-        <div className="space-y-2">
-          {weeks.map((week) => {
-            const isCurrent = week.weekNum === currentRunningWeek;
-            const sessionTypes = week.sessions.map((s) => getSessionTypeLabel(s.type)).join(" + ");
-            const weekDone = completedRunningSessions.filter((s) => s.weekNumber === week.weekNum).length;
-            const weekTotal = week.sessions.length;
-            const weekFullyDone = weekDone >= weekTotal;
-            return (
-              <button
-                key={week.weekNum}
-                onClick={() => setRunningWeek(week.weekNum)}
-                className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left ${
-                  isCurrent
-                    ? "bg-[#00d4ff]/10 border border-[#00d4ff]/30"
-                    : weekFullyDone
-                    ? "bg-[#00ff94]/5 border border-[#00ff94]/15"
-                    : "hover:bg-white/[0.03] border border-transparent"
-                }`}
-              >
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
-                  weekFullyDone ? "bg-[#00ff94] text-black" : isCurrent ? "bg-[#00d4ff] text-black" : "bg-white/[0.06] text-white/60"
-                }`}>
-                  {weekFullyDone ? "✓" : week.weekNum}
-                </div>
-
-                <Badge color={getPhaseColor(week.phase)}>{week.phase}</Badge>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1">
-                      <ProgressBar
-                        value={week.volume}
-                        max={maxVolume}
-                        color={weekFullyDone ? "#00ff94" : isCurrent ? "#00d4ff" : "#ffffff30"}
-                        showValue={false}
-                      />
-                    </div>
-                    <span className={`text-xs font-medium min-w-[50px] text-right ${
-                      weekFullyDone ? "text-[#00ff94]" : isCurrent ? "text-[#00d4ff]" : "text-white/50"
-                    }`}>
-                      {week.volume} km
-                    </span>
-                  </div>
-                </div>
-
-                <span className="text-xs text-white/35 min-w-[120px] text-right hidden md:block">
-                  {weekDone > 0 ? `${weekDone}/${weekTotal}` : sessionTypes}
-                </span>
-
-                {isCurrent && !weekFullyDone && (
-                  <span className="text-[#00d4ff] text-xs font-semibold">EN COURS</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </Card>
-
-      {/* T1D Running Adaptations */}
-      <SectionTitle>Adaptations Diabete T1 — Course</SectionTitle>
-      <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-        <Card>
-          <h3 className="font-semibold text-white mb-3">Avant la course</h3>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-white/60">Glycemie ideale</span>
-              <span className="text-sm font-semibold text-green-400">120 - 180 mg/dL</span>
-            </div>
-            <div className="h-px bg-white/[0.06]" />
-            <div className="space-y-1.5">
-              <div className="flex items-start gap-2">
-                <span className="text-red-400 text-xs mt-0.5">●</span>
-                <p className="text-xs text-white/50">
-                  <span className="text-white/70 font-medium">&lt; 100 mg/dL :</span> Prendre 20-30g de glucides rapides, attendre 15 min
-                </p>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-orange-400 text-xs mt-0.5">●</span>
-                <p className="text-xs text-white/50">
-                  <span className="text-white/70 font-medium">100-120 mg/dL :</span> Prendre 15g de glucides, partir apres 10 min
-                </p>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-green-400 text-xs mt-0.5">●</span>
-                <p className="text-xs text-white/50">
-                  <span className="text-white/70 font-medium">120-180 mg/dL :</span> Zone ideale, c&apos;est parti !
-                </p>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-orange-400 text-xs mt-0.5">●</span>
-                <p className="text-xs text-white/50">
-                  <span className="text-white/70 font-medium">180-250 mg/dL :</span> OK pour Z2, prudence pour fractionne
-                </p>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-red-400 text-xs mt-0.5">●</span>
-                <p className="text-xs text-white/50">
-                  <span className="text-white/70 font-medium">&gt; 250 mg/dL :</span> Verifier cetones, reporter si &gt; 1.0 mmol/L
-                </p>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <h3 className="font-semibold text-white mb-3">Pendant la course</h3>
-          <div className="space-y-2">
-            <InfoBox variant="info">
-              <p className="font-medium mb-1">Glucides pendant l&apos;effort</p>
-              <p className="text-xs opacity-80">
-                30g/h pour les sorties &gt; 1h. Gel, compote, ou boisson sportive.
-              </p>
-            </InfoBox>
-            <div className="space-y-1.5 mt-3">
-              <div className="flex items-start gap-2">
-                <span className="text-[#00d4ff] text-xs mt-0.5">●</span>
-                <p className="text-xs text-white/50">
-                  <span className="text-white/70 font-medium">Z2 (endurance) :</span> -60 mg/dL/h en moyenne. Anticiper avec glucides.
-                </p>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-orange-400 text-xs mt-0.5">●</span>
-                <p className="text-xs text-white/50">
-                  <span className="text-white/70 font-medium">Z4-Z5 (fractionne) :</span> Peut faire monter temporairement (+30-50 mg/dL). Pas de correction pendant.
-                </p>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-white/40 text-xs mt-0.5">●</span>
-                <p className="text-xs text-white/50">
-                  Toujours avoir du sucre rapide sur soi (dextrose, gel).
-                </p>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <h3 className="font-semibold text-white mb-3">Insuline</h3>
-          <div className="space-y-1.5">
-            <div className="flex items-start gap-2">
-              <span className="text-[#00d4ff] text-xs mt-0.5">●</span>
-              <p className="text-xs text-white/50">
-                <span className="text-white/70 font-medium">Bolus pre-run :</span> Reduire de 30-50% si repas &lt; 2h avant la course
-              </p>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="text-[#00d4ff] text-xs mt-0.5">●</span>
-              <p className="text-xs text-white/50">
-                <span className="text-white/70 font-medium">Basale :</span> Pas de modification avec les stylos (pas de pompe)
-              </p>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="text-[#00d4ff] text-xs mt-0.5">●</span>
-              <p className="text-xs text-white/50">
-                <span className="text-white/70 font-medium">Post-run :</span> Sensibilite accrue 4-6h. Reduire bolus du repas suivant de 20-30%
-              </p>
-            </div>
-            <div className="flex items-start gap-2">
-              <span className="text-[#00d4ff] text-xs mt-0.5">●</span>
-              <p className="text-xs text-white/50">
-                <span className="text-white/70 font-medium">Sortie longue (&gt; 1h30) :</span> Reduire bolus de 50% et surveiller dans les 8h suivantes
-              </p>
-            </div>
-            <div className="mt-3">
-              <InfoBox variant="warning">
-                <p className="text-xs">
-                  Risque d&apos;hypoglycemie nocturne apres sortie longue. Collation pre-dodo recommandee (20g glucides lents + proteine).
-                </p>
-              </InfoBox>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Race Predictions */}
-      <SectionTitle>Predictions de course</SectionTitle>
-      <Card className="mb-8">
-        <div className="overflow-x-auto scrollbar-hide -mx-2 px-2">
-          <table className="w-full text-sm min-w-[500px]">
-            <thead>
-              <tr className="text-white/40 text-xs uppercase tracking-wider border-b border-white/[0.06]">
-                <th className="text-left py-3 pr-4">Distance</th>
-                <th className="text-left py-3 pr-4">Temps predit</th>
-                <th className="text-left py-3 pr-4">Allure</th>
-                <th className="text-left py-3 pr-4">Vitesse</th>
-                <th className="text-left py-3">Marge</th>
-              </tr>
-            </thead>
-            <tbody>
-              {races.map((race) => {
-                const pred = predictRaceTime(VO2MAX, race.dist);
-                return (
-                  <tr key={race.label} className="border-b border-white/[0.03] last:border-0">
-                    <td className="py-3 pr-4">
-                      <span className="font-semibold text-white">{race.label}</span>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <span className="text-[#00d4ff] font-bold">
-                        {formatTime(pred.predictedTimeMinutes)}
-                      </span>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <span className="text-white/70">{formatPace(pred.predictedPace)} /km</span>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <span className="text-white/50">{pred.predictedSpeed.toFixed(1)} km/h</span>
-                    </td>
-                    <td className="py-3">
-                      <Badge color="gray">{pred.confidence}</Badge>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
     </div>
   );
 }

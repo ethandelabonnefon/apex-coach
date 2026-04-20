@@ -3,14 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
-import { getCurrentPhaseInfo, VOLUME_LANDMARKS } from "@/lib/muscu-science";
+import { getCurrentPhaseInfo } from "@/lib/muscu-science";
 import { generatePersonalizedProgram } from "@/lib/program-generation-flow";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { MetricCard } from "@/components/ui/MetricCard";
 import { Pulse } from "@/components/ui/Pulse";
-import BodyAnalysisSection from "@/components/body-map/BodyAnalysisSection";
-import PersonalizationBadge from "@/components/musculation/PersonalizationBadge";
 import ModifyDaysModal from "@/components/musculation/ModifyDaysModal";
 import ReasoningModal from "@/components/musculation/ReasoningModal";
 import {
@@ -19,38 +16,13 @@ import {
   ArrowUpRight,
   Calendar,
   TrendingUp,
-  Target,
   Sparkles,
+  Play,
+  RefreshCw,
+  Info,
 } from "lucide-react";
 
-function computeWeeklyVolume(sessions: { exercises: { name: string; sets: number }[] }[]): Record<string, number> {
-  const muscleMap: Record<string, string[]> = {
-    "Pectoraux": ["Développé couché", "Développé incliné", "Écarté", "Pec deck", "Dips"],
-    "Dos": ["Tractions", "Rowing", "Lat pulldown", "T-bar"],
-    "Épaules latérales": ["Élévations latérales"],
-    "Épaules postérieures": ["Face pulls", "Reverse pec"],
-    "Biceps": ["Curl"],
-    "Triceps": ["Extensions triceps", "Barre au front", "Overhead extension"],
-    "Quadriceps": ["Presse à cuisses", "Squat bulgare", "Leg extension", "Hack squat", "Sissy squat", "Squat", "Front squat"],
-    "Ischio-jambiers": ["Romanian deadlift", "Leg curl", "Nordic curl", "RDL"],
-    "Mollets": ["Mollets"],
-  };
-
-  const volume: Record<string, number> = {};
-  for (const muscle of Object.keys(muscleMap)) volume[muscle] = 0;
-
-  for (const session of sessions) {
-    for (const ex of session.exercises) {
-      for (const [muscle, keywords] of Object.entries(muscleMap)) {
-        if (keywords.some((kw) => ex.name.toLowerCase().includes(kw.toLowerCase()))) {
-          volume[muscle] += ex.sets;
-        }
-      }
-    }
-  }
-
-  return volume;
-}
+const DAYS_FR = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
 
 export default function MuscuPage() {
   const {
@@ -73,23 +45,17 @@ export default function MuscuPage() {
   const displayDaysPerWeek = program?.daysPerWeek || muscuProgram.daysPerWeek;
   const currentWeek = program?.currentWeek || muscuProgram.currentWeek;
   const phase = getCurrentPhaseInfo(currentWeek);
-  const weeklyVolume = program?.volumeDistribution
-    ? Object.fromEntries(
-        Object.entries(program.volumeDistribution).map(([k, v]) => [
-          k,
-          typeof v === "object" && v !== null && "setsPerWeek" in v
-            ? (v as { setsPerWeek: number }).setsPerWeek
-            : v,
-        ])
-      )
-    : computeWeeklyVolume(displaySessions);
-
-  const totalSets = displaySessions.reduce(
-    (sum, s) => sum + s.exercises.reduce((es, e) => es + e.sets, 0),
-    0
-  );
-
   const cycleWeek = ((currentWeek - 1) % 6) + 1;
+
+  const todayName = DAYS_FR[new Date().getDay()];
+  const todaySession = displaySessions.find((s) => s.day === todayName);
+  const nextSession = !todaySession
+    ? displaySessions.find((s) => {
+        const idx = DAYS_FR.indexOf(s.day);
+        const today = new Date().getDay();
+        return idx > today;
+      }) || displaySessions[0]
+    : null;
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -128,21 +94,21 @@ export default function MuscuPage() {
     }
   };
 
-  // ─── CAS 1 : Pas de diagnostic ───────────────────────────
+  // ─── CAS 1 : Pas de diagnostic ──────────────────────────
   if (!hasDiagnostic && !program) {
     return (
-      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
+      <div className="max-w-[960px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
         <section className="mb-8 animate-in">
           <div className="flex items-center gap-2 mb-2">
             <Dumbbell size={14} className="text-muscu" />
             <span className="label">Musculation</span>
           </div>
-          <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight mb-1">
+          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight mb-2">
             Crée ton programme.
           </h1>
           <p className="text-sm sm:text-base text-text-secondary max-w-xl">
-            Complète le diagnostic pour que l&apos;IA génère un programme adapté à ta morphologie,
-            ton équipement et tes contraintes T1D.
+            Complète le diagnostic pour que l&apos;IA génère un programme adapté à ta morphologie
+            et tes contraintes T1D.
           </p>
           <div className="mt-5">
             <Link href="/profil/diagnostic">
@@ -153,45 +119,34 @@ export default function MuscuPage() {
           </div>
         </section>
 
-        <section className="mb-6">
-          <div className="flex items-baseline justify-between mb-4">
+        <section>
+          <div className="flex items-baseline justify-between mb-3">
             <h2 className="text-sm font-semibold tracking-tight">Programme par défaut</h2>
-            <Badge variant="default">Statique</Badge>
+            <Badge variant="default">Template statique</Badge>
           </div>
-          <div className="grid sm:grid-cols-2 gap-3 stagger">
+          <p className="text-xs text-text-tertiary mb-4">
+            En attendant ton diagnostic, tu peux déjà tester ces séances.
+          </p>
+          <div className="space-y-2">
             {muscuProgram.sessions.map((session) => {
-              const sessionSets = session.exercises.reduce((s, e) => s + e.sets, 0);
+              const sets = session.exercises.reduce((s, e) => s + e.sets, 0);
               return (
                 <Link
                   key={session.id}
                   href={`/muscu/seance/${session.id}`}
-                  className="group surface-1 p-5 hover:bg-bg-tertiary transition-colors tap-scale"
+                  className="group flex items-center gap-4 surface-1 p-4 hover:bg-bg-tertiary transition-colors tap-scale"
                 >
-                  <div className="flex items-start justify-between mb-3 gap-2">
-                    <div className="min-w-0">
-                      <h3 className="font-semibold text-sm truncate">{session.name}</h3>
-                      <p className="text-[11px] text-text-tertiary mt-0.5">
-                        {session.day} · <span className="num">{session.duration}</span>min
-                      </p>
-                    </div>
-                    <Badge variant="muscu">{sessionSets} sets</Badge>
+                  <div className="h-10 w-10 rounded-lg bg-muscu/10 flex items-center justify-center flex-shrink-0">
+                    <Dumbbell size={18} className="text-muscu" />
                   </div>
-                  <p className="text-xs text-muscu mb-3">{session.focus}</p>
-                  <div className="space-y-1.5">
-                    {session.exercises.map((ex) => (
-                      <div key={ex.order} className="flex items-center justify-between text-xs">
-                        <span className="text-text-secondary truncate pr-2">{ex.name}</span>
-                        <span className="num text-text-tertiary whitespace-nowrap">
-                          {ex.sets}×{ex.reps} · RIR{ex.rir}
-                        </span>
-                      </div>
-                    ))}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{session.name}</p>
+                    <p className="text-[11px] text-text-tertiary mt-0.5">
+                      {session.day} · <span className="num">{session.duration}</span>min ·{" "}
+                      <span className="num">{sets}</span> sets
+                    </p>
                   </div>
-                  <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-end">
-                    <span className="text-muscu text-[11px] font-medium inline-flex items-center gap-1">
-                      Commencer <ChevronRight size={12} />
-                    </span>
-                  </div>
+                  <ChevronRight size={16} className="text-text-tertiary group-hover:text-muscu transition-colors" />
                 </Link>
               );
             })}
@@ -201,22 +156,19 @@ export default function MuscuPage() {
     );
   }
 
-  // ─── CAS 2 : Diagnostic fait, pas de programme ────────────
+  // ─── CAS 2 : Diagnostic fait, pas de programme ─────────
   if (hasDiagnostic && !program) {
     return (
-      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
-        <section className="animate-in flex flex-col items-center justify-center min-h-[60vh] text-center">
+      <div className="max-w-[960px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
+        <section className="animate-in flex flex-col items-center justify-center min-h-[70vh] text-center">
           {generating ? (
             <>
-              <div className="mb-5">
-                <Pulse tone="accent" size="lg" />
-              </div>
+              <div className="mb-5"><Pulse tone="accent" size="lg" /></div>
               <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-2">
                 Génération en cours.
               </h1>
               <p className="text-sm text-text-secondary max-w-md">
-                L&apos;IA analyse ton diagnostic et ta morphologie pour créer un programme sur mesure.
-                Ça peut prendre 15-30 secondes.
+                L&apos;IA analyse ton diagnostic pour créer un programme sur mesure. 15-30 secondes.
               </p>
             </>
           ) : (
@@ -225,30 +177,12 @@ export default function MuscuPage() {
                 <Sparkles size={14} className="text-accent" />
                 <span className="label">Diagnostic complété</span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-2">
+              <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight mb-3">
                 Prêt à générer.
               </h1>
-              <p className="text-sm text-text-secondary mb-5 max-w-md">
-                Tes données sont prêtes. Génère maintenant ton programme personnalisé
-                basé sur ton diagnostic muscu{diagnosticHistory.length > 0 ? ", ta morphologie" : ""} et tes contraintes T1D.
+              <p className="text-sm text-text-secondary mb-6 max-w-md">
+                Tes données sont prêtes. Génère ton programme personnalisé.
               </p>
-              <div className="flex flex-wrap gap-2 mb-6 justify-center">
-                {Boolean(muscuDiagnosticData.primaryGoal) && (
-                  <Badge variant="muscu" dot>
-                    {String(muscuDiagnosticData.primaryGoal).replace(/_/g, " ")}
-                  </Badge>
-                )}
-                {Boolean(muscuDiagnosticData.daysPerWeek) && (
-                  <Badge variant="running" dot>
-                    {String(muscuDiagnosticData.daysPerWeek)} jours/sem
-                  </Badge>
-                )}
-                {Boolean(muscuDiagnosticData.preferredSplit) && (
-                  <Badge variant="default">
-                    {String(muscuDiagnosticData.preferredSplit).replace(/_/g, " ")}
-                  </Badge>
-                )}
-              </div>
               <Button
                 onClick={handleGenerate}
                 size="lg"
@@ -265,9 +199,8 @@ export default function MuscuPage() {
 
   // ─── CAS 3 : Programme actif ───────────────────────────
   return (
-    <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
+    <div className="max-w-[960px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
 
-      {/* Modals */}
       {showModifyDays && (
         <ModifyDaysModal
           currentDays={displayDaysPerWeek}
@@ -280,284 +213,228 @@ export default function MuscuPage() {
         <ReasoningModal program={program} onClose={() => setShowReasoning(false)} />
       )}
 
-      {/* ============ HERO ============ */}
+      {/* ============ HERO : Séance du jour ============ */}
       <section className="mb-8 animate-in">
         <div className="flex items-center gap-2 mb-2">
           <Dumbbell size={14} className="text-muscu" />
-          <span className="label">Musculation · Semaine {currentWeek} · {phase.name}</span>
+          <span className="label">
+            {todaySession ? `Aujourd'hui · ${todayName}` : `${todayName} · Repos`}
+          </span>
         </div>
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight mb-1 truncate">
-              {displayName}
-            </h1>
-            <p className="text-sm text-text-secondary">
-              {displayDaysPerWeek} séances/semaine · <span className="num">{totalSets}</span> sets hebdo ·{" "}
-              {program?.isGenerated ? "Généré par IA" : "Programme statique"}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setShowModifyDays(true)} leftIcon={<Calendar size={14} />}>
-              Modifier jours
-            </Button>
-            <Link href="/muscu/progression">
-              <Button variant="secondary" size="sm" leftIcon={<TrendingUp size={14} />}>
-                Progression
-              </Button>
-            </Link>
-          </div>
+
+        {todaySession ? (
+          <TodaySessionHero
+            session={todaySession}
+            phaseName={phase.name}
+            rirTarget={phase.rirTarget}
+          />
+        ) : (
+          <RestDayHero nextSession={nextSession} />
+        )}
+      </section>
+
+      {/* ============ Mini context : program + phase ============ */}
+      <section className="mb-8 grid grid-cols-2 gap-3">
+        <div className="surface-1 p-4">
+          <span className="label">Programme</span>
+          <p className="text-sm font-medium mt-1 truncate">{displayName}</p>
+          <p className="text-[11px] text-text-tertiary mt-0.5">
+            {displayDaysPerWeek} jours/sem · {program?.isGenerated ? "IA" : "Statique"}
+          </p>
+        </div>
+        <div className="surface-1 p-4">
+          <span className="label">Phase · Semaine {cycleWeek}/6</span>
+          <p className="text-sm font-medium mt-1" style={{
+            color: phase.name === "Accumulation" ? "var(--muscu)" : phase.name === "Intensification" ? "var(--warning)" : "var(--accent-2)",
+          }}>
+            {phase.name}
+          </p>
+          <p className="text-[11px] text-text-tertiary mt-0.5">
+            RIR <span className="num">{phase.rirTarget}</span> ·{" "}
+            <span className="num">{Math.round(phase.volumeMultiplier * 100)}%</span> vol
+          </p>
         </div>
       </section>
 
-      {/* Personalization badge (only for generated programs) */}
-      {program?.isGenerated && (
-        <div className="mb-6">
-          <PersonalizationBadge program={program} onShowReasoning={() => setShowReasoning(true)} />
-        </div>
-      )}
-
-      {/* ============ METRIC GRID ============ */}
-      <section className="mb-10">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 stagger">
-          <MetricCard
-            label="Phase active"
-            value={phase.name}
-            unit=""
-            hint={`Semaine ${cycleWeek}/6 du cycle`}
-            tone="muscu"
-          />
-          <MetricCard
-            label="RIR cible"
-            value={phase.rirTarget}
-            unit="reps"
-            tone="accent-2"
-          />
-          <MetricCard
-            label="Volume phase"
-            value={Math.round(phase.volumeMultiplier * 100)}
-            unit="%"
-            hint="vs base Accumulation"
-            tone="default"
-          />
-          <MetricCard
-            label="Bench 1RM"
-            value={profile.benchPress1RM}
-            unit="kg"
-            tone="muscu"
-          />
-        </div>
-      </section>
-
-      {/* Body Map */}
-      <div className="mb-8">
-        <BodyAnalysisSection />
-      </div>
-
-      {/* ============ PERIODISATION ============ */}
-      <section className="mb-10">
-        <div className="flex items-baseline justify-between mb-4">
-          <h2 className="text-sm font-semibold tracking-tight">Périodisation</h2>
-          <span className="label">Cycle de 6 semaines</span>
-        </div>
-
-        <div className="surface-1 p-5 lg:p-6">
-          <div className="grid grid-cols-6 gap-2 mb-5">
-            {[1, 2, 3, 4, 5, 6].map((w) => {
-              const p = getCurrentPhaseInfo(w);
-              const isCurrent = w === cycleWeek;
-              const toneVar =
-                p.name === "Accumulation"
-                  ? "var(--muscu)"
-                  : p.name === "Intensification"
-                  ? "var(--warning)"
-                  : "var(--accent-2)";
-              return (
-                <div
-                  key={w}
-                  className={`text-center py-3 rounded-lg transition-all ${
-                    isCurrent ? "text-ink font-bold" : "bg-bg-tertiary text-text-tertiary"
-                  }`}
-                  style={isCurrent ? { background: toneVar } : {}}
-                >
-                  <p className="num text-xs mb-0.5">S{w}</p>
-                  <p className="text-[9px] leading-tight uppercase tracking-wide">
-                    {p.name === "Accumulation" ? "Accum" : p.name === "Intensification" ? "Intens" : "Deload"}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-          <div className="grid sm:grid-cols-3 gap-3 text-xs">
-            <div className="surface-2 p-3 border-l-2 border-muscu">
-              <p className="font-semibold text-muscu mb-1">Accumulation · S1-S3</p>
-              <p className="text-text-tertiary leading-snug">
-                Volume élevé, intensité modérée. RIR 2-3. Focus : construire du volume d&apos;entraînement.
-              </p>
-            </div>
-            <div className="surface-2 p-3 border-l-2 border-warning">
-              <p className="font-semibold text-warning mb-1">Intensification · S4-S5</p>
-              <p className="text-text-tertiary leading-snug">
-                Volume réduit (-15%), intensité élevée. RIR 1-2. Focus : pousser les charges.
-              </p>
-            </div>
-            <div className="surface-2 p-3 border-l-2 border-accent-2">
-              <p className="font-semibold text-accent-2 mb-1">Deload · S6</p>
-              <p className="text-text-tertiary leading-snug">
-                Volume -50%, RIR 4-5. Focus : récupération, laisser le corps surcompenser.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ============ SESSIONS LIST ============ */}
-      <section className="mb-10">
-        <div className="flex items-baseline justify-between mb-4">
-          <h2 className="text-sm font-semibold tracking-tight">Séances de la semaine</h2>
+      {/* ============ Semaine : 7 jours avec séances ============ */}
+      <section className="mb-8">
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-sm font-semibold tracking-tight">Cette semaine</h2>
           <span className="label">{displaySessions.length} séances</span>
         </div>
-        <div className="grid sm:grid-cols-2 gap-3 stagger">
+        <div className="space-y-2">
           {displaySessions.map((session) => {
-            const sessionSets = session.exercises.reduce((s, e) => s + e.sets, 0);
-            const completedCount = completedWorkouts.filter((w) => w.sessionId === session.id).length;
+            const isToday = session.day === todayName;
+            const sets = session.exercises.reduce((s, e) => s + e.sets, 0);
+            const done = completedWorkouts.filter((w) => w.sessionId === session.id).length;
             return (
               <Link
                 key={session.id}
                 href={`/muscu/seance/${session.id}`}
-                className="group surface-1 p-5 hover:bg-bg-tertiary transition-colors tap-scale"
+                className={`group flex items-center gap-3 surface-1 p-4 hover:bg-bg-tertiary transition-colors tap-scale ${
+                  isToday ? "ring-1 ring-muscu/40" : ""
+                }`}
               >
-                <div className="flex items-start justify-between mb-3 gap-2">
-                  <div className="min-w-0">
-                    <h3 className="font-semibold text-sm truncate">{session.name}</h3>
-                    <p className="text-[11px] text-text-tertiary mt-0.5">
-                      {session.day} · <span className="num">{session.duration}</span>min
-                    </p>
+                <div className={`h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                  isToday ? "bg-muscu text-ink" : "bg-muscu/10 text-muscu"
+                }`}>
+                  <span className="text-xs font-semibold uppercase">
+                    {session.day.slice(0, 3)}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-sm truncate">{session.name}</p>
+                    {isToday && <Badge variant="muscu" size="sm">Aujourd&apos;hui</Badge>}
                   </div>
-                  <Badge variant="muscu">{sessionSets} sets</Badge>
+                  <p className="text-[11px] text-text-tertiary mt-0.5 truncate">
+                    <span className="num">{session.exercises.length}</span> exos ·{" "}
+                    <span className="num">{sets}</span> sets ·{" "}
+                    <span className="num">{session.duration}</span>min
+                    {done > 0 && <span className="text-muscu"> · {done} fait{done > 1 ? "s" : ""}</span>}
+                  </p>
                 </div>
-                <p className="text-xs text-muscu mb-3">{session.focus}</p>
-                <div className="space-y-1.5">
-                  {session.exercises.map((ex) => (
-                    <div key={ex.order} className="flex items-center justify-between text-xs">
-                      <span className="text-text-secondary truncate pr-2">{ex.name}</span>
-                      <span className="num text-text-tertiary whitespace-nowrap">
-                        {ex.sets}×{ex.reps} · RIR{ex.rir}
-                      </span>
-                    </div>
-                  ))}
-                  {session.exercises.length === 0 && (
-                    <p className="text-xs text-text-disabled italic">Exercices en attente de génération</p>
-                  )}
-                </div>
-                <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-between">
-                  <span className="num text-[11px] text-text-tertiary">
-                    {completedCount} complétée{completedCount !== 1 ? "s" : ""}
-                  </span>
-                  <span className="text-muscu text-[11px] font-medium inline-flex items-center gap-1">
-                    Commencer <ChevronRight size={12} />
-                  </span>
-                </div>
+                <ChevronRight size={16} className="text-text-tertiary group-hover:text-muscu transition-colors flex-shrink-0" />
               </Link>
             );
           })}
         </div>
+      </section>
 
+      {/* ============ Actions ============ */}
+      <section className="mb-6 flex flex-wrap gap-2">
+        <Link href="/muscu/progression">
+          <Button variant="secondary" size="sm" leftIcon={<TrendingUp size={14} />}>
+            Progression & volume
+          </Button>
+        </Link>
+        <Button variant="ghost" size="sm" onClick={() => setShowModifyDays(true)} leftIcon={<Calendar size={14} />}>
+          Modifier jours/sem
+        </Button>
+        {program?.isGenerated && (
+          <Button variant="ghost" size="sm" onClick={() => setShowReasoning(true)} leftIcon={<Info size={14} />}>
+            Pourquoi ce programme
+          </Button>
+        )}
         {hasDiagnostic && (
-          <div className="mt-6 flex justify-center">
-            <Button variant="ghost" size="sm" onClick={handleGenerate} disabled={generating} isLoading={generating}>
-              {generating ? "Régénération..." : "Régénérer depuis le diagnostic"}
-            </Button>
-          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleGenerate}
+            disabled={generating}
+            isLoading={generating}
+            leftIcon={!generating ? <RefreshCw size={14} /> : undefined}
+          >
+            {generating ? "Régénération..." : "Régénérer"}
+          </Button>
         )}
       </section>
+    </div>
+  );
+}
 
-      {/* ============ VOLUME LANDMARKS ============ */}
-      <section className="mb-10">
-        <div className="flex items-baseline justify-between mb-2">
-          <h2 className="text-sm font-semibold tracking-tight">Volume Landmarks</h2>
-          <span className="label">Israetel · RP</span>
-        </div>
-        <p className="text-xs text-text-tertiary mb-5 max-w-2xl">
-          MEV = volume minimum efficace · MAV = volume adaptatif · MRV = volume maximum récupérable.
-          Les valeurs sont ajustées par le multiplicateur de phase (×{phase.volumeMultiplier}).
+// ================== HERO Components ==================
+
+type HeroSession = {
+  id: string;
+  name: string;
+  focus: string;
+  duration: number;
+  exercises: Array<{ order: number; name: string; sets: number; reps: string }>;
+};
+
+function TodaySessionHero({
+  session,
+  phaseName,
+  rirTarget,
+}: {
+  session: HeroSession;
+  phaseName: string;
+  rirTarget: string;
+}) {
+  const totalSets = session.exercises.reduce((s, e) => s + e.sets, 0);
+  return (
+    <div className="surface-1 p-6 lg:p-8 relative overflow-hidden">
+      <div
+        aria-hidden
+        className="absolute -top-24 -right-24 h-64 w-64 rounded-full opacity-[0.08] blur-3xl"
+        style={{ background: "var(--muscu)" }}
+      />
+      <div className="relative">
+        <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight mb-1">
+          {session.name}
+        </h1>
+        <p className="text-sm text-text-secondary mb-5">
+          {session.focus} · <span className="num">{session.duration}</span>min ·{" "}
+          <span className="num">{session.exercises.length}</span> exos ·{" "}
+          <span className="num">{totalSets}</span> sets · RIR <span className="num">{rirTarget}</span> ({phaseName})
         </p>
 
-        <div className="grid sm:grid-cols-2 gap-3">
-          {Object.entries(VOLUME_LANDMARKS).map(([muscle, landmarks]) => {
-            const current = weeklyVolume[muscle] || 0;
-            const adjustedCurrent = Math.round(current * phase.volumeMultiplier);
-            const isInMAV = adjustedCurrent >= landmarks.mav_low && adjustedCurrent <= landmarks.mav_high;
-            const isBelowMEV = adjustedCurrent < landmarks.mev;
-            const isAboveMRV = adjustedCurrent > landmarks.mrv;
-
-            let statusVariant: "success" | "error" | "warning" = "success";
-            let statusLabel = "Dans la MAV";
-            if (isBelowMEV) {
-              statusVariant = "error";
-              statusLabel = "Sous MEV";
-            } else if (isAboveMRV) {
-              statusVariant = "warning";
-              statusLabel = "Au-dessus MRV";
-            } else if (!isInMAV && adjustedCurrent < landmarks.mav_low) {
-              statusVariant = "warning";
-              statusLabel = "MEV→MAV";
-            } else if (!isInMAV && adjustedCurrent > landmarks.mav_high) {
-              statusVariant = "warning";
-              statusLabel = "MAV haute";
-            }
-
-            const pct = Math.min(100, (adjustedCurrent / landmarks.mrv) * 100);
-
-            return (
-              <div key={muscle} className="surface-1 p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium">{muscle}</span>
-                  <Badge variant={statusVariant} size="sm">{statusLabel}</Badge>
-                </div>
-                <div className="h-1.5 rounded-full bg-bg-tertiary overflow-hidden mb-2">
-                  <div
-                    className="h-full rounded-full transition-all duration-700"
-                    style={{
-                      width: `${pct}%`,
-                      background:
-                        statusVariant === "error"
-                          ? "var(--error)"
-                          : statusVariant === "warning"
-                          ? "var(--warning)"
-                          : "var(--muscu)",
-                    }}
-                  />
-                </div>
-                <div className="flex justify-between num text-[10px] text-text-tertiary mb-1">
-                  <span>MEV {landmarks.mev}</span>
-                  <span>MAV {landmarks.mav_low}–{landmarks.mav_high}</span>
-                  <span>MRV {landmarks.mrv}</span>
-                </div>
-                <p className="text-[11px] text-text-secondary">
-                  Actuel · <span className="num font-medium text-text-primary">{adjustedCurrent}</span> sets/sem
-                  {phase.volumeMultiplier !== 1 && (
-                    <span className="text-text-disabled num"> (base {current}, ×{phase.volumeMultiplier})</span>
-                  )}
-                </p>
-              </div>
-            );
-          })}
+        {/* Exercises list — BIG & READABLE */}
+        <div className="space-y-2 mb-6">
+          {session.exercises.map((ex) => (
+            <div
+              key={ex.order}
+              className="flex items-center gap-3 py-2.5 px-3 rounded-lg bg-bg-tertiary"
+            >
+              <span className="num text-xs text-text-tertiary w-5 flex-shrink-0">
+                {ex.order}
+              </span>
+              <span className="flex-1 text-sm text-text-primary truncate">{ex.name}</span>
+              <span className="num text-base font-semibold text-muscu whitespace-nowrap">
+                {ex.sets}×{ex.reps}
+              </span>
+            </div>
+          ))}
+          {session.exercises.length === 0 && (
+            <p className="text-sm text-text-tertiary italic py-4 text-center">
+              Exercices en attente de génération
+            </p>
+          )}
         </div>
-      </section>
 
-      {/* Goals footer */}
-      {profile.weakPoints && profile.weakPoints.length > 0 && (
-        <section className="mb-6 surface-1 p-5 lg:p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Target size={14} className="text-muscu" />
-            <span className="label">Points faibles ciblés</span>
+        <Link href={`/muscu/seance/${session.id}`}>
+          <Button size="lg" fullWidth rightIcon={<Play size={16} strokeWidth={2.5} />}>
+            Commencer la séance
+          </Button>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function RestDayHero({
+  nextSession,
+}: {
+  nextSession: HeroSession | null | undefined;
+}) {
+  return (
+    <div className="surface-1 p-6 lg:p-8">
+      <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight mb-1">
+        Jour de repos.
+      </h1>
+      <p className="text-sm text-text-secondary mb-5">
+        Récupération active : mobilité, marche, étirements. Pas de séance aujourd&apos;hui.
+      </p>
+
+      {nextSession && (
+        <Link
+          href={`/muscu/seance/${nextSession.id}`}
+          className="group flex items-center gap-3 surface-2 p-4 hover:bg-bg-hover transition-colors tap-scale"
+        >
+          <div className="h-10 w-10 rounded-lg bg-muscu/10 flex items-center justify-center flex-shrink-0">
+            <Dumbbell size={18} className="text-muscu" />
           </div>
-          <div className="flex flex-wrap gap-2">
-            {profile.weakPoints.map((wp) => (
-              <Badge key={wp} variant="muscu" dot>{wp}</Badge>
-            ))}
+          <div className="flex-1 min-w-0">
+            <span className="label block mb-0.5">Prochaine séance</span>
+            <p className="text-sm font-medium truncate">{nextSession.name}</p>
+            <p className="text-[11px] text-text-tertiary mt-0.5">
+              <span className="num">{nextSession.exercises.length}</span> exos ·{" "}
+              <span className="num">{nextSession.duration}</span>min
+            </p>
           </div>
-        </section>
+          <ChevronRight size={16} className="text-text-tertiary group-hover:text-muscu transition-colors" />
+        </Link>
       )}
     </div>
   );
