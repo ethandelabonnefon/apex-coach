@@ -130,15 +130,25 @@ export function useGlucose(options: UseGlucoseOptions = {}): UseGlucoseResult {
     return () => clearInterval(id);
   }, [fetchData, paused, refreshMs]);
 
-  // Refresh au retour de visibilité
+  // Refresh au retour de visibilité — MAIS seulement si on a du succès récent
+  // (évite de rebombarder l'API quand on est déjà en erreur / rate-limit)
+  const lastFetchedRef = useRef<number | null>(null);
+  useEffect(() => {
+    lastFetchedRef.current = lastFetchedAt;
+  }, [lastFetchedAt]);
+
   useEffect(() => {
     if (paused) return;
     const onVis = () => {
-      if (document.visibilityState === "visible") fetchData();
+      if (document.visibilityState !== "visible") return;
+      const last = lastFetchedRef.current;
+      // Déjà OK récemment (< refreshMs) → pas besoin de retap
+      if (last && Date.now() - last < refreshMs) return;
+      fetchData();
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
-  }, [fetchData, paused]);
+  }, [fetchData, paused, refreshMs]);
 
   return {
     current,

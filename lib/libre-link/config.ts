@@ -12,12 +12,17 @@ export const LIBRE_LINK_CONFIG = {
   password: process.env.LIBRELINK_PASSWORD || "",
 
   // Version du client LibreLinkUp — imposée côté Abbott pour certaines régions.
-  // `4.9.0` est la dernière connue stable pour la lib `@diakem/libre-link-up-api-client`.
-  clientVersion: process.env.LIBRELINK_CLIENT_VERSION || "4.9.0",
+  // Abbott refuse (403 / 430) les versions trop vieilles. `4.12.0` est le default
+  // de la lib @diakem/libre-link-up-api-client ; on peut override via env.
+  clientVersion: process.env.LIBRELINK_CLIENT_VERSION || "4.12.0",
 
   // Cache côté serveur : on évite de hammerer l'API Abbott
   // (lecture capteur rafraîchie toutes les 60s max côté FreeStyle Libre 2).
   cacheTtlSeconds: 60,
+
+  // Backoff sur erreur : si l'API Abbott renvoie 4xx/5xx, on ne retente
+  // pas avant ce délai (évite rate-limit 429 en cascade).
+  errorBackoffSeconds: 120,
 } as const;
 
 /**
