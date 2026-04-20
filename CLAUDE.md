@@ -305,6 +305,12 @@ Le projet est une PWA fonctionnelle deployee sur Vercel. **Toutes les fonctionna
   - **Modal "Pourquoi ce programme ?" refonte Phase 2** : sheet bottom-up sur mobile / centré desktop avec glass sticky header, sections clairement titrées (Split choisi, Volume par muscle trié décroissant avec Badge status coloré, **Pourquoi ces exercices** avec raisonnement 1-par-exo groupé par session, Protocole T1D avant/après/alertes, Analyse complète, Prédictions). Icônes lucide (Split, BarChart3, Droplet, Sparkles, Target, Dumbbell, X)
   - **Page muscu : CTA dédié** : nouvelle carte "Pourquoi ce programme ?" en bas de page (surface-1, icône Sparkles muscu, badge IA) pour accès visible à l'analyse. Retrait du bouton ghost redondant dans la rangée d'actions
   - **Diagnostics (morpho/muscu/running/nutrition) : non touchés** — déjà implémentés et opérationnels
+- **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
+  - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
+  - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"
+  - **3 stats max** : Glycémie (avec tendance ↑↓→ vs lecture précédente), Calories (X / target), Séances (X/Y cette semaine) — chaque tuile est `num-hero` coloré par token de catégorie et cliquable
+  - **Accès rapide** : grid 2×2 de QuickLinks (Muscu, Running, Nutrition, Diabète) avec icône tinted par couleur de catégorie + chevron
+  - Retrait : Sparkline glucose, ratios cockpit, MetricCard grid 4, sections détaillées par module, goals strip. Tout ce contenu vit dans les pages dédiées
 - **Phase 3 — Simplification radicale des 4 pages principales (avril 2026)** : philosophie "clair, pas 12000 infos, une action primaire par page" :
   - **Muscu** : hero "Séance du jour" lisible (today computed via DAYS_FR + getDay), exos format `3×12` direct en lime, liste 7 jours compacte, rest day hero si aucun match, retrait body map + landmarks + périodisation complète (seulement phase/RIR/focus en hero)
   - **Running** : hero semaine courante avec 3 stats essentielles (séances X/Y, km X/Y, VMA) + chevrons prev/next, cards séances avec distance big-num + pace range + intervalles + T1D glucose badges si completée, grid compacte prédiction semi + zones, plan 14 semaines bars avec Check icon complete, tip T1D 4 badges glucose
