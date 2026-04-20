@@ -120,11 +120,27 @@ function ExerciseCard({
           </span>
           <div>
             <h3 className="font-semibold text-sm">{exercise.name}</h3>
-            <p className="text-xs text-white/35">
-              {exercise.sets}x{exercise.reps} -- RIR {exercise.rir} -- Repos {exercise.rest}s
-            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+              <span className="font-mono text-[#a855f7] font-semibold">
+                {exercise.sets} séries × {exercise.reps} reps
+              </span>
+              <span className="text-white/35">RIR {exercise.rir}</span>
+              <span className="text-white/35">Repos {exercise.rest}s</span>
+            </div>
           </div>
         </div>
+      </div>
+
+      {/* RIR explainer — visible une fois par exo, discret */}
+      <div className="mb-3 flex items-start gap-2 p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.04]">
+        <span className="text-[10px] font-mono text-[#a855f7]/70 mt-0.5">i</span>
+        <p className="text-[11px] leading-snug text-white/50">
+          <span className="text-white/70 font-medium">Objectif :</span>{" "}
+          fais <span className="text-white/90 font-semibold font-mono">{exercise.reps} répétitions</span>{" "}
+          par série, en gardant{" "}
+          <span className="text-white/90 font-semibold font-mono">{exercise.rir} rep{exercise.rir > 1 ? "s" : ""} en réserve</span>{" "}
+          (RIR = Reps In Reserve : ce qu&apos;il te reste dans le réservoir à la fin du set).
+        </p>
       </div>
 
       {/* Cues */}
@@ -171,8 +187,15 @@ function ExerciseCard({
             <tr className="text-xs text-white/30">
               <th className="text-left py-1 pr-2 w-12">Set</th>
               <th className="text-left py-1 px-2">Poids (kg)</th>
-              <th className="text-left py-1 px-2">Reps</th>
-              <th className="text-left py-1 px-2">RIR</th>
+              <th className="text-left py-1 px-2">
+                Reps <span className="text-white/20 font-mono normal-case">({exercise.reps})</span>
+              </th>
+              <th
+                className="text-left py-1 px-2 cursor-help"
+                title="RIR (Reps In Reserve) : nombre de reps qu'il te reste dans le réservoir à la fin du set. RIR 2 = tu pouvais en faire 2 de plus."
+              >
+                RIR <span className="text-white/20">ⓘ</span>
+              </th>
               <th className="text-left py-1 pl-2 w-20">Repos</th>
             </tr>
           </thead>
@@ -195,8 +218,9 @@ function ExerciseCard({
                     type="number"
                     value={set.reps || ""}
                     onChange={(e) => onUpdateSet(setIdx, "reps", parseInt(e.target.value) || 0)}
-                    className="w-16 text-sm !py-1 !px-2"
-                    placeholder="reps"
+                    className="w-20 text-sm !py-1 !px-2 font-mono"
+                    placeholder={exercise.reps}
+                    title={`Cible: ${exercise.reps} reps`}
                   />
                 </td>
                 <td className="py-2 px-2">

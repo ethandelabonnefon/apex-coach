@@ -40,12 +40,27 @@ export function calculateBolus(
   const adjustments: string[] = [];
   const reasoning: string[] = [];
 
-  reasoning.push(`Ratio ${mealTime}: 1U pour ${ratio}g → ${carbsGrams}g / ${ratio} = ${carbBolus.toFixed(1)}U`);
+  // Affichage du ratio dans le format naturel : X U pour 10g
+  const unitsPer10g = 10 / ratio;
+  const mealLabel: Record<MealTime, string> = {
+    morning: "matin",
+    lunch: "midi",
+    snack: "goûter",
+    dinner: "soir",
+  };
+  reasoning.push(
+    `Ratio ${mealLabel[mealTime]} : ${unitsPer10g.toFixed(1).replace(".", ",")}U pour 10g → ${carbsGrams}g = ${carbBolus.toFixed(1)}U`
+  );
 
   // Correction si glycémie au-dessus de la cible
   if (currentGlucose > config.targetRange.max) {
     correctionBolus = (currentGlucose - target) / isf;
-    reasoning.push(`Correction: (${currentGlucose} - ${target}) / ${isf} = ${correctionBolus.toFixed(1)}U`);
+    const diff = currentGlucose - target;
+    // Sensibilité au format naturel : X U pour 50 mg/dL au-dessus
+    const unitsPer50mg = 50 / isf;
+    reasoning.push(
+      `Correction : ${diff} mg/dL au-dessus de la cible → ${correctionBolus.toFixed(1)}U (${unitsPer50mg.toFixed(1).replace(".", ",")}U pour 50 mg/dL)`
+    );
   } else if (currentGlucose < config.targetRange.min) {
     reasoning.push(`Glycémie basse (${currentGlucose} mg/dL) — considérer des glucides supplémentaires avant l'injection`);
   }

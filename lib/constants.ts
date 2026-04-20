@@ -40,15 +40,21 @@ export const USER_PROFILE: UserProfile = {
   bodyType: "Ectomorphe-Mésomorphe",
 };
 
+// Ratios Ethan (format naturel : X unités pour 10g de glucides) :
+//   Matin    1,5 U / 10g  → 10 / 1.5  ≈ 6.67 g par U
+//   Midi     1   U / 10g  → 10        = 10   g par U
+//   Goûter   1,2 U / 10g  → 10 / 1.2  ≈ 8.33 g par U
+//   Soir     1   U / 10g  → 10        = 10   g par U
+// Sensib. (ISF) : 0,5 U corrige 50 mg/dL au-dessus de la cible → 1U = 100 mg/dL
 export const DIABETES_CONFIG: DiabetesConfig = {
-  ratios: { morning: 5, lunch: 7, dinner: 9 },
+  ratios: { morning: 10 / 1.5, lunch: 10, dinner: 10 },
   insulinRatios: [
-    { id: "r-morning", label: "Petit-déjeuner", mealKey: "morning", timeStart: "07:00", timeEnd: "10:00", ratio: 5 },
-    { id: "r-lunch", label: "Déjeuner", mealKey: "lunch", timeStart: "12:00", timeEnd: "14:00", ratio: 7 },
-    { id: "r-snack", label: "Goûter", mealKey: "snack", timeStart: "15:00", timeEnd: "17:00", ratio: 8 },
-    { id: "r-dinner", label: "Dîner", mealKey: "dinner", timeStart: "19:00", timeEnd: "21:00", ratio: 9 },
+    { id: "r-morning", label: "Petit-déjeuner", mealKey: "morning", timeStart: "07:00", timeEnd: "10:00", ratio: 10 / 1.5 },
+    { id: "r-lunch", label: "Déjeuner", mealKey: "lunch", timeStart: "12:00", timeEnd: "14:00", ratio: 10 },
+    { id: "r-snack", label: "Goûter", mealKey: "snack", timeStart: "15:00", timeEnd: "17:00", ratio: 10 / 1.2 },
+    { id: "r-dinner", label: "Dîner", mealKey: "dinner", timeStart: "19:00", timeEnd: "21:00", ratio: 10 },
   ],
-  insulinSensitivityFactor: 35,
+  insulinSensitivityFactor: 100,
   targetGlucose: 110,
   targetRange: { min: 70, max: 180 },
   insulinActiveDuration: 195,
@@ -61,7 +67,7 @@ export const DIABETES_CONFIG: DiabetesConfig = {
     {
       name: "Phénomène de l'aube",
       description: "Résistance hormonale 5h-8h",
-      suggestion: "Ratio matin 1:5 compense bien",
+      suggestion: "Ratio matin 1,5U / 10g compense bien",
     },
     {
       name: "Post-musculation",

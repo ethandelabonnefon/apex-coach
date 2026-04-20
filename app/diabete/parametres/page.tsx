@@ -1,13 +1,34 @@
 "use client";
 
 import { useState } from "react";
-import { Card, PageHeader, Button, SectionTitle, InfoBox } from "@/components/ui";
+import Link from "next/link";
 import { useStore } from "@/lib/store";
 import type { InsulinRatio } from "@/types";
-import Link from "next/link";
+import { Badge } from "@/components/ui/Badge";
+import {
+  ArrowLeft,
+  Plus,
+  Trash2,
+  Pencil,
+  Check,
+  X,
+  AlertTriangle,
+  Info,
+} from "lucide-react";
 
 function generateId() {
   return "r-" + Math.random().toString(36).slice(2, 9);
+}
+
+// Helpers : conversion entre format interne (g/U) et format naturel (U/10g)
+function gPerUtoUper10g(gPerU: number): number {
+  return 10 / gPerU;
+}
+function uPer10gToGperU(uPer10g: number): number {
+  return 10 / uPer10g;
+}
+function formatU(value: number, decimals = 1): string {
+  return value.toFixed(decimals).replace(".", ",");
 }
 
 function RatioCard({
@@ -23,10 +44,19 @@ function RatioCard({
   const [label, setLabel] = useState(ratio.label);
   const [timeStart, setTimeStart] = useState(ratio.timeStart);
   const [timeEnd, setTimeEnd] = useState(ratio.timeEnd);
-  const [ratioValue, setRatioValue] = useState(ratio.ratio);
+  // On édite au format naturel : X U / 10g
+  const [unitsPer10g, setUnitsPer10g] = useState(
+    Number(gPerUtoUper10g(ratio.ratio).toFixed(2))
+  );
 
   const handleSave = () => {
-    onUpdate({ ...ratio, label, timeStart, timeEnd, ratio: ratioValue });
+    onUpdate({
+      ...ratio,
+      label,
+      timeStart,
+      timeEnd,
+      ratio: uPer10gToGperU(unitsPer10g),
+    });
     setEditing(false);
   };
 
@@ -34,92 +64,116 @@ function RatioCard({
     setLabel(ratio.label);
     setTimeStart(ratio.timeStart);
     setTimeEnd(ratio.timeEnd);
-    setRatioValue(ratio.ratio);
+    setUnitsPer10g(Number(gPerUtoUper10g(ratio.ratio).toFixed(2)));
     setEditing(false);
   };
 
   if (editing) {
     return (
-      <div className="p-4 rounded-xl bg-white/[0.05] border border-white/[0.08] space-y-3">
+      <div className="surface-2 rounded-2xl p-4 space-y-3 border border-diabete/30">
         <div>
-          <label className="text-xs text-white/40 block mb-1">Nom du repas</label>
+          <p className="label mb-1">Nom du repas</p>
           <input
             type="text"
             value={label}
             onChange={(e) => setLabel(e.target.value)}
-            className="w-full bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#00ff94]/50 transition-colors"
+            className="w-full bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-white/40 block mb-1">Heure debut</label>
+            <p className="label mb-1">Heure début</p>
             <input
               type="time"
               value={timeStart}
               onChange={(e) => setTimeStart(e.target.value)}
-              className="w-full bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#00ff94]/50 transition-colors"
+              className="num w-full bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
             />
           </div>
           <div>
-            <label className="text-xs text-white/40 block mb-1">Heure fin</label>
+            <p className="label mb-1">Heure fin</p>
             <input
               type="time"
               value={timeEnd}
               onChange={(e) => setTimeEnd(e.target.value)}
-              className="w-full bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#00ff94]/50 transition-colors"
+              className="num w-full bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
             />
           </div>
         </div>
         <div>
-          <label className="text-xs text-white/40 block mb-1">Ratio (1 unite pour X grammes de glucides)</label>
-          <div className="flex items-center gap-3">
-            <span className="text-white/50 text-sm font-medium">1:</span>
+          <p className="label mb-1">Ratio insuline / glucides</p>
+          <div className="flex items-center gap-2">
             <input
               type="number"
-              value={ratioValue}
-              onChange={(e) => setRatioValue(Number(e.target.value))}
-              min={1}
-              max={30}
-              step={0.5}
-              className="w-24 bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#00ff94]/50 transition-colors"
+              inputMode="decimal"
+              value={unitsPer10g}
+              onChange={(e) => setUnitsPer10g(Number(e.target.value))}
+              min={0.1}
+              max={10}
+              step={0.1}
+              className="num w-20 bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
             />
-            <span className="text-xs text-white/35">g de glucides</span>
+            <span className="text-sm text-text-secondary">U pour</span>
+            <span className="num text-sm font-semibold text-text-primary">10g</span>
+            <span className="text-sm text-text-secondary">de glucides</span>
           </div>
+          <p className="text-[11px] text-text-tertiary mt-1.5">
+            Interne : 1U pour {formatU(uPer10gToGperU(unitsPer10g), 1)}g
+          </p>
         </div>
         <div className="flex gap-2 pt-1">
-          <Button onClick={handleSave} size="sm">Sauvegarder</Button>
-          <Button onClick={handleCancel} variant="ghost" size="sm">Annuler</Button>
+          <button
+            onClick={handleSave}
+            className="flex items-center gap-1.5 bg-diabete text-ink text-xs font-semibold px-4 py-2 rounded-lg hover:bg-diabete/90 transition-colors tap-scale"
+          >
+            <Check className="w-3.5 h-3.5" />
+            Sauvegarder
+          </button>
+          <button
+            onClick={handleCancel}
+            className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-primary px-3 py-2 transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+            Annuler
+          </button>
         </div>
       </div>
     );
   }
 
+  const naturalUnits = gPerUtoUper10g(ratio.ratio);
+
   return (
-    <div className="flex items-center justify-between p-4 rounded-xl bg-white/[0.03] hover:bg-white/[0.05] transition-colors group">
+    <div className="surface-2 rounded-2xl p-4 flex items-center justify-between hover-lift group">
       <div className="flex items-center gap-4">
-        <div className="text-center min-w-[60px]">
-          <p className="text-xl font-bold text-[#00ff94]">1:{ratio.ratio}</p>
-          <p className="text-[10px] text-white/25 mt-0.5">1U / {ratio.ratio}g</p>
+        <div className="text-center min-w-[80px]">
+          <p className="num text-xl font-semibold text-diabete leading-none">
+            {formatU(naturalUnits, 1)}
+            <span className="text-xs text-text-tertiary ml-0.5">U</span>
+          </p>
+          <p className="text-[10px] text-text-tertiary mt-0.5">/ 10g glucides</p>
         </div>
-        <div>
-          <p className="text-sm font-medium">{ratio.label}</p>
-          <p className="text-xs text-white/35">{ratio.timeStart} — {ratio.timeEnd}</p>
+        <div className="border-l border-border-subtle pl-4">
+          <p className="text-sm font-medium text-text-primary">{ratio.label}</p>
+          <p className="num text-xs text-text-tertiary mt-0.5">
+            {ratio.timeStart} — {ratio.timeEnd}
+          </p>
         </div>
       </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1">
         <button
           onClick={() => setEditing(true)}
-          className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/[0.05] transition-colors"
+          className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-hover transition-colors"
           title="Modifier"
         >
-          ✏️
+          <Pencil className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={onDelete}
-          className="p-2 rounded-lg text-white/40 hover:text-[#ff4757] hover:bg-[#ff4757]/10 transition-colors"
+          className="p-2 rounded-lg text-text-tertiary hover:text-error hover:bg-error/10 transition-colors"
           title="Supprimer"
         >
-          🗑️
+          <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>
@@ -131,20 +185,22 @@ export default function DiabeteParametresPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  // New ratio form state
+  // New ratio form
   const [newLabel, setNewLabel] = useState("");
   const [newTimeStart, setNewTimeStart] = useState("15:00");
   const [newTimeEnd, setNewTimeEnd] = useState("17:00");
-  const [newRatio, setNewRatio] = useState(8);
+  const [newUnitsPer10g, setNewUnitsPer10g] = useState(1);
 
   // General settings
-  const [isf, setIsf] = useState(diabetesConfig.insulinSensitivityFactor);
+  // ISF en format naturel : X U pour 50 mg/dL au-dessus
+  const [unitsPer50mg, setUnitsPer50mg] = useState(
+    Number((50 / diabetesConfig.insulinSensitivityFactor).toFixed(2))
+  );
   const [targetGlucose, setTargetGlucose] = useState(diabetesConfig.targetGlucose);
   const [targetMin, setTargetMin] = useState(diabetesConfig.targetRange.min);
   const [targetMax, setTargetMax] = useState(diabetesConfig.targetRange.max);
   const [activeDuration, setActiveDuration] = useState(diabetesConfig.insulinActiveDuration);
 
-  // Ensure insulinRatios exists (migration for existing users)
   const ratios: InsulinRatio[] = diabetesConfig.insulinRatios || [
     { id: "r-morning", label: "Petit-déjeuner", mealKey: "morning", timeStart: "07:00", timeEnd: "10:00", ratio: diabetesConfig.ratios.morning },
     { id: "r-lunch", label: "Déjeuner", mealKey: "lunch", timeStart: "12:00", timeEnd: "14:00", ratio: diabetesConfig.ratios.lunch },
@@ -152,17 +208,17 @@ export default function DiabeteParametresPage() {
   ];
 
   const syncLegacyRatios = (updatedRatios: InsulinRatio[]) => {
-    const legacy: Record<string, number> = {
+    const legacy = {
       morning: diabetesConfig.ratios.morning,
       lunch: diabetesConfig.ratios.lunch,
       dinner: diabetesConfig.ratios.dinner,
     };
     for (const r of updatedRatios) {
       if (r.mealKey in legacy) {
-        legacy[r.mealKey] = r.ratio;
+        (legacy as Record<string, number>)[r.mealKey] = r.ratio;
       }
     }
-    return { morning: legacy.morning, lunch: legacy.lunch, dinner: legacy.dinner };
+    return legacy;
   };
 
   const handleUpdateRatio = (updated: InsulinRatio) => {
@@ -184,7 +240,7 @@ export default function DiabeteParametresPage() {
   };
 
   const handleAddRatio = () => {
-    if (!newLabel.trim()) return;
+    if (!newLabel.trim() || newUnitsPer10g <= 0) return;
     const mealKey = newLabel.toLowerCase().replace(/[^a-z]/g, "");
     const newEntry: InsulinRatio = {
       id: generateId(),
@@ -192,7 +248,7 @@ export default function DiabeteParametresPage() {
       mealKey,
       timeStart: newTimeStart,
       timeEnd: newTimeEnd,
-      ratio: newRatio,
+      ratio: uPer10gToGperU(newUnitsPer10g),
     };
     const newRatios = [...ratios, newEntry];
     updateDiabetesConfig({
@@ -202,12 +258,14 @@ export default function DiabeteParametresPage() {
     setNewLabel("");
     setNewTimeStart("15:00");
     setNewTimeEnd("17:00");
-    setNewRatio(8);
+    setNewUnitsPer10g(1);
     setShowAddForm(false);
     flash();
   };
 
   const handleSaveSettings = () => {
+    // Conversion U pour 50 mg/dL → mg/dL par U (ISF interne)
+    const isf = 50 / unitsPer50mg;
     updateDiabetesConfig({
       insulinSensitivityFactor: isf,
       targetGlucose,
@@ -222,98 +280,122 @@ export default function DiabeteParametresPage() {
     setTimeout(() => setSaved(false), 1500);
   };
 
+  const isfInternal = 50 / unitsPer50mg;
+
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto pb-32">
-      <PageHeader
-        title="Parametres Diabete"
-        subtitle="Gere tes ratios insuline/glucides et parametres de calcul"
-        action={
-          <Link href="/diabete">
-            <Button variant="ghost" size="sm">← Retour</Button>
-          </Link>
-        }
-      />
+    <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto pb-32 stagger">
+      {/* Header */}
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <p className="label">Diabète · Paramètres</p>
+          <h1 className="mt-1 text-2xl font-semibold text-text-primary">
+            Ratios & sensibilité
+          </h1>
+        </div>
+        <Link
+          href="/diabete"
+          className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-primary transition-colors px-3 py-1.5 rounded-lg border border-border-subtle tap-scale"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Retour
+        </Link>
+      </div>
 
       {saved && (
         <div className="mb-4 text-center">
-          <span className="text-sm text-[#00ff94] animate-pulse">Sauvegarde !</span>
+          <Badge variant="success" size="sm">
+            <Check className="w-3 h-3 mr-1" />
+            Sauvegardé
+          </Badge>
         </div>
       )}
 
-      {/* Insulin Ratios */}
-      <Card glow="orange" className="mb-6">
+      {/* ── Ratios insuline / glucides ── */}
+      <section className="surface-1 rounded-3xl p-6 mb-4">
         <div className="flex items-center justify-between mb-4">
-          <SectionTitle className="!mb-0">Ratios insuline / glucides</SectionTitle>
-          <Button
-            variant="ghost"
-            size="sm"
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-semibold text-text-primary">
+              Ratios insuline / glucides
+            </h2>
+          </div>
+          <button
             onClick={() => setShowAddForm(!showAddForm)}
+            className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-primary px-3 py-1.5 rounded-lg border border-border-subtle transition-colors tap-scale"
           >
-            {showAddForm ? "Annuler" : "+ Ajouter"}
-          </Button>
+            {showAddForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+            {showAddForm ? "Annuler" : "Ajouter"}
+          </button>
         </div>
 
-        <InfoBox variant="info">
-          Le ratio indique combien de grammes de glucides sont couverts par 1 unite d&apos;insuline rapide.
-          Par exemple, 1:7 signifie 1U pour 7g de glucides.
-        </InfoBox>
+        <div className="flex items-start gap-2 bg-info/5 border border-info/20 rounded-xl p-3 mb-4">
+          <Info className="w-4 h-4 text-info shrink-0 mt-0.5" />
+          <p className="text-xs text-text-secondary">
+            Exemple : <span className="num font-semibold text-text-primary">1,5U pour 10g</span> signifie
+            que tu injectes 1,5 unité d&apos;insuline rapide par tranche de 10 grammes de glucides.
+          </p>
+        </div>
 
-        {/* Add form */}
         {showAddForm && (
-          <div className="mt-4 p-4 rounded-xl bg-white/[0.05] border border-[#00ff94]/20 space-y-3">
-            <p className="text-sm font-medium text-[#00ff94]">Nouveau ratio</p>
+          <div className="surface-2 rounded-2xl p-4 mb-4 space-y-3 border border-diabete/30 animate-slide-up">
+            <p className="label" style={{ color: "var(--diabete)" }}>Nouveau ratio</p>
             <div>
-              <label className="text-xs text-white/40 block mb-1">Nom du repas</label>
+              <p className="label mb-1">Nom du repas</p>
               <input
                 type="text"
                 value={newLabel}
                 onChange={(e) => setNewLabel(e.target.value)}
-                placeholder="Ex: Collation soir, Pre-entrainement..."
-                className="w-full bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-[#00ff94]/50 transition-colors"
+                placeholder="Ex: Collation soir, Pré-entraînement..."
+                className="w-full bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-diabete/50 transition-colors"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-white/40 block mb-1">Heure debut</label>
+                <p className="label mb-1">Heure début</p>
                 <input
                   type="time"
                   value={newTimeStart}
                   onChange={(e) => setNewTimeStart(e.target.value)}
-                  className="w-full bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#00ff94]/50 transition-colors"
+                  className="num w-full bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
                 />
               </div>
               <div>
-                <label className="text-xs text-white/40 block mb-1">Heure fin</label>
+                <p className="label mb-1">Heure fin</p>
                 <input
                   type="time"
                   value={newTimeEnd}
                   onChange={(e) => setNewTimeEnd(e.target.value)}
-                  className="w-full bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#00ff94]/50 transition-colors"
+                  className="num w-full bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
                 />
               </div>
             </div>
             <div>
-              <label className="text-xs text-white/40 block mb-1">Ratio</label>
-              <div className="flex items-center gap-3">
-                <span className="text-white/50 text-sm font-medium">1:</span>
+              <p className="label mb-1">Ratio</p>
+              <div className="flex items-center gap-2">
                 <input
                   type="number"
-                  value={newRatio}
-                  onChange={(e) => setNewRatio(Number(e.target.value))}
-                  min={1}
-                  max={30}
-                  step={0.5}
-                  className="w-24 bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#00ff94]/50 transition-colors"
+                  inputMode="decimal"
+                  value={newUnitsPer10g}
+                  onChange={(e) => setNewUnitsPer10g(Number(e.target.value))}
+                  min={0.1}
+                  max={10}
+                  step={0.1}
+                  className="num w-20 bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
                 />
-                <span className="text-xs text-white/35">g de glucides</span>
+                <span className="text-sm text-text-secondary">U pour</span>
+                <span className="num text-sm font-semibold text-text-primary">10g</span>
+                <span className="text-sm text-text-secondary">de glucides</span>
               </div>
             </div>
-            <Button onClick={handleAddRatio} size="sm">Ajouter le ratio</Button>
+            <button
+              onClick={handleAddRatio}
+              className="bg-diabete text-ink text-xs font-semibold px-4 py-2 rounded-lg hover:bg-diabete/90 transition-colors tap-scale"
+            >
+              Ajouter le ratio
+            </button>
           </div>
         )}
 
-        {/* Ratio list */}
-        <div className="mt-4 space-y-2">
+        <div className="space-y-2">
           {ratios.map((ratio) => (
             <RatioCard
               key={ratio.id}
@@ -323,33 +405,46 @@ export default function DiabeteParametresPage() {
             />
           ))}
           {ratios.length === 0 && (
-            <p className="text-center text-white/30 text-sm py-4">Aucun ratio configure</p>
+            <p className="text-center text-text-tertiary text-sm py-4">
+              Aucun ratio configuré
+            </p>
           )}
         </div>
-      </Card>
+      </section>
 
-      {/* General Diabetes Settings */}
-      <Card className="mb-6">
-        <SectionTitle>Parametres generaux</SectionTitle>
+      {/* ── Paramètres généraux ── */}
+      <section className="surface-1 rounded-3xl p-6 mb-4">
+        <h2 className="text-base font-semibold text-text-primary mb-4">
+          Sensibilité & cibles
+        </h2>
+
         <div className="space-y-4">
+          {/* Sensibilité (ISF) en format naturel */}
           <div>
-            <label className="text-xs text-white/40 block mb-1">Facteur de sensibilite (ISF)</label>
+            <p className="label mb-1.5">Sensibilité (correction glycémique)</p>
             <div className="flex items-center gap-2">
               <input
                 type="number"
-                value={isf}
-                onChange={(e) => setIsf(Number(e.target.value))}
-                min={10}
-                max={100}
-                className="w-24 bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#00ff94]/50 transition-colors"
+                inputMode="decimal"
+                value={unitsPer50mg}
+                onChange={(e) => setUnitsPer50mg(Number(e.target.value))}
+                min={0.1}
+                max={5}
+                step={0.1}
+                className="num w-20 bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
               />
-              <span className="text-xs text-white/35">mg/dL par unite</span>
+              <span className="text-sm text-text-secondary">U pour</span>
+              <span className="num text-sm font-semibold text-text-primary">50 mg/dL</span>
+              <span className="text-sm text-text-secondary">au-dessus de la cible</span>
             </div>
-            <p className="text-[10px] text-white/25 mt-1">1U d&apos;insuline fait baisser la glycemie de {isf} mg/dL</p>
+            <p className="text-[11px] text-text-tertiary mt-1.5">
+              Équivaut à : 1U fait baisser {formatU(isfInternal, 0)} mg/dL
+            </p>
           </div>
 
+          {/* Glycémie cible */}
           <div>
-            <label className="text-xs text-white/40 block mb-1">Glycemie cible</label>
+            <p className="label mb-1.5">Glycémie cible</p>
             <div className="flex items-center gap-2">
               <input
                 type="number"
@@ -357,14 +452,15 @@ export default function DiabeteParametresPage() {
                 onChange={(e) => setTargetGlucose(Number(e.target.value))}
                 min={70}
                 max={150}
-                className="w-24 bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#00ff94]/50 transition-colors"
+                className="num w-24 bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
               />
-              <span className="text-xs text-white/35">mg/dL</span>
+              <span className="text-sm text-text-secondary">mg/dL</span>
             </div>
           </div>
 
+          {/* Plage cible */}
           <div>
-            <label className="text-xs text-white/40 block mb-1">Plage cible</label>
+            <p className="label mb-1.5">Plage cible (zone verte)</p>
             <div className="flex items-center gap-2">
               <input
                 type="number"
@@ -372,23 +468,24 @@ export default function DiabeteParametresPage() {
                 onChange={(e) => setTargetMin(Number(e.target.value))}
                 min={50}
                 max={100}
-                className="w-20 bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#00ff94]/50 transition-colors"
+                className="num w-20 bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
               />
-              <span className="text-xs text-white/35">—</span>
+              <span className="text-text-tertiary">—</span>
               <input
                 type="number"
                 value={targetMax}
                 onChange={(e) => setTargetMax(Number(e.target.value))}
                 min={140}
                 max={250}
-                className="w-20 bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#00ff94]/50 transition-colors"
+                className="num w-20 bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
               />
-              <span className="text-xs text-white/35">mg/dL</span>
+              <span className="text-sm text-text-secondary">mg/dL</span>
             </div>
           </div>
 
+          {/* Durée d'action */}
           <div>
-            <label className="text-xs text-white/40 block mb-1">Duree d&apos;action de l&apos;insuline</label>
+            <p className="label mb-1.5">Durée d&apos;action de l&apos;insuline</p>
             <div className="flex items-center gap-2">
               <input
                 type="number"
@@ -397,32 +494,47 @@ export default function DiabeteParametresPage() {
                 min={120}
                 max={360}
                 step={15}
-                className="w-24 bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#00ff94]/50 transition-colors"
+                className="num w-24 bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
               />
-              <span className="text-xs text-white/35">minutes ({(activeDuration / 60).toFixed(1)}h)</span>
+              <span className="text-sm text-text-secondary">
+                minutes
+                <span className="num text-text-tertiary ml-1">
+                  ({(activeDuration / 60).toFixed(1)}h)
+                </span>
+              </span>
             </div>
           </div>
 
-          <Button onClick={handleSaveSettings}>Sauvegarder les parametres</Button>
+          <button
+            onClick={handleSaveSettings}
+            className="bg-diabete text-ink text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-diabete/90 transition-colors tap-scale"
+          >
+            Sauvegarder les paramètres
+          </button>
         </div>
-      </Card>
+      </section>
 
-      {/* Known Patterns (read-only) */}
-      <Card>
-        <SectionTitle>Patterns connus</SectionTitle>
-        <div className="space-y-3">
+      {/* ── Patterns connus (read-only) ── */}
+      <section className="surface-1 rounded-3xl p-6">
+        <h2 className="text-base font-semibold text-text-primary mb-4">Patterns connus</h2>
+        <div className="space-y-2">
           {diabetesConfig.knownPatterns.map((p, i) => (
-            <div key={i} className="p-3 rounded-xl bg-white/[0.03]">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-[#ff9500]">⚠</span>
-                <p className="text-sm font-medium">{p.name}</p>
+            <div
+              key={i}
+              className="surface-2 rounded-xl p-3 flex items-start gap-3"
+            >
+              <div className="shrink-0 w-7 h-7 rounded-lg bg-warning/15 flex items-center justify-center">
+                <AlertTriangle className="w-3.5 h-3.5 text-warning" />
               </div>
-              <p className="text-xs text-white/40">{p.description}</p>
-              <p className="text-xs text-white/50 mt-1">{p.suggestion}</p>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-text-primary">{p.name}</p>
+                <p className="text-xs text-text-tertiary mt-0.5">{p.description}</p>
+                <p className="text-xs text-diabete mt-1">→ {p.suggestion}</p>
+              </div>
             </div>
           ))}
         </div>
-      </Card>
+      </section>
     </div>
   );
 }

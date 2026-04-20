@@ -19,7 +19,6 @@ import {
   Sparkles,
   Play,
   RefreshCw,
-  Info,
 } from "lucide-react";
 
 const DAYS_FR = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
@@ -311,11 +310,6 @@ export default function MuscuPage() {
         <Button variant="ghost" size="sm" onClick={() => setShowModifyDays(true)} leftIcon={<Calendar size={14} />}>
           Modifier jours/sem
         </Button>
-        {program?.isGenerated && (
-          <Button variant="ghost" size="sm" onClick={() => setShowReasoning(true)} leftIcon={<Info size={14} />}>
-            Pourquoi ce programme
-          </Button>
-        )}
         {hasDiagnostic && (
           <Button
             variant="ghost"
@@ -329,6 +323,31 @@ export default function MuscuPage() {
           </Button>
         )}
       </section>
+
+      {/* ============ Pourquoi ce programme — carte visuelle ============ */}
+      {program?.isGenerated && (
+        <section className="mb-8">
+          <button
+            onClick={() => setShowReasoning(true)}
+            className="group w-full flex items-center gap-4 surface-1 p-5 text-left hover:bg-bg-tertiary transition-colors tap-scale"
+          >
+            <div className="h-12 w-12 rounded-xl bg-muscu/10 flex items-center justify-center flex-shrink-0">
+              <Sparkles size={20} className="text-muscu" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <p className="font-medium text-sm">Pourquoi ce programme&nbsp;?</p>
+                <Badge variant="muscu" size="sm">IA</Badge>
+              </div>
+              <p className="text-[11px] text-text-tertiary leading-snug">
+                Le split, le volume par muscle, le choix de chaque exercice, le protocole T1D —
+                visualise le raisonnement complet.
+              </p>
+            </div>
+            <ChevronRight size={18} className="text-text-tertiary group-hover:text-muscu transition-colors flex-shrink-0" />
+          </button>
+        </section>
+      )}
     </div>
   );
 }
