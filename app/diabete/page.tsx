@@ -9,6 +9,9 @@ import type { MealTime } from "@/types";
 import { Badge } from "@/components/ui/Badge";
 import { useGlucose } from "@/hooks/useGlucose";
 import GlucoseWidget from "@/components/glucose/GlucoseWidget";
+import GlucoseChart from "@/components/glucose/GlucoseChart";
+import CorrectionSuggestion from "@/components/glucose/CorrectionSuggestion";
+import PushOptIn from "@/components/glucose/PushOptIn";
 import {
   Droplet,
   Syringe,
@@ -214,6 +217,16 @@ export default function DiabetePage() {
           </div>
         </div>
       </section>
+
+      {/* ── COURBE 8H (capteur live) ── */}
+      <div className="mb-4">
+        <GlucoseChart />
+      </div>
+
+      {/* ── CORRECTION SUGGÉRÉE (hyper) ── */}
+      <div className="mb-4">
+        <CorrectionSuggestion />
+      </div>
 
       {/* ── CALCULATEUR BOLUS (action primaire) ── */}
       <section className="surface-1 rounded-3xl p-6 sm:p-8 mb-4 glow-accent">
@@ -574,6 +587,11 @@ export default function DiabetePage() {
             </div>
           )}
         </section>
+      </div>
+
+      {/* ── Push notifications (alertes hypo/hyper) ── */}
+      <div className="mb-4">
+        <PushOptIn />
       </div>
 
       {/* ── Footer : mon programme d'insuline (4 ratios) ── */}

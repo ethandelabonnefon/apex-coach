@@ -1,5 +1,6 @@
 // APEX Coach — Service Worker
-const CACHE_NAME = "apex-coach-v1";
+// v2 : ajout des handlers push (hypo/hyper alerts) + notificationclick
+const CACHE_NAME = "apex-coach-v2";
 
 const PRECACHE_URLS = [
   "/",
@@ -73,5 +74,70 @@ self.addEventListener("fetch", (event) => {
         return response;
       })
       .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/")))
+  );
+});
+
+// ─── Push notifications ──────────────────────────────────────────
+// Reçoit les pushes envoyés par /api/cron/glucose-check (hypo/hyper alerts).
+// Payload attendu : { type, title, body, value?, url? }
+
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+
+  let payload;
+  try {
+    payload = event.data.json();
+  } catch (_e) {
+    payload = {
+      title: "APEX Coach",
+      body: event.data.text(),
+    };
+  }
+
+  const title = payload.title || "APEX Coach";
+  const options = {
+    body: payload.body || "",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: payload.type || "apex-alert",
+    // Les alertes hypo/hyper sont urgentes → renotify + vibration
+    renotify: payload.type === "hypo" || payload.type === "hyper",
+    requireInteraction: payload.type === "hypo",
+    vibrate: payload.type === "hypo" ? [200, 100, 200, 100, 400] : [200, 100, 200],
+    data: {
+      url: payload.url || "/diabete",
+      type: payload.type,
+      value: payload.value,
+    },
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Au tap sur la notif : on focus (ou ouvre) la page indiquée.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || "/diabete";
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clientList) => {
+        // Si une fenêtre APEX est déjà ouverte → la focus + navigue
+        for (const client of clientList) {
+          const url = new URL(client.url);
+          const sameOrigin = url.origin === self.location.origin;
+          if (sameOrigin && "focus" in client) {
+            if ("navigate" in client && url.pathname !== targetUrl) {
+              return client.navigate(targetUrl).then(() => client.focus());
+            }
+            return client.focus();
+          }
+        }
+        // Sinon on ouvre un nouvel onglet / la PWA
+        if (self.clients.openWindow) {
+          return self.clients.openWindow(targetUrl);
+        }
+      }),
   );
 });
