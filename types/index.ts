@@ -71,7 +71,10 @@ export interface InsulinRatio {
 }
 
 export interface DiabetesConfig {
-  ratios: { morning: number; lunch: number; dinner: number };
+  // `ratios` est gardé pour rétrocompat (ancien calc). La vraie source
+  // de vérité est `insulinRatios[]` (par créneau). Le champ snack a été
+  // ajouté en Phase 9 pour supprimer l'asymétrie.
+  ratios: { morning: number; lunch: number; snack: number; dinner: number };
   insulinRatios: InsulinRatio[];
   insulinSensitivityFactor: number;
   targetGlucose: number;

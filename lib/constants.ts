@@ -47,7 +47,7 @@ export const USER_PROFILE: UserProfile = {
 //   Soir     1   U / 10g  → 10        = 10   g par U
 // Sensib. (ISF) : 0,5 U corrige 50 mg/dL au-dessus de la cible → 1U = 100 mg/dL
 export const DIABETES_CONFIG: DiabetesConfig = {
-  ratios: { morning: 10 / 1.5, lunch: 10, dinner: 10 },
+  ratios: { morning: 10 / 1.5, lunch: 10, snack: 10 / 1.2, dinner: 10 },
   insulinRatios: [
     { id: "r-morning", label: "Petit-déjeuner", mealKey: "morning", timeStart: "07:00", timeEnd: "10:00", ratio: 10 / 1.5 },
     { id: "r-lunch", label: "Déjeuner", mealKey: "lunch", timeStart: "12:00", timeEnd: "14:00", ratio: 10 },

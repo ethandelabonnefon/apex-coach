@@ -216,6 +216,50 @@ export const useStore = create<AppState>()(
       nutritionTargets: null,
       setNutritionTargets: (targets) => set({ nutritionTargets: targets }),
     }),
-    { name: 'apex-coach-storage' }
+    {
+      name: 'apex-coach-storage',
+      version: 2,
+      // Migration v1 → v2 : force-update des ratios insuline Ethan.
+      // Les anciennes installations avaient les valeurs pré-Phase 5
+      // (morning ≈ 5, lunch ≈ 7, dinner ≈ 9 gPerU) qui correspondent
+      // au vieux format "1:5, 1:7, 1:9" et donnent des bolus incorrects
+      // (ex: 60g × 1/7 = 8.57U au lieu de 6U à 1U/10g).
+      // On détecte les vieilles valeurs et on réimporte DIABETES_CONFIG
+      // sans toucher au reste du state (glucose, injections, etc.).
+      migrate: (persistedState: unknown, version: number) => {
+        const state = persistedState as Record<string, unknown> | null;
+        if (!state) return state;
+        if (version < 2) {
+          const cfg = state.diabetesConfig as DiabetesConfig | undefined;
+          if (cfg) {
+            const lunchOld = cfg.ratios?.lunch;
+            const morningOld = cfg.ratios?.morning;
+            const looksLegacy =
+              // heuristique : si lunch < 9 (donc >1.1 U/10g), on est en
+              // mode legacy "1:7" → on écrase avec les bonnes valeurs.
+              typeof lunchOld === 'number' && lunchOld < 9 ||
+              typeof morningOld === 'number' && morningOld < 6;
+            if (looksLegacy) {
+              state.diabetesConfig = {
+                ...cfg,
+                ratios: { ...DIABETES_CONFIG.ratios },
+                insulinRatios: [...DIABETES_CONFIG.insulinRatios],
+                insulinSensitivityFactor: DIABETES_CONFIG.insulinSensitivityFactor,
+              };
+            } else if (!cfg.ratios?.snack) {
+              // Ajoute snack si absent (nouveau champ Phase 9)
+              state.diabetesConfig = {
+                ...cfg,
+                ratios: {
+                  ...cfg.ratios,
+                  snack: DIABETES_CONFIG.ratios.snack,
+                } as DiabetesConfig['ratios'],
+              };
+            }
+          }
+        }
+        return state;
+      },
+    }
   )
 );
