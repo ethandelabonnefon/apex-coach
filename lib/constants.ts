@@ -1,4 +1,4 @@
-import { UserProfile, DiabetesConfig } from '@/types';
+import { UserProfile, DiabetesConfig, RatioProfile } from '@/types';
 
 export const USER_PROFILE: UserProfile = {
   name: "Ethan",
@@ -46,15 +46,79 @@ export const USER_PROFILE: UserProfile = {
 //   Goûter   1,2 U / 10g  → 10 / 1.2  ≈ 8.33 g par U
 //   Soir     1   U / 10g  → 10        = 10   g par U
 // Sensib. (ISF) : 0,5 U corrige 50 mg/dL au-dessus de la cible → 1U = 100 mg/dL
-export const DIABETES_CONFIG: DiabetesConfig = {
+
+// Phase 10a — Trois profils par défaut (Par défaut / Sèche / PDM).
+// Les valeurs sont des points de départ raisonnables ; Ethan les ajuste
+// lui-même selon son endo et son ressenti. Les profils "Sèche" et "PDM"
+// partent des mêmes ratios que "Par défaut" pour que l'utilisateur
+// calibre lui-même (incréments +/- 0,1 U/10g et +/- 0,5U basal standards).
+const DEFAULT_PROFILE: RatioProfile = {
+  id: "prof-default",
+  name: "Par défaut",
+  description: "Ratios courants — à utiliser hors phase spécifique.",
   ratios: { morning: 10 / 1.5, lunch: 10, snack: 10 / 1.2, dinner: 10 },
   insulinRatios: [
-    { id: "r-morning", label: "Petit-déjeuner", mealKey: "morning", timeStart: "07:00", timeEnd: "10:00", ratio: 10 / 1.5 },
-    { id: "r-lunch", label: "Déjeuner", mealKey: "lunch", timeStart: "12:00", timeEnd: "14:00", ratio: 10 },
-    { id: "r-snack", label: "Goûter", mealKey: "snack", timeStart: "15:00", timeEnd: "17:00", ratio: 10 / 1.2 },
-    { id: "r-dinner", label: "Dîner", mealKey: "dinner", timeStart: "19:00", timeEnd: "21:00", ratio: 10 },
+    { id: "r-default-morning", label: "Petit-déjeuner", mealKey: "morning", timeStart: "07:00", timeEnd: "10:00", ratio: 10 / 1.5 },
+    { id: "r-default-lunch",   label: "Déjeuner",      mealKey: "lunch",   timeStart: "12:00", timeEnd: "14:00", ratio: 10 },
+    { id: "r-default-snack",   label: "Goûter",        mealKey: "snack",   timeStart: "15:00", timeEnd: "17:00", ratio: 10 / 1.2 },
+    { id: "r-default-dinner",  label: "Dîner",         mealKey: "dinner",  timeStart: "19:00", timeEnd: "21:00", ratio: 10 },
   ],
   insulinSensitivityFactor: 100,
+  basalDose: 26,
+  createdAt: new Date("2026-04-24T00:00:00.000Z").toISOString(),
+};
+
+// Sèche : moins de glucides au global → basal tend à être légèrement plus bas,
+// ratios souvent stables ou un poil plus agressifs (gluconéogenèse).
+// Point de départ prudent : ratios identiques, basal -0,5U à ajuster.
+const CUT_PROFILE: RatioProfile = {
+  id: "prof-cut",
+  name: "Sèche",
+  description: "Déficit calorique. Glucides réduits, basal légèrement plus bas.",
+  ratios: { morning: 10 / 1.5, lunch: 10, snack: 10 / 1.2, dinner: 10 },
+  insulinRatios: [
+    { id: "r-cut-morning", label: "Petit-déjeuner", mealKey: "morning", timeStart: "07:00", timeEnd: "10:00", ratio: 10 / 1.5 },
+    { id: "r-cut-lunch",   label: "Déjeuner",      mealKey: "lunch",   timeStart: "12:00", timeEnd: "14:00", ratio: 10 },
+    { id: "r-cut-snack",   label: "Goûter",        mealKey: "snack",   timeStart: "15:00", timeEnd: "17:00", ratio: 10 / 1.2 },
+    { id: "r-cut-dinner",  label: "Dîner",         mealKey: "dinner",  timeStart: "19:00", timeEnd: "21:00", ratio: 10 },
+  ],
+  insulinSensitivityFactor: 100,
+  basalDose: 25,
+  createdAt: new Date("2026-04-24T00:00:00.000Z").toISOString(),
+};
+
+// PDM (prise de masse) : surplus calorique, plus de glucides, basal souvent
+// augmenté, ratios potentiellement un poil plus agressifs (repas plus lourds).
+// Point de départ prudent : ratios identiques, basal +0,5U à ajuster.
+const BULK_PROFILE: RatioProfile = {
+  id: "prof-bulk",
+  name: "PDM",
+  description: "Prise de masse. Glucides élevés, basal légèrement plus haut.",
+  ratios: { morning: 10 / 1.5, lunch: 10, snack: 10 / 1.2, dinner: 10 },
+  insulinRatios: [
+    { id: "r-bulk-morning", label: "Petit-déjeuner", mealKey: "morning", timeStart: "07:00", timeEnd: "10:00", ratio: 10 / 1.5 },
+    { id: "r-bulk-lunch",   label: "Déjeuner",      mealKey: "lunch",   timeStart: "12:00", timeEnd: "14:00", ratio: 10 },
+    { id: "r-bulk-snack",   label: "Goûter",        mealKey: "snack",   timeStart: "15:00", timeEnd: "17:00", ratio: 10 / 1.2 },
+    { id: "r-bulk-dinner",  label: "Dîner",         mealKey: "dinner",  timeStart: "19:00", timeEnd: "21:00", ratio: 10 },
+  ],
+  insulinSensitivityFactor: 100,
+  basalDose: 27,
+  createdAt: new Date("2026-04-24T00:00:00.000Z").toISOString(),
+};
+
+export const DIABETES_PROFILES_DEFAULT: RatioProfile[] = [
+  DEFAULT_PROFILE,
+  CUT_PROFILE,
+  BULK_PROFILE,
+];
+
+export const DIABETES_CONFIG: DiabetesConfig = {
+  profiles: DIABETES_PROFILES_DEFAULT,
+  activeProfileId: DEFAULT_PROFILE.id,
+  // Miroirs du profil actif (synchronisés par les setters du store).
+  ratios: { ...DEFAULT_PROFILE.ratios },
+  insulinRatios: DEFAULT_PROFILE.insulinRatios.map((r) => ({ ...r })),
+  insulinSensitivityFactor: DEFAULT_PROFILE.insulinSensitivityFactor,
   targetGlucose: 110,
   targetRange: { min: 70, max: 180 },
   insulinActiveDuration: 195,

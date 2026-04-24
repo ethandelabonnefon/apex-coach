@@ -70,17 +70,37 @@ export interface InsulinRatio {
   ratio: number;         // 1:X
 }
 
-export interface DiabetesConfig {
-  // `ratios` est gardé pour rétrocompat (ancien calc). La vraie source
-  // de vérité est `insulinRatios[]` (par créneau). Le champ snack a été
-  // ajouté en Phase 9 pour supprimer l'asymétrie.
+/**
+ * Profil de ratios insuline — permet de switcher entre Sèche / PDM / Maintenance
+ * selon la période (chaque phase a ses propres ratios + basal).
+ * Source de vérité en Phase 10a. Les champs flat dans DiabetesConfig
+ * (ratios, insulinRatios, insulinSensitivityFactor) sont des miroirs du
+ * profil actif, synchronisés par les setters du store (rétrocompat consumers).
+ */
+export interface RatioProfile {
+  id: string;
+  name: string;                // "Par défaut" | "Sèche" | "PDM" | custom
+  description?: string;
   ratios: { morning: number; lunch: number; snack: number; dinner: number };
   insulinRatios: InsulinRatio[];
   insulinSensitivityFactor: number;
+  basalDose: number;           // lent du soir (Lantus/Toujeo/Tresiba…)
+  createdAt: string;           // ISO
+}
+
+export interface DiabetesConfig {
+  // Multi-profils (Phase 10a)
+  profiles: RatioProfile[];
+  activeProfileId: string;
+  // Global (pas par profil)
   targetGlucose: number;
   targetRange: { min: number; max: number };
   insulinActiveDuration: number;
   knownPatterns: DiabetesPattern[];
+  // Miroirs du profil actif (rétrocompat — Phase 5 à 9)
+  ratios: { morning: number; lunch: number; snack: number; dinner: number };
+  insulinRatios: InsulinRatio[];
+  insulinSensitivityFactor: number;
 }
 
 export interface DiabetesPattern {
@@ -105,6 +125,8 @@ export interface InsulinLog {
   glucoseBefore: number;
   notes: string;
   injectedAt: Date;
+  /** ID du profil ratio actif au moment de l'injection (Phase 10a). */
+  profileId?: string;
 }
 
 export interface Meal {

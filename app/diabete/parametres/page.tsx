@@ -13,6 +13,9 @@ import {
   Pencil,
   RotateCcw,
   X,
+  Copy,
+  Trash2,
+  History,
 } from "lucide-react";
 
 // ─── Mon programme fixe (4 ratios) ─────────────────
@@ -166,9 +169,75 @@ function RatioSentence({
 // Page principale
 // ═══════════════════════════════════════════════════════
 export default function DiabeteParametresPage() {
-  const { diabetesConfig, updateDiabetesConfig } = useStore();
+  const {
+    diabetesConfig,
+    updateDiabetesConfig,
+    setActiveRatioProfile,
+    duplicateRatioProfile,
+    updateRatioProfile,
+    deleteRatioProfile,
+    profile: userProfile,
+    updateProfile: updateUserProfile,
+  } = useStore();
   const [saved, setSaved] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+
+  // Profils (Phase 10a) ─────────────────────────────────────────────
+  const profiles = diabetesConfig.profiles ?? [];
+  const activeProfileId = diabetesConfig.activeProfileId;
+  const activeProfile = profiles.find((p) => p.id === activeProfileId);
+
+  const [newProfileName, setNewProfileName] = useState("");
+  const [creatingProfile, setCreatingProfile] = useState(false);
+  const [renamingProfile, setRenamingProfile] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [confirmDeleteProfile, setConfirmDeleteProfile] = useState<string | null>(null);
+
+  // Basal — affiché au niveau du profil actif (source de vérité = profile.basalDose)
+  const [basalDraft, setBasalDraft] = useState<string>(
+    () => (activeProfile?.basalDose ?? userProfile.basalDose).toString(),
+  );
+  const [editingBasal, setEditingBasal] = useState(false);
+
+  useEffect(() => {
+    if (!editingBasal) {
+      setBasalDraft((activeProfile?.basalDose ?? userProfile.basalDose).toString());
+    }
+  }, [activeProfile?.basalDose, userProfile.basalDose, editingBasal]);
+
+  const commitBasal = () => {
+    const parsed = parseFrenchNumber(basalDraft);
+    if (parsed >= 0 && parsed <= 100 && activeProfile) {
+      updateRatioProfile(activeProfile.id, { basalDose: Math.round(parsed * 2) / 2 });
+      // Sync aussi UserProfile pour la cohérence (la route /profil lit userProfile.basalDose)
+      updateUserProfile({ basalDose: Math.round(parsed * 2) / 2 });
+    }
+    setEditingBasal(false);
+  };
+
+  const handleCreateProfile = () => {
+    const name = newProfileName.trim();
+    if (!name || !activeProfile) return;
+    duplicateRatioProfile(activeProfile.id, name);
+    setNewProfileName("");
+    setCreatingProfile(false);
+    flash();
+  };
+
+  const handleRename = (profileId: string) => {
+    const name = renameDraft.trim();
+    if (!name) return;
+    updateRatioProfile(profileId, { name });
+    setRenamingProfile(null);
+    setRenameDraft("");
+    flash();
+  };
+
+  const handleDeleteProfile = (profileId: string) => {
+    deleteRatioProfile(profileId);
+    setConfirmDeleteProfile(null);
+    flash();
+  };
 
   // General settings (local draft, commité au bouton "Sauvegarder")
   const [unitsPer50mg, setUnitsPer50mg] = useState<string>(
@@ -305,6 +374,217 @@ export default function DiabeteParametresPage() {
           </Badge>
         </div>
       )}
+
+      {/* ── Profils ratios (Sèche / PDM / Par défaut…) ── */}
+      <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-base font-semibold text-text-primary">Profil actif</h2>
+            <p className="text-xs text-text-tertiary mt-1">
+              Chaque profil stocke tes ratios, ton ISF et ta basale. Bascule pour la sèche ou la PDM.
+            </p>
+          </div>
+          <Link
+            href="/diabete/historique"
+            className="shrink-0 flex items-center gap-1.5 text-[11px] text-text-tertiary hover:text-diabete transition-colors px-2 py-1.5 rounded-lg border border-border-subtle hover:border-diabete/30 tap-scale"
+            title="Voir l'historique 30j"
+          >
+            <History className="w-3 h-3" />
+            Historique
+          </Link>
+        </div>
+
+        {/* Chips profils */}
+        <div className="flex flex-wrap gap-2 mb-3">
+          {profiles.map((p) => {
+            const isActive = p.id === activeProfileId;
+            const isRenaming = renamingProfile === p.id;
+            if (isRenaming) {
+              return (
+                <div key={p.id} className="flex items-center gap-1 bg-bg-tertiary border border-diabete/50 rounded-full px-3 py-1.5">
+                  <input
+                    autoFocus
+                    value={renameDraft}
+                    onChange={(e) => setRenameDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleRename(p.id);
+                      if (e.key === "Escape") { setRenamingProfile(null); setRenameDraft(""); }
+                    }}
+                    className="bg-transparent text-xs text-text-primary outline-none w-24"
+                  />
+                  <button
+                    onClick={() => handleRename(p.id)}
+                    className="text-diabete hover:opacity-80"
+                    aria-label="Valider"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => { setRenamingProfile(null); setRenameDraft(""); }}
+                    className="text-text-tertiary hover:text-text-secondary"
+                    aria-label="Annuler"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            }
+            return (
+              <button
+                key={p.id}
+                onClick={() => { if (!isActive) setActiveRatioProfile(p.id); flash(); }}
+                onDoubleClick={() => { setRenamingProfile(p.id); setRenameDraft(p.name); }}
+                className={`group flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium border transition-all tap-scale ${
+                  isActive
+                    ? "bg-diabete/15 border-diabete/40 text-diabete glow-accent-2"
+                    : "bg-bg-tertiary border-border-subtle text-text-secondary hover:border-diabete/30 hover:text-text-primary"
+                }`}
+                title={isActive ? "Profil actif (double-clic pour renommer)" : "Cliquer pour activer (double-clic pour renommer)"}
+              >
+                {isActive && <Check className="w-3 h-3" />}
+                <span>{p.name}</span>
+                <span className="num text-[10px] opacity-70">
+                  · {formatU(p.basalDose, 1)}U basal
+                </span>
+              </button>
+            );
+          })}
+
+          {!creatingProfile ? (
+            <button
+              onClick={() => setCreatingProfile(true)}
+              className="flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium border border-dashed border-border-default text-text-tertiary hover:text-diabete hover:border-diabete/40 tap-scale"
+            >
+              <Copy className="w-3 h-3" />
+              Nouveau profil
+            </button>
+          ) : (
+            <div className="flex items-center gap-1 bg-bg-tertiary border border-diabete/50 rounded-full px-3 py-1.5">
+              <input
+                autoFocus
+                placeholder="Nom du profil…"
+                value={newProfileName}
+                onChange={(e) => setNewProfileName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreateProfile();
+                  if (e.key === "Escape") { setCreatingProfile(false); setNewProfileName(""); }
+                }}
+                className="bg-transparent text-xs text-text-primary outline-none w-28"
+              />
+              <button
+                onClick={handleCreateProfile}
+                className="text-diabete hover:opacity-80"
+                aria-label="Créer"
+              >
+                <Check className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => { setCreatingProfile(false); setNewProfileName(""); }}
+                className="text-text-tertiary hover:text-text-secondary"
+                aria-label="Annuler"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Infos du profil actif */}
+        {activeProfile && (
+          <div className="surface-2 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-text-tertiary">
+                <span className="text-diabete font-medium">{activeProfile.name}</span>
+                {activeProfile.description ? ` — ${activeProfile.description}` : ""}
+              </p>
+              {/* Basal editable inline */}
+              <div className="mt-2 flex items-center gap-2 text-sm text-text-secondary">
+                <span>Insuline lente :</span>
+                {editingBasal ? (
+                  <>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      autoFocus
+                      value={basalDraft}
+                      onChange={(e) => setBasalDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitBasal();
+                        if (e.key === "Escape") setEditingBasal(false);
+                      }}
+                      onBlur={commitBasal}
+                      className="num w-16 bg-bg-tertiary border border-diabete/50 rounded-lg px-2 py-1 text-base font-semibold text-diabete focus:outline-none"
+                    />
+                    <span className="text-text-secondary text-sm">U / soir</span>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => setEditingBasal(true)}
+                    className="flex items-center gap-1.5 group tap-scale"
+                  >
+                    <span className="num text-lg font-semibold text-diabete">
+                      {formatU(activeProfile.basalDose, 1)}
+                    </span>
+                    <span className="text-sm text-text-secondary">U / soir</span>
+                    <Pencil className="w-3 h-3 text-text-tertiary group-hover:text-diabete transition-colors" />
+                  </button>
+                )}
+              </div>
+            </div>
+            {/* Supprimer profil (sauf si actif ou dernier) */}
+            {profiles.length > 1 && activeProfile.id !== activeProfileId ? null : null}
+          </div>
+        )}
+
+        {/* Liste des autres profils avec action supprimer */}
+        {profiles.filter((p) => p.id !== activeProfileId).length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {profiles
+              .filter((p) => p.id !== activeProfileId)
+              .map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setConfirmDeleteProfile(p.id)}
+                  className="flex items-center gap-1 text-[10px] text-text-tertiary hover:text-error transition-colors px-2 py-1 rounded-md border border-border-subtle hover:border-error/30 tap-scale"
+                  title={`Supprimer le profil "${p.name}"`}
+                >
+                  <Trash2 className="w-2.5 h-2.5" />
+                  {p.name}
+                </button>
+              ))}
+          </div>
+        )}
+
+        {/* Confirm delete profile */}
+        {confirmDeleteProfile && (() => {
+          const target = profiles.find((p) => p.id === confirmDeleteProfile);
+          if (!target) return null;
+          return (
+            <div className="mt-4 rounded-xl bg-error/10 border border-error/25 p-4">
+              <p className="text-sm text-text-primary font-medium mb-1">
+                Supprimer le profil « {target.name} » ?
+              </p>
+              <p className="text-xs text-text-tertiary mb-3">
+                Les injections déjà enregistrées sous ce profil resteront dans l&apos;historique.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleDeleteProfile(target.id)}
+                  className="bg-error text-ink text-xs font-semibold px-3 py-2 rounded-lg hover:bg-error/90 transition-colors tap-scale"
+                >
+                  Oui, supprimer
+                </button>
+                <button
+                  onClick={() => setConfirmDeleteProfile(null)}
+                  className="text-xs text-text-secondary px-3 py-2 rounded-lg hover:text-text-primary transition-colors"
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+      </section>
 
       {/* ── 4 ratios en phrases naturelles ── */}
       <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">

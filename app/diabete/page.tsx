@@ -169,6 +169,12 @@ export default function DiabetePage() {
           </div>
           <div className="flex gap-2">
             <Link
+              href="/diabete/historique"
+              className="text-xs text-text-secondary hover:text-text-primary transition-colors px-3 py-1.5 rounded-lg border border-border-subtle tap-scale"
+            >
+              Historique
+            </Link>
+            <Link
               href="/diabete/patterns"
               className="text-xs text-text-secondary hover:text-text-primary transition-colors px-3 py-1.5 rounded-lg border border-border-subtle tap-scale"
             >

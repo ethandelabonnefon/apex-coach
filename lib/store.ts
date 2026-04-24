@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { USER_PROFILE, DIABETES_CONFIG, MUSCU_PROGRAM } from './constants';
-import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession } from '@/types';
+import { USER_PROFILE, DIABETES_CONFIG, DIABETES_PROFILES_DEFAULT, MUSCU_PROGRAM } from './constants';
+import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile } from '@/types';
 
 interface CompletedWorkout {
   id: string;
@@ -71,6 +71,12 @@ interface AppState {
   // Diabetes
   diabetesConfig: DiabetesConfig;
   updateDiabetesConfig: (updates: Partial<DiabetesConfig>) => void;
+  // Multi-profils ratios (Phase 10a)
+  setActiveRatioProfile: (profileId: string) => void;
+  addRatioProfile: (profile: RatioProfile) => void;
+  updateRatioProfile: (profileId: string, updates: Partial<RatioProfile>) => void;
+  deleteRatioProfile: (profileId: string) => void;
+  duplicateRatioProfile: (profileId: string, newName: string) => void;
   glucoseReadings: GlucoseReading[];
   addGlucoseReading: (reading: GlucoseReading) => void;
   insulinLogs: InsulinLog[];
@@ -142,11 +148,120 @@ export const useStore = create<AppState>()(
       updateProfile: (updates) => set((s) => ({ profile: { ...s.profile, ...updates } })),
 
       diabetesConfig: DIABETES_CONFIG,
-      updateDiabetesConfig: (updates) => set((s) => ({ diabetesConfig: { ...s.diabetesConfig, ...updates } })),
+      updateDiabetesConfig: (updates) => set((s) => {
+        const next = { ...s.diabetesConfig, ...updates };
+        // Si l'update touche les flat fields (ratios, insulinRatios, ISF),
+        // on répercute aussi dans le profil actif pour rester cohérent.
+        const touchesFlat =
+          updates.ratios !== undefined ||
+          updates.insulinRatios !== undefined ||
+          updates.insulinSensitivityFactor !== undefined;
+        if (touchesFlat) {
+          next.profiles = next.profiles.map((p) =>
+            p.id === next.activeProfileId
+              ? {
+                  ...p,
+                  ratios: next.ratios,
+                  insulinRatios: next.insulinRatios,
+                  insulinSensitivityFactor: next.insulinSensitivityFactor,
+                }
+              : p,
+          );
+        }
+        return { diabetesConfig: next };
+      }),
+
+      // Multi-profils ratios (Phase 10a) ────────────────────────────────────
+      // Bascule le profil actif : on met à jour activeProfileId ET on copie
+      // les valeurs du profil vers les champs flat (ratios/insulinRatios/ISF)
+      // pour que tous les consumers existants les voient. On met aussi à
+      // jour profile.basalDose pour que le Profil affiche la bonne valeur.
+      setActiveRatioProfile: (profileId) => set((s) => {
+        const target = s.diabetesConfig.profiles.find((p) => p.id === profileId);
+        if (!target) return {};
+        return {
+          diabetesConfig: {
+            ...s.diabetesConfig,
+            activeProfileId: target.id,
+            ratios: { ...target.ratios },
+            insulinRatios: target.insulinRatios.map((r) => ({ ...r })),
+            insulinSensitivityFactor: target.insulinSensitivityFactor,
+          },
+          profile: { ...s.profile, basalDose: target.basalDose },
+        };
+      }),
+      addRatioProfile: (profile) => set((s) => ({
+        diabetesConfig: {
+          ...s.diabetesConfig,
+          profiles: [...s.diabetesConfig.profiles, profile],
+        },
+      })),
+      updateRatioProfile: (profileId, updates) => set((s) => {
+        const updatedProfiles = s.diabetesConfig.profiles.map((p) =>
+          p.id === profileId ? { ...p, ...updates } : p,
+        );
+        const isActive = s.diabetesConfig.activeProfileId === profileId;
+        const active = updatedProfiles.find((p) => p.id === profileId);
+        if (isActive && active) {
+          // Resync les miroirs pour le profil actif
+          return {
+            diabetesConfig: {
+              ...s.diabetesConfig,
+              profiles: updatedProfiles,
+              ratios: { ...active.ratios },
+              insulinRatios: active.insulinRatios.map((r) => ({ ...r })),
+              insulinSensitivityFactor: active.insulinSensitivityFactor,
+            },
+            profile: { ...s.profile, basalDose: active.basalDose },
+          };
+        }
+        return {
+          diabetesConfig: { ...s.diabetesConfig, profiles: updatedProfiles },
+        };
+      }),
+      deleteRatioProfile: (profileId) => set((s) => {
+        // Garde-fou : impossible de supprimer le dernier profil ou le profil actif.
+        if (s.diabetesConfig.profiles.length <= 1) return {};
+        if (s.diabetesConfig.activeProfileId === profileId) return {};
+        return {
+          diabetesConfig: {
+            ...s.diabetesConfig,
+            profiles: s.diabetesConfig.profiles.filter((p) => p.id !== profileId),
+          },
+        };
+      }),
+      duplicateRatioProfile: (profileId, newName) => set((s) => {
+        const source = s.diabetesConfig.profiles.find((p) => p.id === profileId);
+        if (!source) return {};
+        const newId = `prof-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+        const cloned: RatioProfile = {
+          ...source,
+          id: newId,
+          name: newName,
+          insulinRatios: source.insulinRatios.map((r) => ({
+            ...r,
+            id: `${r.id}-copy-${Date.now().toString(36)}`,
+          })),
+          createdAt: new Date().toISOString(),
+        };
+        return {
+          diabetesConfig: {
+            ...s.diabetesConfig,
+            profiles: [...s.diabetesConfig.profiles, cloned],
+          },
+        };
+      }),
+
       glucoseReadings: [],
       addGlucoseReading: (reading) => set((s) => ({ glucoseReadings: [reading, ...s.glucoseReadings].slice(0, 500) })),
       insulinLogs: [],
-      addInsulinLog: (log) => set((s) => ({ insulinLogs: [log, ...s.insulinLogs].slice(0, 500) })),
+      addInsulinLog: (log) => set((s) => ({
+        // Tag automatique avec le profil actif si non fourni (Phase 10a).
+        insulinLogs: [
+          { ...log, profileId: log.profileId ?? s.diabetesConfig.activeProfileId },
+          ...s.insulinLogs,
+        ].slice(0, 500),
+      })),
 
       meals: [],
       addMeal: (meal) => set((s) => ({ meals: [meal, ...s.meals].slice(0, 500) })),
@@ -218,25 +333,22 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'apex-coach-storage',
-      version: 2,
+      version: 3,
       // Migration v1 → v2 : force-update des ratios insuline Ethan.
-      // Les anciennes installations avaient les valeurs pré-Phase 5
-      // (morning ≈ 5, lunch ≈ 7, dinner ≈ 9 gPerU) qui correspondent
-      // au vieux format "1:5, 1:7, 1:9" et donnent des bolus incorrects
-      // (ex: 60g × 1/7 = 8.57U au lieu de 6U à 1U/10g).
-      // On détecte les vieilles valeurs et on réimporte DIABETES_CONFIG
-      // sans toucher au reste du state (glucose, injections, etc.).
+      // Migration v2 → v3 : introduction multi-profils ratios (Phase 10a).
+      // Les valeurs actuelles deviennent le profil "Par défaut" et on ajoute
+      // les profils "Sèche" et "PDM" (clones du défaut à ajuster par l'user).
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Record<string, unknown> | null;
         if (!state) return state;
+
+        // ─── v1 → v2 : fix ratios legacy "1:5, 1:7, 1:9" ─────────────────
         if (version < 2) {
           const cfg = state.diabetesConfig as DiabetesConfig | undefined;
           if (cfg) {
             const lunchOld = cfg.ratios?.lunch;
             const morningOld = cfg.ratios?.morning;
             const looksLegacy =
-              // heuristique : si lunch < 9 (donc >1.1 U/10g), on est en
-              // mode legacy "1:7" → on écrase avec les bonnes valeurs.
               typeof lunchOld === 'number' && lunchOld < 9 ||
               typeof morningOld === 'number' && morningOld < 6;
             if (looksLegacy) {
@@ -247,7 +359,6 @@ export const useStore = create<AppState>()(
                 insulinSensitivityFactor: DIABETES_CONFIG.insulinSensitivityFactor,
               };
             } else if (!cfg.ratios?.snack) {
-              // Ajoute snack si absent (nouveau champ Phase 9)
               state.diabetesConfig = {
                 ...cfg,
                 ratios: {
@@ -258,6 +369,66 @@ export const useStore = create<AppState>()(
             }
           }
         }
+
+        // ─── v2 → v3 : multi-profils ratios (Phase 10a) ──────────────────
+        if (version < 3) {
+          const cfg = state.diabetesConfig as DiabetesConfig | undefined;
+          const userProfile = state.profile as UserProfile | undefined;
+          if (cfg && !cfg.profiles) {
+            // Wrap les valeurs actuelles dans un profil "Par défaut" qui
+            // reprend exactement ce que l'user avait (ratios, ISF, basal).
+            const currentAsDefault: RatioProfile = {
+              id: 'prof-default',
+              name: 'Par défaut',
+              description: 'Ratios courants — à utiliser hors phase spécifique.',
+              ratios: cfg.ratios
+                ? { ...cfg.ratios }
+                : { ...DIABETES_CONFIG.ratios },
+              insulinRatios: (cfg.insulinRatios ?? DIABETES_CONFIG.insulinRatios).map((r) => ({ ...r })),
+              insulinSensitivityFactor:
+                cfg.insulinSensitivityFactor ??
+                DIABETES_CONFIG.insulinSensitivityFactor,
+              basalDose: userProfile?.basalDose ?? 26,
+              createdAt: new Date().toISOString(),
+            };
+            // Clone pour Sèche (basal -1U) et PDM (basal +1U) comme points
+            // de départ. L'utilisateur ajustera selon son endo.
+            const cutProfile: RatioProfile = {
+              ...currentAsDefault,
+              id: 'prof-cut',
+              name: 'Sèche',
+              description: 'Déficit calorique. Glucides réduits, basal légèrement plus bas.',
+              basalDose: Math.max(0, currentAsDefault.basalDose - 1),
+              insulinRatios: currentAsDefault.insulinRatios.map((r) => ({
+                ...r,
+                id: r.id.replace(/^r-default-/, 'r-cut-'),
+              })),
+              createdAt: new Date().toISOString(),
+            };
+            const bulkProfile: RatioProfile = {
+              ...currentAsDefault,
+              id: 'prof-bulk',
+              name: 'PDM',
+              description: 'Prise de masse. Glucides élevés, basal légèrement plus haut.',
+              basalDose: currentAsDefault.basalDose + 1,
+              insulinRatios: currentAsDefault.insulinRatios.map((r) => ({
+                ...r,
+                id: r.id.replace(/^r-default-/, 'r-bulk-'),
+              })),
+              createdAt: new Date().toISOString(),
+            };
+            state.diabetesConfig = {
+              ...cfg,
+              profiles: [currentAsDefault, cutProfile, bulkProfile],
+              activeProfileId: currentAsDefault.id,
+              // Miroirs conservés pour rétrocompat
+              ratios: currentAsDefault.ratios,
+              insulinRatios: currentAsDefault.insulinRatios,
+              insulinSensitivityFactor: currentAsDefault.insulinSensitivityFactor,
+            } as DiabetesConfig;
+          }
+        }
+
         return state;
       },
     }
