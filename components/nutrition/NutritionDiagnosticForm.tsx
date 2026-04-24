@@ -88,6 +88,7 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
     age: profile.age,
     sex: "male",
     muscuSessionsPerWeek: profile.trainingDaysPerWeek || 4,
+    averageMuscuDuration: 60,
     runningSessionsPerWeek: 3,
     averageRunningDuration: 45,
     dailyActivityLevel: "light",
@@ -229,9 +230,32 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
             </div>
           </div>
 
+          {(data.muscuSessionsPerWeek ?? 0) > 0 && (
+            <div>
+              <label className="text-xs text-white/40 mb-2 block">Durée moyenne d&apos;une séance muscu</label>
+              <div className="grid grid-cols-5 gap-1.5">
+                {[
+                  { v: 30, l: "~30 min" },
+                  { v: 45, l: "~45 min" },
+                  { v: 60, l: "~1h" },
+                  { v: 75, l: "~1h15" },
+                  { v: 90, l: "1h30+" },
+                ].map((o) => (
+                  <OptionButton
+                    key={o.v}
+                    selected={data.averageMuscuDuration === o.v}
+                    onClick={() => update({ averageMuscuDuration: o.v })}
+                  >
+                    {o.l}
+                  </OptionButton>
+                ))}
+              </div>
+            </div>
+          )}
+
           {(data.runningSessionsPerWeek ?? 0) > 0 && (
             <div>
-              <label className="text-xs text-white/40 mb-2 block">Durée moyenne d'une sortie running</label>
+              <label className="text-xs text-white/40 mb-2 block">Durée moyenne d&apos;une sortie running</label>
               <div className="grid grid-cols-5 gap-1.5">
                 {[
                   { v: 20, l: "~20 min" },
@@ -319,17 +343,58 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
           </div>
 
           {data.primaryGoal !== "maintain" && (
-            <NumberInput
-              label="Poids cible (optionnel)"
-              value={data.targetWeight}
-              onChange={(v) => update({ targetWeight: v })}
-              suffix="kg"
-            />
+            <div className="grid grid-cols-2 gap-3">
+              <NumberInput
+                label="Poids cible"
+                value={data.targetWeight}
+                onChange={(v) => update({ targetWeight: v })}
+                suffix="kg"
+                placeholder={data.primaryGoal === "bulk" ? "92" : "80"}
+                helpText="Optionnel"
+              />
+              <NumberInput
+                label="En combien de semaines ?"
+                value={data.targetTimelineWeeks}
+                onChange={(v) => update({ targetTimelineWeeks: v })}
+                suffix="sem"
+                placeholder="12"
+                helpText="Si rempli, override le rythme"
+              />
+            </div>
           )}
+
+          {/* Preview du rythme calculé si timeline fournie */}
+          {(data.primaryGoal === "bulk" || data.primaryGoal === "cut") &&
+            data.targetWeight &&
+            data.targetTimelineWeeks &&
+            data.targetTimelineWeeks > 0 &&
+            data.weight && (
+              <div className="rounded-xl bg-[#00ff94]/10 border border-[#00ff94]/25 px-3 py-2.5 text-xs">
+                <p className="text-[#00ff94] font-medium">
+                  Rythme calculé :{" "}
+                  {(
+                    Math.round(
+                      ((data.targetWeight - data.weight) / data.targetTimelineWeeks) * 100,
+                    ) / 100
+                  ).toFixed(2)}{" "}
+                  kg/sem
+                </p>
+                <p className="text-white/50 mt-0.5">
+                  {data.targetWeight - data.weight > 0 ? "+" : ""}
+                  {(data.targetWeight - data.weight).toFixed(1)} kg sur {data.targetTimelineWeeks}{" "}
+                  semaines
+                </p>
+              </div>
+            )}
 
           {(data.primaryGoal === "bulk" || data.primaryGoal === "cut") && (
             <div>
-              <label className="text-xs text-white/40 mb-2 block">Rythme souhaité</label>
+              <label className="text-xs text-white/40 mb-2 block">
+                Rythme souhaité{" "}
+                {data.targetWeight && data.targetTimelineWeeks ? (
+                  <span className="text-white/25">(ignoré — objectif chiffré prioritaire)</span>
+                ) : null}
+              </label>
               <div className="grid grid-cols-3 gap-2">
                 {[
                   {
