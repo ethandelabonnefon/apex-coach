@@ -374,7 +374,20 @@ Le projet est une PWA fonctionnelle deployee sur Vercel. **Toutes les fonctionna
   - **Output JSON strict** : `{ summary, highlights[2-4], suggestions[max 4]{area, suggestion, rationale, confidence}, warnings[max 3], generatedAt }`. `area` ∈ {ratio-midi, ratio-matin, ratio-soir, ratio-snack, isf, basal, timing, regularite, autre}
   - **Garde-fous serveur** : si `pointsCount === 0` → court-circuit, retour direct sans appel Claude. Si `kv_not_configured` → 503.
   - **UI `/diabete/historique`** : nouvelle section "Bilan IA · {days}j" en haut (juste après le sélecteur de période), CTA Sparkles "Générer" / "Régénérer" / "Analyse…" avec spinner Loader2. Affichage structuré : summary lavender (surface accent-2), warnings warning, highlights avec CheckCircle2 success, suggestions en cards avec area label, confidence badge coloré (Forte/Modérée/Faible), suggestion en bold + rationale en text-tertiary. Footer "Généré le X · valide avec ton diabéto". L'insight reset si l'user change de période (les stats ne match plus).
-  - **Pas de cron pour l'instant** : la génération est manuelle (bouton). Phase 10d ajoutera le cron dominical 18h + push notif "ton bilan hebdo est prêt" + persist du dernier bilan en KV pour l'historique des bilans.
+  - **Génération 100% manuelle, par décision produit** : Ethan préfère déclencher le bilan à la demande quand il a besoin d'analyser une période — pas de cron dominical, pas de push notif, pas de persist KV des bilans. Le bouton "Générer / Régénérer" sur `/diabete/historique` est l'unique entry point. Cette décision simplifie l'archi (pas de Phase 10d) et évite la fatigue de notification. Si jamais on revient là-dessus plus tard, l'infra (route + moteur stats) est déjà prête, il suffirait d'ajouter `/api/cron/weekly-bilan` qui appelle l'endpoint et envoie la push.
+  - **Phase 10b+c déployée et live en prod (25 avril 2026)** : `dpl_8v1H1sacJQebxJfD3Dm3Z6mVeVjn` — testé sur 7j (126 points, 0 injection enregistrée à ce stade). Claude joue parfaitement son rôle de filet de sécurité : il identifie le pic post-déjeuner (13-15h à 189-200 mg/dL = pattern "remontée 16h" documenté), félicite TIR 79,4%, mais refuse de proposer des ajustements ratios sans data d'injections. Les 3 warnings affichés ("pas assez de data", "impossible d'analyser sans injections", "reviens avec plus de data") sont la preuve que le system prompt T1D-strict tient. **Pour que les bilans deviennent actionnables, Ethan doit logger ses injections** via le calculateur de bolus de `/diabete` — chaque injection enregistrée alimente `byMeal`, `postMeal` curve T+0/+1h/+2h/+3h, et `byProfile` pour comparer Sèche vs PDM.
+
+## Module Diabète T1 — État final (avril 2026)
+
+Le module diabète est désormais **complet et stable**. Pipeline end-to-end :
+- **Live data** : LibreLink Up → glycémie temps réel (Phase 6) + graphique 8h (Phase 7)
+- **Calculateur bolus** : multi-profils ratios (Phase 10a) + format naturel "X U pour 10g" (Phase 5)
+- **Alertes safety** : push iOS hypo <70 / hyper >250 avec backoff anti-spam (Phase 7) + correction auto-suggérée si glucose >180 et IOB <0,5U (Phase 7)
+- **Archive long terme** : Vercel KV 90j alimentée par cron 4h (Phase 10a)
+- **Page historique** : 7/14/30/90j avec stats récap, pattern par heure, courbe + injections overlay (Phase 10a)
+- **Bilan IA à la demande** : Claude Sonnet 4 avec system prompt T1D-strict, suggestions incrémentales validées par diabéto (Phase 10b+c)
+
+Pas de roadmap T1D active. Évolutions futures possibles si besoin : Phase 10d (cron dominical), import historique LibreView (rétroactif), export CSV pour partage diabéto, intégration Dexcom G7 si Ethan change de capteur.
 - **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
   - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
   - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"
