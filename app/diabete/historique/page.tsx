@@ -33,7 +33,19 @@ import {
 } from "recharts";
 import { useStore } from "@/lib/store";
 import { GLUCOSE_THRESHOLDS } from "@/lib/libre-link/config";
-import { ArrowLeft, AlertTriangle, TrendingUp, TrendingDown, Activity, Droplet, Syringe } from "lucide-react";
+import {
+  ArrowLeft,
+  AlertTriangle,
+  TrendingUp,
+  Activity,
+  Droplet,
+  Syringe,
+  Sparkles,
+  CheckCircle2,
+  Lightbulb,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
 
 type ArchivePoint = {
   t: number;
@@ -48,6 +60,21 @@ type ArchiveResponse = {
   range: { fromMs: number; toMs: number; days: number };
   meta: { total: number; latestTs: number | null; oldestTs: number | null };
   warning?: string;
+};
+
+type InsightSuggestion = {
+  area: string;
+  suggestion: string;
+  rationale: string;
+  confidence: "low" | "medium" | "high";
+};
+
+type InsightOutput = {
+  summary: string;
+  highlights: string[];
+  suggestions: InsightSuggestion[];
+  warnings: string[];
+  generatedAt: string;
 };
 
 const PERIODS = [
@@ -171,6 +198,59 @@ export default function DiabeteHistoriquePage() {
   const [error, setError] = useState<string | null>(null);
 
   const insulinLogs = useStore((s) => s.insulinLogs);
+  const diabetesConfig = useStore((s) => s.diabetesConfig);
+
+  // ─── État Bilan IA (Phase 10c) ────────────────────────────────────────
+  const [insight, setInsight] = useState<InsightOutput | null>(null);
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [insightError, setInsightError] = useState<string | null>(null);
+
+  const activeProfileName = useMemo(() => {
+    const active = diabetesConfig.profiles?.find(
+      (p) => p.id === diabetesConfig.activeProfileId,
+    );
+    return active?.name ?? "Par défaut";
+  }, [diabetesConfig]);
+
+  const generateInsight = async () => {
+    setInsightLoading(true);
+    setInsightError(null);
+    setInsight(null);
+    try {
+      const res = await fetch("/api/diabete/weekly-insight", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          days,
+          injections: insulinLogs,
+          profiles: (diabetesConfig.profiles ?? []).map((p) => ({
+            id: p.id,
+            name: p.name,
+          })),
+          activeProfileName,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message ?? `HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      if (!json.insight) {
+        throw new Error("Réponse sans insight");
+      }
+      setInsight(json.insight as InsightOutput);
+    } catch (err) {
+      setInsightError(err instanceof Error ? err.message : "fetch failed");
+    } finally {
+      setInsightLoading(false);
+    }
+  };
+
+  // Reset l'insight si on change de période
+  useEffect(() => {
+    setInsight(null);
+    setInsightError(null);
+  }, [days]);
 
   useEffect(() => {
     let cancelled = false;
@@ -289,6 +369,178 @@ export default function DiabeteHistoriquePage() {
           <p className="text-xs text-text-secondary">{data.warning}</p>
         </div>
       )}
+
+      {/* ─── Bilan IA (Phase 10c) ────────────────────────────────────── */}
+      <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Sparkles className="w-4 h-4 text-accent-2 flex-shrink-0" />
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-text-primary">
+                Bilan IA · {days}j
+              </h2>
+              <p className="text-[10px] text-text-tertiary mt-0.5">
+                Analyse de ta glycémie + injections par Claude — suggestions
+                à valider avec ton diabéto.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={generateInsight}
+            disabled={insightLoading || overallStats.count === 0}
+            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-accent-2/15 border border-accent-2/40 text-accent-2 hover:bg-accent-2/25 disabled:opacity-50 disabled:cursor-not-allowed tap-scale flex-shrink-0"
+          >
+            {insightLoading ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Analyse…
+              </>
+            ) : insight ? (
+              <>
+                <RefreshCw className="w-3.5 h-3.5" />
+                Régénérer
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3.5 h-3.5" />
+                Générer
+              </>
+            )}
+          </button>
+        </div>
+
+        {!insight && !insightLoading && !insightError && (
+          <div className="rounded-xl bg-bg-tertiary border border-border-subtle p-4 text-center">
+            <Lightbulb className="w-5 h-5 text-text-tertiary mx-auto mb-1.5" />
+            <p className="text-xs text-text-secondary">
+              Clique sur <span className="text-accent-2 font-medium">Générer</span> pour
+              que Claude analyse tes {days}{" "}derniers jours.
+            </p>
+            <p className="text-[10px] text-text-tertiary mt-1">
+              Profil actif : <span className="text-text-secondary">{activeProfileName}</span>
+            </p>
+          </div>
+        )}
+
+        {insightLoading && (
+          <div className="rounded-xl bg-bg-tertiary border border-border-subtle p-6 text-center">
+            <Loader2 className="w-5 h-5 text-accent-2 animate-spin mx-auto mb-2" />
+            <p className="text-xs text-text-secondary">
+              Claude lit tes patterns…
+            </p>
+            <p className="text-[10px] text-text-tertiary mt-1">
+              ~10-20 secondes
+            </p>
+          </div>
+        )}
+
+        {insightError && (
+          <div className="rounded-xl bg-error/10 border border-error/25 p-4 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-error flex-shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-xs text-error font-medium">Échec génération</p>
+              <p className="text-[10px] text-text-tertiary mt-0.5">
+                {insightError}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {insight && !insightLoading && (
+          <div className="space-y-3">
+            {/* Summary */}
+            <div className="rounded-xl bg-accent-2/10 border border-accent-2/25 p-4">
+              <p className="text-sm text-text-primary leading-relaxed">
+                {insight.summary}
+              </p>
+            </div>
+
+            {/* Warnings */}
+            {insight.warnings.length > 0 && (
+              <div className="space-y-2">
+                {insight.warnings.map((w, i) => (
+                  <div
+                    key={i}
+                    className="rounded-xl bg-warning/10 border border-warning/25 p-3 flex items-start gap-2"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 text-warning flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-text-secondary leading-relaxed">{w}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Highlights */}
+            {insight.highlights.length > 0 && (
+              <div>
+                <p className="label mb-2">Observations</p>
+                <ul className="space-y-1.5">
+                  {insight.highlights.map((h, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-success flex-shrink-0 mt-0.5" />
+                      <span className="text-xs text-text-secondary leading-relaxed">{h}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Suggestions */}
+            {insight.suggestions.length > 0 && (
+              <div>
+                <p className="label mb-2">Suggestions à valider</p>
+                <div className="space-y-2">
+                  {insight.suggestions.map((s, i) => (
+                    <div
+                      key={i}
+                      className="rounded-xl bg-bg-tertiary border border-border-subtle p-3"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <span className="label text-[9px] text-accent-2">
+                          {s.area}
+                        </span>
+                        <span
+                          className={`text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                            s.confidence === "high"
+                              ? "bg-success/15 text-success"
+                              : s.confidence === "medium"
+                                ? "bg-warning/15 text-warning"
+                                : "bg-text-tertiary/15 text-text-tertiary"
+                          }`}
+                        >
+                          {s.confidence === "high"
+                            ? "Forte"
+                            : s.confidence === "medium"
+                              ? "Modérée"
+                              : "Faible"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-text-primary leading-relaxed font-medium">
+                        {s.suggestion}
+                      </p>
+                      <p className="text-[11px] text-text-tertiary leading-relaxed mt-1">
+                        {s.rationale}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="text-[9px] text-text-tertiary text-center pt-1">
+              Généré le{" "}
+              {new Date(insight.generatedAt).toLocaleString("fr-FR", {
+                day: "2-digit",
+                month: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}{" "}
+              · ces suggestions sont indicatives, valide-les avec ton diabéto.
+            </p>
+          </div>
+        )}
+      </section>
+      {/* ──────────────────────────────────────────────────────────────── */}
 
       {/* Stats récap */}
       {loading ? (
