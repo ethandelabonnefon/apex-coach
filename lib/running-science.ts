@@ -4,6 +4,52 @@ export function calculateVMA(vo2max: number): number {
   return vo2max / 3.5;
 }
 
+// Phase 11 — Dérive la VMA en respectant la hiérarchie du diagnostic.
+// Priorité : test terrain (calculatedVMA) > VO2max diagnostic > VO2max profil.
+// Garantit que la page Running utilise les vraies données utilisateur,
+// pas une constante hardcodée.
+export type VMASource = "field-test" | "diagnostic-vo2max" | "profile-vo2max" | "fallback";
+
+export function deriveVMA(
+  diagnosticData: Record<string, unknown> | undefined | null,
+  profileVo2max: number | null | undefined,
+  fallbackVo2max = 49,
+): { vma: number; vo2max: number; source: VMASource } {
+  const d = diagnosticData ?? {};
+
+  const calculatedVMA = typeof d.calculatedVMA === "number" ? d.calculatedVMA : null;
+  if (calculatedVMA && calculatedVMA > 5 && calculatedVMA < 30) {
+    return {
+      vma: calculatedVMA,
+      vo2max: calculatedVMA * 3.5,
+      source: "field-test",
+    };
+  }
+
+  const diagVo2 = d.vo2max ? Number(d.vo2max) : null;
+  if (diagVo2 && !Number.isNaN(diagVo2) && diagVo2 > 20 && diagVo2 < 90) {
+    return {
+      vma: calculateVMA(diagVo2),
+      vo2max: diagVo2,
+      source: "diagnostic-vo2max",
+    };
+  }
+
+  if (profileVo2max && profileVo2max > 20 && profileVo2max < 90) {
+    return {
+      vma: calculateVMA(profileVo2max),
+      vo2max: profileVo2max,
+      source: "profile-vo2max",
+    };
+  }
+
+  return {
+    vma: calculateVMA(fallbackVo2max),
+    vo2max: fallbackVo2max,
+    source: "fallback",
+  };
+}
+
 export function calculateZones(vma: number): Record<string, RunningZone> {
   return {
     z1: {

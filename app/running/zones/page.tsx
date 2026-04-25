@@ -1,19 +1,16 @@
 "use client";
 
-import { Card, PageHeader, Badge, Button, SectionTitle, ProgressBar, InfoBox } from "@/components/ui";
+import { Card, PageHeader, Badge, Button, SectionTitle } from "@/components/ui";
 import { useStore } from "@/lib/store";
 import {
-  calculateVMA,
   calculateZones,
   formatPace,
   predictRaceTime,
   formatTime,
   getPhase,
+  deriveVMA,
 } from "@/lib/running-science";
-import { HALF_MARATHON_PLAN } from "@/lib/constants";
 import Link from "next/link";
-
-const VO2MAX = 49;
 
 const ZONE_CONFIG = [
   {
@@ -69,9 +66,11 @@ const ZONE_CONFIG = [
 ];
 
 export default function ZonesPage() {
-  const { currentRunningWeek } = useStore();
+  const { currentRunningWeek, profile, runningDiagnosticData } = useStore();
 
-  const vma = calculateVMA(VO2MAX);
+  const vmaInfo = deriveVMA(runningDiagnosticData, profile.vo2max);
+  const vma = vmaInfo.vma;
+  const VO2MAX = vmaInfo.vo2max;
   const zones = calculateZones(vma);
 
   const races = [
@@ -85,7 +84,15 @@ export default function ZonesPage() {
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       <PageHeader
         title="Zones d'entrainement"
-        subtitle={`Basees sur ta VMA de ${vma.toFixed(1)} km/h (VO2max ${VO2MAX})`}
+        subtitle={`Basées sur ta VMA de ${vma.toFixed(1)} km/h (VO2max ${VO2MAX.toFixed(0)} · ${
+          vmaInfo.source === "field-test"
+            ? "test terrain"
+            : vmaInfo.source === "diagnostic-vo2max"
+            ? "VO2max diagnostic"
+            : vmaInfo.source === "profile-vo2max"
+            ? "profil"
+            : "estimation"
+        })`}
         action={
           <Link href="/running">
             <Button variant="secondary" size="sm">
@@ -106,7 +113,7 @@ export default function ZonesPage() {
               {vma.toFixed(1)} <span className="text-lg text-white/40 font-normal">km/h</span>
             </p>
             <p className="text-sm text-white/40 mt-1">
-              VO2max: {VO2MAX} ml/kg/min | Formule: VMA = VO2max / 3.5
+              VO2max: {VO2MAX.toFixed(0)} ml/kg/min | Formule: VMA = VO2max / 3.5
             </p>
           </div>
           <div className="flex gap-3">
