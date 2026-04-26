@@ -2,6 +2,12 @@ import { DIABETES_CONFIG } from './constants';
 import type { DiabetesConfig, MealTime } from '@/types';
 
 function getRatioForMeal(config: DiabetesConfig, mealTime: MealTime): number {
+  // "other" = saisie libre (correction seule, pas de repas) → on retombe
+  // sur le ratio midi par défaut au cas où l'utilisateur entre quand même
+  // des glucides. Cas typique : injection d'appoint en hyper sans repas.
+  if (mealTime === 'other') {
+    return config.ratios.lunch;
+  }
   // Try insulinRatios first (new system)
   if (config.insulinRatios?.length) {
     const found = config.insulinRatios.find((r) => r.mealKey === mealTime);
@@ -47,10 +53,15 @@ export function calculateBolus(
     lunch: "midi",
     snack: "goûter",
     dinner: "soir",
+    other: "saisie libre",
   };
-  reasoning.push(
-    `Ratio ${mealLabel[mealTime]} : ${unitsPer10g.toFixed(1).replace(".", ",")}U pour 10g → ${carbsGrams}g = ${carbBolus.toFixed(1)}U`
-  );
+  // En mode "saisie libre" sans glucides, on ne mentionne pas le ratio dans
+  // le raisonnement : c'est juste une correction (ou rien) — moins de bruit.
+  if (mealTime !== 'other' || carbsGrams > 0) {
+    reasoning.push(
+      `Ratio ${mealLabel[mealTime]} : ${unitsPer10g.toFixed(1).replace(".", ",")}U pour 10g → ${carbsGrams}g = ${carbBolus.toFixed(1)}U`
+    );
+  }
 
   // Correction si glycémie au-dessus de la cible
   if (currentGlucose > config.targetRange.max) {
@@ -84,7 +95,16 @@ export function calculateBolus(
     }
   }
 
-  const totalBolus = Math.max(0, Math.round((carbBolus + correctionBolus) * 2) / 2); // arrondi à 0.5U
+  // Stylo Novorapid d'Ethan = pas de demi-unités. On arrondit au-dessus
+  // pour éviter de sous-doser (le risque "hyper" est plus prévisible que
+  // le risque "hypo brutal" en post-prandial avec une dose insuffisante).
+  const rawTotal = Math.max(0, carbBolus + correctionBolus);
+  const totalBolus = Math.ceil(rawTotal);
+  if (rawTotal > 0 && totalBolus !== Math.round(rawTotal * 10) / 10) {
+    reasoning.push(
+      `Arrondi au-dessus : ${rawTotal.toFixed(1).replace(".", ",")}U → ${totalBolus}U (stylo sans demi-unités)`
+    );
+  }
 
   return { carbBolus, correctionBolus, totalBolus, adjustments, reasoning };
 }

@@ -238,4 +238,4 @@ export interface CompletedRunningSession {
   notes: string;
 }
 
-export type MealTime = 'morning' | 'lunch' | 'snack' | 'dinner';
+export type MealTime = 'morning' | 'lunch' | 'snack' | 'dinner' | 'other';

@@ -24,6 +24,7 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
+  Trash2,
 } from "lucide-react";
 
 type GlucoseTone = "low" | "normal" | "high" | "critical";
@@ -53,6 +54,7 @@ const MEAL_OPTIONS: { value: MealTime; label: string }[] = [
   { value: "lunch", label: "Déjeuner" },
   { value: "snack", label: "Goûter" },
   { value: "dinner", label: "Dîner" },
+  { value: "other", label: "Autre" },
 ];
 
 // Conversion ratio interne (g par U) → format naturel "X,YU"
@@ -71,6 +73,7 @@ export default function DiabetePage() {
     addGlucoseReading,
     insulinLogs,
     addInsulinLog,
+    removeInsulinLog,
   } = useStore();
 
   // ─── Bolus calculator ─────────────────────────
@@ -143,6 +146,15 @@ export default function DiabetePage() {
       notes: isPreWorkout ? `pré-${workoutType}` : "",
       injectedAt: new Date(),
     });
+  }
+
+  function handleDeleteInjection(id: string, units: number) {
+    if (
+      typeof window !== "undefined" &&
+      window.confirm(`Supprimer cette injection de ${units}U ? Action irréversible.`)
+    ) {
+      removeInsulinLog(id);
+    }
   }
 
   const lastGlucose = glucoseReadings[0];
@@ -278,12 +290,17 @@ export default function DiabetePage() {
         {/* Meal selector */}
         <div className="mb-5">
           <p className="label mb-2">Repas</p>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-5 gap-2">
             {MEAL_OPTIONS.map((m) => (
               <button
                 key={m.value}
                 type="button"
-                onClick={() => setMealTime(m.value)}
+                onClick={() => {
+                  setMealTime(m.value);
+                  // En "Autre" (sans repas), on remet les glucides à 0
+                  // pour ne pas suggérer un bolus repas par erreur.
+                  if (m.value === "other") setCarbsGrams(0);
+                }}
                 className={`py-2 text-xs font-medium rounded-lg border transition-all tap-scale ${
                   mealTime === m.value
                     ? "bg-diabete/15 border-diabete/40 text-diabete"
@@ -294,6 +311,13 @@ export default function DiabetePage() {
               </button>
             ))}
           </div>
+          {mealTime === "other" && (
+            <p className="mt-2 text-[11px] text-text-tertiary leading-relaxed">
+              Saisie libre — pour une injection sans repas associé (ex: correction
+              d&apos;hyper). Mets <span className="num">0</span>g de glucides si tu
+              veux uniquement la correction sur la glycémie.
+            </p>
+          )}
         </div>
 
         {/* Pre-workout */}
@@ -546,29 +570,43 @@ export default function DiabetePage() {
               {insulinLogs.slice(0, 10).map((log) => (
                 <div
                   key={log.id}
-                  className="bg-bg-tertiary rounded-xl p-3 border border-border-subtle"
+                  className="group bg-bg-tertiary rounded-xl p-3 border border-border-subtle"
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between mb-1 gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       <span className="num text-lg font-semibold text-diabete">
                         {log.units}
                         <span className="text-xs text-text-tertiary ml-0.5">U</span>
                       </span>
                       <Badge
-                        variant={log.mealType === "correction" ? "warning" : "default"}
+                        variant={
+                          log.mealType === "correction" || log.mealType === "other"
+                            ? "warning"
+                            : "default"
+                        }
                         size="sm"
                       >
                         {log.mealType}
                       </Badge>
                     </div>
-                    <span className="num text-[10px] text-text-tertiary">
-                      {new Date(log.injectedAt).toLocaleString("fr-FR", {
-                        day: "2-digit",
-                        month: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="num text-[10px] text-text-tertiary">
+                        {new Date(log.injectedAt).toLocaleString("fr-FR", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteInjection(log.id, log.units)}
+                        aria-label="Supprimer l'injection"
+                        className="p-1.5 rounded-md text-text-tertiary hover:text-error hover:bg-error/10 transition-colors tap-scale"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                   <div className="num flex items-center gap-3 text-[11px] text-text-tertiary">
                     <span>{log.carbsGrams}g gluc.</span>

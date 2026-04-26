@@ -81,6 +81,7 @@ interface AppState {
   addGlucoseReading: (reading: GlucoseReading) => void;
   insulinLogs: InsulinLog[];
   addInsulinLog: (log: InsulinLog) => void;
+  removeInsulinLog: (id: string) => void;
 
   // Nutrition
   meals: Meal[];
@@ -261,6 +262,9 @@ export const useStore = create<AppState>()(
           { ...log, profileId: log.profileId ?? s.diabetesConfig.activeProfileId },
           ...s.insulinLogs,
         ].slice(0, 500),
+      })),
+      removeInsulinLog: (id) => set((s) => ({
+        insulinLogs: s.insulinLogs.filter((log) => log.id !== id),
       })),
 
       meals: [],

@@ -414,8 +414,8 @@ function aggregatePostMeal(
     });
   }
 
-  // Order: morning, lunch, snack, dinner, correction, autres
-  const order = ["morning", "lunch", "snack", "dinner", "correction"];
+  // Order: morning, lunch, snack, dinner, correction, other, autres inconnus
+  const order = ["morning", "lunch", "snack", "dinner", "correction", "other"];
   result.sort((a, b) => {
     const ai = order.indexOf(a.mealType);
     const bi = order.indexOf(b.mealType);

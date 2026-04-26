@@ -8,7 +8,8 @@
  * l'insuline active (IOB) pour éviter le stacking.
  *
  * Règle T1D-first :
- *   - correction = (glucose - cible) / ISF, arrondie à 0,5U
+ *   - correction = (glucose - cible) / ISF, arrondie à l'entier supérieur
+ *     (le stylo Novorapid d'Ethan n'a pas de demi-unités)
  *   - si IOB > 0,5U : on affiche un WARNING rouge "ne pas empiler", pas de bouton injection
  *   - si IOB ≈ 0 et glucose > 180 : on propose l'injection
  *   - si glucose > 250 (hyper) : message "vérifier cétones"
@@ -60,7 +61,8 @@ export default function CorrectionSuggestion() {
   const target = diabetesConfig.targetGlucose;
   const isf = diabetesConfig.insulinSensitivityFactor;
   const rawCorrection = (value - target) / isf;
-  const correctionBolus = Math.max(0, Math.round(rawCorrection * 2) / 2);
+  // Arrondi au-dessus : stylo sans demi-unités.
+  const correctionBolus = Math.max(0, Math.ceil(rawCorrection));
   const tone = glucoseTone(value);
   const isHyper = tone === "hyper"; // > 250
   const iobTooHigh = iob.totalIOB > 0.5;
