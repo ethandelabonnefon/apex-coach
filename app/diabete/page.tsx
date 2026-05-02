@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
 import { calculateBolus, getInsulinOnBoard } from "@/lib/insulin-calculator";
@@ -84,6 +84,31 @@ export default function DiabetePage() {
   const [workoutType, setWorkoutType] = useState<"muscu" | "running" | null>(null);
   const [minutesUntilWorkout, setMinutesUntilWorkout] = useState(60);
 
+  // ─── IOB ──────────────────────────────────────
+  // On le calcule AVANT le bolus pour pouvoir le passer au calculateur
+  // (réduction de la part correction pour éviter le stacking).
+  // Tick toutes les 60s pour rafraîchir l'IOB en temps réel sans nécessiter
+  // une nouvelle injection (sinon l'IOB resterait figé visuellement).
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const iob = useMemo(() => {
+    const now = nowTick;
+    const recentInjections = insulinLogs
+      .map((log) => {
+        const injectedAt = new Date(log.injectedAt);
+        const minutesAgo = (now - injectedAt.getTime()) / 60000;
+        return { units: log.units, minutesAgo };
+      })
+      .filter(
+        (inj) =>
+          inj.minutesAgo < DIABETES_CONFIG.insulinActiveDuration && inj.minutesAgo >= 0
+      );
+    return getInsulinOnBoard(recentInjections);
+  }, [insulinLogs, nowTick]);
+
   const bolusResult = useMemo(
     () =>
       calculateBolus(
@@ -93,7 +118,8 @@ export default function DiabetePage() {
         isPreWorkout,
         workoutType,
         minutesUntilWorkout,
-        diabetesConfig
+        diabetesConfig,
+        iob.totalIOB,
       ),
     [
       carbsGrams,
@@ -103,24 +129,28 @@ export default function DiabetePage() {
       workoutType,
       minutesUntilWorkout,
       diabetesConfig,
+      iob.totalIOB,
     ]
   );
 
-  // ─── IOB ──────────────────────────────────────
-  const iob = useMemo(() => {
-    const now = new Date();
-    const recentInjections = insulinLogs
-      .map((log) => {
-        const injectedAt = new Date(log.injectedAt);
-        const minutesAgo = (now.getTime() - injectedAt.getTime()) / 60000;
-        return { units: log.units, minutesAgo };
-      })
-      .filter(
-        (inj) =>
-          inj.minutesAgo < DIABETES_CONFIG.insulinActiveDuration && inj.minutesAgo >= 0
-      );
-    return getInsulinOnBoard(recentInjections);
-  }, [insulinLogs]);
+  // ─── Override manuel des unités ────────────────
+  // Le calculateur propose une dose, mais l'utilisateur peut l'ajuster
+  // (ex: stylo qui ne fait que des entiers, intuition diabète, mode "Autre"
+  // où l'on tape une dose libre, etc.). On reset l'override quand le calc
+  // change pour éviter qu'une vieille saisie reste collée.
+  const [unitsOverride, setUnitsOverride] = useState<number | null>(null);
+  useEffect(() => {
+    setUnitsOverride(null);
+  }, [
+    carbsGrams,
+    mealTime,
+    currentGlucose,
+    isPreWorkout,
+    workoutType,
+    minutesUntilWorkout,
+    iob.totalIOB,
+  ]);
+  const finalUnits = unitsOverride ?? bolusResult.totalBolus;
 
   // ─── Quick logs ───────────────────────────────
   const [glucoseValue, setGlucoseValue] = useState(110);
@@ -136,16 +166,25 @@ export default function DiabetePage() {
   }
 
   function handleLogInjection() {
+    if (finalUnits <= 0) return;
+    const overridden = unitsOverride !== null && unitsOverride !== bolusResult.totalBolus;
+    const baseNote = isPreWorkout ? `pré-${workoutType}` : "";
+    const overrideNote = overridden
+      ? `manuel (calc proposait ${bolusResult.totalBolus}U)`
+      : "";
+    const notes = [baseNote, overrideNote].filter(Boolean).join(" · ");
     addInsulinLog({
       id: crypto.randomUUID(),
-      units: bolusResult.totalBolus,
+      units: finalUnits,
       insulinType: profile.insulinRapid,
       mealType: mealTime,
       carbsGrams,
       glucoseBefore: currentGlucose,
-      notes: isPreWorkout ? `pré-${workoutType}` : "",
+      notes,
       injectedAt: new Date(),
     });
+    // Reset l'override après log pour ne pas qu'il reste collé sur le suivant.
+    setUnitsOverride(null);
   }
 
   function handleDeleteInjection(id: string, units: number) {
@@ -386,10 +425,10 @@ export default function DiabetePage() {
           )}
         </div>
 
-        {/* Résultat hero */}
+        {/* Résultat hero — éditable */}
         <div className="rounded-2xl bg-diabete/10 border border-diabete/30 p-5">
           <div className="flex items-center justify-between mb-4">
-            <p className="label" style={{ color: "var(--diabete)" }}>Total à injecter</p>
+            <p className="label" style={{ color: "var(--diabete)" }}>Dose à injecter</p>
             {iob.totalIOB > 0.5 && (
               <Badge variant="warning" size="sm">
                 <AlertTriangle className="w-3 h-3 mr-1" />
@@ -398,11 +437,47 @@ export default function DiabetePage() {
             )}
           </div>
 
-          <div className="flex items-baseline gap-2 mb-4">
-            <span className="num-hero text-6xl sm:text-7xl font-semibold text-diabete leading-none">
-              {bolusResult.totalBolus}
-            </span>
-            <span className="text-xl text-diabete/70 font-medium">U</span>
+          {/* Stepper +/- — l'utilisateur garde le contrôle final */}
+          <div className="flex items-center justify-center gap-4 mb-3">
+            <button
+              type="button"
+              onClick={() => setUnitsOverride(Math.max(0, finalUnits - 1))}
+              className="shrink-0 w-11 h-11 rounded-full bg-bg-tertiary border border-border-default text-diabete text-xl font-semibold hover:bg-bg-hover transition-colors tap-scale"
+              aria-label="Diminuer d'1U"
+            >
+              −
+            </button>
+            <div className="flex items-baseline gap-2 min-w-[140px] justify-center">
+              <span className="num-hero text-6xl sm:text-7xl font-semibold text-diabete leading-none tabular-nums">
+                {finalUnits}
+              </span>
+              <span className="text-xl text-diabete/70 font-medium">U</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setUnitsOverride(finalUnits + 1)}
+              className="shrink-0 w-11 h-11 rounded-full bg-bg-tertiary border border-border-default text-diabete text-xl font-semibold hover:bg-bg-hover transition-colors tap-scale"
+              aria-label="Augmenter d'1U"
+            >
+              +
+            </button>
+          </div>
+
+          {/* Indicateur suggestion calc + reset si modifié */}
+          <div className="text-center mb-4">
+            {unitsOverride !== null && unitsOverride !== bolusResult.totalBolus ? (
+              <button
+                type="button"
+                onClick={() => setUnitsOverride(null)}
+                className="text-[11px] text-text-tertiary hover:text-diabete transition-colors underline-offset-2 hover:underline"
+              >
+                Modifié — calc suggérait {bolusResult.totalBolus}U (cliquer pour rétablir)
+              </button>
+            ) : (
+              <p className="text-[11px] text-text-tertiary">
+                Suggestion automatique — ajustable avec − / +
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2 mb-4">
@@ -433,9 +508,10 @@ export default function DiabetePage() {
           <button
             type="button"
             onClick={handleLogInjection}
-            className="w-full bg-diabete text-ink font-semibold py-3 rounded-xl hover:bg-diabete/90 transition-colors tap-scale"
+            disabled={finalUnits <= 0}
+            className="w-full bg-diabete text-ink font-semibold py-3 rounded-xl hover:bg-diabete/90 transition-colors tap-scale disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Enregistrer l&apos;injection ({bolusResult.totalBolus}U)
+            Enregistrer l&apos;injection ({finalUnits}U)
           </button>
 
           {bolusResult.reasoning.length > 0 && (

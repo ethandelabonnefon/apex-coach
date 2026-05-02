@@ -29,6 +29,10 @@ export function calculateBolus(
   workoutType: 'muscu' | 'running' | null = null,
   minutesUntilWorkout: number = 0,
   configOverride?: DiabetesConfig,
+  /** Insuline encore active (IOB) — on l'utilise pour réduire la PART CORRECTION
+   *  (jamais le bolus repas) afin d'éviter le stacking quand l'utilisateur fait
+   *  plusieurs corrections d'affilée. Phase 11. */
+  currentIOB: number = 0,
 ): {
   carbBolus: number;
   correctionBolus: number;
@@ -65,15 +69,40 @@ export function calculateBolus(
 
   // Correction si glycémie au-dessus de la cible
   if (currentGlucose > config.targetRange.max) {
-    correctionBolus = (currentGlucose - target) / isf;
+    const rawCorrection = (currentGlucose - target) / isf;
     const diff = currentGlucose - target;
     // Sensibilité au format naturel : X U pour 50 mg/dL au-dessus
     const unitsPer50mg = 50 / isf;
     reasoning.push(
-      `Correction : ${diff} mg/dL au-dessus de la cible → ${correctionBolus.toFixed(1)}U (${unitsPer50mg.toFixed(1).replace(".", ",")}U pour 50 mg/dL)`
+      `Correction : ${diff} mg/dL au-dessus de la cible → ${rawCorrection.toFixed(1)}U (${unitsPer50mg.toFixed(1).replace(".", ",")}U pour 50 mg/dL)`
     );
+
+    // T1D-safe : on soustrait l'IOB UNIQUEMENT de la part correction
+    // (jamais du bolus repas, sinon on sous-dose la nourriture qui arrive).
+    // Évite le stacking : si une correction précédente travaille encore,
+    // on en tient compte avant d'en superposer une nouvelle.
+    if (currentIOB > 0) {
+      const adjusted = Math.max(0, rawCorrection - currentIOB);
+      if (adjusted < rawCorrection) {
+        reasoning.push(
+          `IOB actif : ${currentIOB.toFixed(1).replace(".", ",")}U → correction réduite de ${rawCorrection.toFixed(1).replace(".", ",")}U à ${adjusted.toFixed(1).replace(".", ",")}U (anti-stacking)`
+        );
+      }
+      correctionBolus = adjusted;
+    } else {
+      correctionBolus = rawCorrection;
+    }
   } else if (currentGlucose < config.targetRange.min) {
     reasoning.push(`Glycémie basse (${currentGlucose} mg/dL) — considérer des glucides supplémentaires avant l'injection`);
+  }
+
+  // Warning si bolus repas + IOB élevé (la correction précédente est encore
+  // active, surveiller la post-prandiale pour ne pas tomber en hypo).
+  if (carbBolus > 0 && currentIOB > 1.5) {
+    adjustments.push(`IOB ${currentIOB.toFixed(1).replace(".", ",")}U — surveille post-prandiale`);
+    reasoning.push(
+      `Tu as ${currentIOB.toFixed(1).replace(".", ",")}U d'insuline encore active. Le bolus repas n'est pas réduit (la nourriture nécessite sa pleine couverture) mais surveille ta glycémie 1-2h post-repas pour anticiper une hypo.`
+    );
   }
 
   // Ajustements pré-entraînement
