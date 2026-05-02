@@ -25,6 +25,8 @@ import {
   TrendingDown,
   Minus,
   Trash2,
+  History,
+  Sparkles,
 } from "lucide-react";
 
 type GlucoseTone = "low" | "normal" | "high" | "critical";
@@ -210,38 +212,36 @@ export default function DiabetePage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto stagger">
       {/* ── HERO : Glycémie + IOB ── */}
-      <section className="surface-1 rounded-3xl p-6 sm:p-8 mb-4">
-        <div className="flex items-start justify-between gap-4 mb-6">
+      <section className="surface-1 rounded-3xl p-6 sm:p-8 mb-4 relative overflow-hidden">
+        {/* Glow lavender en fond */}
+        <div
+          aria-hidden
+          className="absolute -top-24 -left-16 h-64 w-64 rounded-full opacity-[0.10] blur-3xl"
+          style={{ background: "var(--diabete)" }}
+        />
+
+        <div className="relative flex items-start justify-between gap-4 mb-6">
           <div>
             <p className="label">Diabète T1</p>
             <h1 className="mt-1 text-xl sm:text-2xl font-semibold text-text-primary">
               {profile.insulinRapid} · {profile.cgmType}
             </h1>
           </div>
-          <div className="flex gap-2">
-            <Link
-              href="/diabete/historique"
-              className="text-xs text-text-secondary hover:text-text-primary transition-colors px-3 py-1.5 rounded-lg border border-border-subtle tap-scale"
-            >
-              Historique
-            </Link>
-            <Link
-              href="/diabete/patterns"
-              className="text-xs text-text-secondary hover:text-text-primary transition-colors px-3 py-1.5 rounded-lg border border-border-subtle tap-scale"
-            >
-              Patterns
-            </Link>
-            <Link
-              href="/diabete/parametres"
-              className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-primary transition-colors px-3 py-1.5 rounded-lg border border-border-subtle tap-scale"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              Paramètres
-            </Link>
+          {/* Nav rapide — icônes seules pour gagner de la place sur mobile */}
+          <div className="flex gap-1.5">
+            <NavIconLink href="/diabete/historique" label="Historique">
+              <History className="w-4 h-4" />
+            </NavIconLink>
+            <NavIconLink href="/diabete/patterns" label="Patterns">
+              <Sparkles className="w-4 h-4" />
+            </NavIconLink>
+            <NavIconLink href="/diabete/parametres" label="Paramètres">
+              <Settings className="w-4 h-4" />
+            </NavIconLink>
           </div>
         </div>
 
-        <div className="grid sm:grid-cols-2 gap-4">
+        <div className="relative grid sm:grid-cols-2 gap-4">
           {/* Glucose hero — live FreeStyle Libre avec fallback manuel */}
           <GlucoseWidget
             fallbackValue={lastValue}
@@ -835,5 +835,27 @@ function RatioChip({
       <p className="num text-base font-semibold text-text-primary mt-0.5">{value}</p>
       {unit && <p className="text-[9px] text-text-tertiary">{unit}</p>}
     </div>
+  );
+}
+
+/** Bouton-icône compact pour la nav rapide du header (page /diabete). */
+function NavIconLink({
+  href,
+  label,
+  children,
+}: {
+  href: string;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-label={label}
+      title={label}
+      className="flex items-center justify-center w-9 h-9 rounded-lg border border-border-subtle text-text-secondary hover:text-diabete hover:border-diabete/40 hover:bg-diabete/5 transition-colors tap-scale"
+    >
+      {children}
+    </Link>
   );
 }

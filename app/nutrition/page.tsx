@@ -220,9 +220,16 @@ export default function NutritionPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto stagger">
-      {/* ── HERO : Macros du jour ── */}
-      <section className="surface-1 rounded-3xl p-6 sm:p-8 mb-4 glow-ring">
-        <div className="flex items-start justify-between gap-4 mb-6">
+      {/* ── HERO : Macros du jour — Ring central géant + glow nutrition ── */}
+      <section className="surface-1 rounded-3xl p-6 sm:p-8 mb-4 relative overflow-hidden">
+        {/* Glow orange en fond pour signature visuelle */}
+        <div
+          aria-hidden
+          className="absolute -top-24 -right-16 h-64 w-64 rounded-full opacity-[0.10] blur-3xl"
+          style={{ background: "var(--nutrition)" }}
+        />
+
+        <div className="relative flex items-start justify-between gap-4 mb-6">
           <div>
             <p className="label">Aujourd&apos;hui</p>
             <h1 className="mt-1 text-xl sm:text-2xl font-semibold text-text-primary">
@@ -238,21 +245,31 @@ export default function NutritionPage() {
           </button>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 sm:gap-8">
+        <div className="relative flex flex-col sm:flex-row items-center sm:items-start gap-6 sm:gap-8">
           <Ring
             value={totals.calories}
             max={targets.calories}
-            size={168}
-            strokeWidth={12}
+            size={200}
+            strokeWidth={14}
             color="var(--nutrition)"
           >
-            <span className="num-hero text-3xl sm:text-4xl font-semibold text-text-primary leading-none">
-              {Math.round(totals.calories)}
-            </span>
-            <span className="label mt-1">/ {targets.calories} kcal</span>
-            <span className="text-[10px] text-text-tertiary mt-1">
-              {remainingCals > 0 ? `Reste ${remainingCals}` : "Objectif atteint"}
-            </span>
+            <div className="flex flex-col items-center justify-center text-center leading-none">
+              <span className="num-hero text-5xl sm:text-6xl font-semibold tabular-nums" style={{ color: "var(--nutrition)" }}>
+                {Math.round(totals.calories)}
+              </span>
+              <span className="text-[10px] text-text-tertiary mt-2 tracking-wide">
+                / <span className="num">{targets.calories}</span> kcal
+              </span>
+              <span className="text-[9px] text-text-tertiary mt-1.5">
+                {remainingCals > 0 ? (
+                  <>
+                    Reste <span className="num font-semibold text-text-secondary">{remainingCals}</span>
+                  </>
+                ) : (
+                  <span className="text-success font-semibold">Objectif atteint ✓</span>
+                )}
+              </span>
+            </div>
           </Ring>
 
           <div className="flex-1 w-full space-y-5">
