@@ -378,68 +378,72 @@ export default function Dashboard() {
       </section>
 
       {/* ============ 2 STATS RINGS : Calories + Séances ============ */}
+      {/* Layout vertical : ring centré avec valeur DEDANS, label+sub en dessous.
+          Plus propre sur mobile, et fidèle aux refs (PulseUp, Antony Thomas). */}
       <section className="mb-6 grid grid-cols-2 gap-3 stagger">
         {/* Calories ring */}
         <Link
           href="/nutrition"
-          className="group surface-1 p-5 tap-scale hover:bg-bg-tertiary transition-colors flex items-center gap-4"
+          className="group surface-1 p-5 tap-scale hover:bg-bg-tertiary transition-colors flex flex-col items-center text-center"
         >
           <Ring
             value={todayCalories}
             max={calorieTarget}
-            size={84}
-            strokeWidth={7}
+            size={120}
+            strokeWidth={8}
             color="var(--nutrition)"
           >
-            <Flame size={18} className="text-nutrition" />
-          </Ring>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 mb-1">
-              <span className="label">Calories</span>
+            <div className="flex flex-col items-center justify-center leading-tight">
+              <Flame size={12} className="text-nutrition/80 mb-0.5" />
+              <span
+                className="num font-semibold text-2xl tabular-nums"
+                style={{ color: "var(--nutrition)" }}
+              >
+                {todayCalories}
+              </span>
+              <span className="text-[9px] text-text-tertiary mt-0.5">
+                kcal
+              </span>
             </div>
-            <p
-              className="num-hero text-2xl sm:text-3xl font-semibold leading-none tabular-nums"
-              style={{ color: "var(--nutrition)" }}
-            >
-              {todayCalories}
-            </p>
-            <p className="text-[10px] text-text-tertiary mt-1">
-              <span className="num">{caloriePct}</span>% / {calorieTarget} kcal
-            </p>
-          </div>
+          </Ring>
+          <p className="label mt-3">Calories</p>
+          <p className="text-[10px] text-text-tertiary mt-0.5 num">
+            {caloriePct}% · cible {calorieTarget}
+          </p>
         </Link>
 
         {/* Séances ring */}
         <Link
           href="/muscu"
-          className="group surface-1 p-5 tap-scale hover:bg-bg-tertiary transition-colors flex items-center gap-4"
+          className="group surface-1 p-5 tap-scale hover:bg-bg-tertiary transition-colors flex flex-col items-center text-center"
         >
           <Ring
             value={completedThisWeek}
             max={sessionsPlanned}
-            size={84}
-            strokeWidth={7}
+            size={120}
+            strokeWidth={8}
             color="var(--muscu)"
           >
-            <Activity size={18} className="text-muscu" />
-          </Ring>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 mb-1">
-              <span className="label">Séances</span>
-            </div>
-            <p
-              className="num-hero text-2xl sm:text-3xl font-semibold leading-none tabular-nums"
-              style={{ color: "var(--muscu)" }}
-            >
-              {completedThisWeek}
-              <span className="text-base text-text-tertiary font-normal">
-                /{sessionsPlanned}
+            <div className="flex flex-col items-center justify-center leading-tight">
+              <Activity size={12} className="text-muscu/80 mb-0.5" />
+              <span
+                className="num font-semibold text-2xl tabular-nums"
+                style={{ color: "var(--muscu)" }}
+              >
+                {completedThisWeek}
+                <span className="text-sm text-text-tertiary font-normal">
+                  /{sessionsPlanned}
+                </span>
               </span>
-            </p>
-            <p className="text-[10px] text-text-tertiary mt-1">
-              <span className="num">{sessionsPct}</span>% cette semaine
-            </p>
-          </div>
+              <span className="text-[9px] text-text-tertiary mt-0.5">
+                séances
+              </span>
+            </div>
+          </Ring>
+          <p className="label mt-3">Cette semaine</p>
+          <p className="text-[10px] text-text-tertiary mt-0.5 num">
+            {sessionsPct}% complétées
+          </p>
         </Link>
       </section>
 
