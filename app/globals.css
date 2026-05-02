@@ -12,12 +12,14 @@
     --bg-elevated: #1F1F23;
     --bg-hover: #26262B;
 
-    /* Accent primaire : Electric Lime — énergie, performance */
-    --accent: #D4FF4F;
-    --accent-hover: #C7F026;
-    --accent-pressed: #B8E01C;
-    --accent-subtle: rgba(212, 255, 79, 0.08);
-    --accent-glow: rgba(212, 255, 79, 0.32);
+    /* Accent primaire : Electric Lime — énergie, performance.
+       v3 (avril 2026) : saturation poussée pour matcher les refs fitness
+       (PulseUp, Antony Thomas, Belly Fat Shredder). Pure neon green. */
+    --accent: #D4FF00;
+    --accent-hover: #C7F000;
+    --accent-pressed: #B8E000;
+    --accent-subtle: rgba(212, 255, 0, 0.10);
+    --accent-glow: rgba(212, 255, 0, 0.38);
     --accent-ink: #0A0A0B; /* text on accent bg */
 
     /* Accent secondaire : Soft Lavender — recovery, T1D, calm data */
@@ -44,8 +46,8 @@
     --error: #FF6B6B;
     --info: #7FC7FF;
 
-    /* Catégories (hue par domaine) */
-    --muscu: #D4FF4F;     /* lime = performance */
+    /* Catégories (hue par domaine) — alignées sur l'accent saturé */
+    --muscu: #D4FF00;     /* lime = performance */
     --running: #7FC7FF;   /* sky = cardio */
     --nutrition: #FFAE5C; /* amber = fuel */
     --diabete: #B4A7FF;   /* lavender = clinical */
@@ -57,7 +59,7 @@
     --glucose-critical: #FF3B3B;
 
     /* Data chart accents */
-    --chart-1: #D4FF4F;
+    --chart-1: #D4FF00;
     --chart-2: #7FC7FF;
     --chart-3: #FFAE5C;
     --chart-4: #B4A7FF;
