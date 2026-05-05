@@ -442,21 +442,26 @@ export default function RunningPage() {
         </div>
 
         <div className="surface-1 p-5 sm:p-6 lg:p-8 relative overflow-hidden">
-          {/* Glow phase color */}
+          {/* Glow phase color — bumped opacity pour matcher refs fitness */}
           <div
             aria-hidden
-            className="absolute -top-32 -right-32 h-80 w-80 rounded-full opacity-[0.10] blur-3xl"
+            className="absolute -top-32 -right-32 h-80 w-80 rounded-full opacity-[0.16] blur-3xl"
             style={{ background: phaseColor(currentWeekData.phase) }}
+          />
+          <div
+            aria-hidden
+            className="absolute -bottom-24 -left-20 h-56 w-56 rounded-full opacity-[0.06] blur-3xl"
+            style={{ background: "var(--running)" }}
           />
 
           {/* Mobile-first : top bar avec week number + chevrons */}
           <div className="relative">
             <div className="flex items-start justify-between gap-2 mb-4 sm:hidden">
               <div className="min-w-0">
-                <h1 className="text-2xl font-semibold tracking-tight leading-none">
-                  Semaine <span className="num">{currentWeekData.weekNum}</span>
+                <h1 className="text-3xl font-semibold tracking-tight leading-[1.05]">
+                  Semaine <span className="num text-running">{currentWeekData.weekNum}</span>
                 </h1>
-                <p className="text-[11px] text-text-tertiary mt-1.5">
+                <p className="text-[11px] text-text-tertiary mt-2">
                   <span className="num text-text-secondary">{currentWeekData.volume}</span> km ·{" "}
                   <span className="num text-text-secondary">{weekSessionsTotal}</span> séances
                 </p>
@@ -507,8 +512,8 @@ export default function RunningPage() {
                 {/* Desktop header */}
                 <div className="hidden sm:flex items-start justify-between gap-2 mb-3">
                   <div className="min-w-0">
-                    <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight leading-none">
-                      Semaine <span className="num">{currentWeekData.weekNum}</span>
+                    <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight leading-[1.05]">
+                      Semaine <span className="num text-running">{currentWeekData.weekNum}</span>
                     </h1>
                     <p className="text-xs text-text-tertiary mt-1.5 truncate">
                       <span className="num text-text-secondary">{currentWeekData.volume}</span> km prévus ·{" "}

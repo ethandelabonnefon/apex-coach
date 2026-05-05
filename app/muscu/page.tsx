@@ -374,33 +374,50 @@ function TodaySessionHero({
   const totalSets = session.exercises.reduce((s, e) => s + e.sets, 0);
   return (
     <div className="surface-1 p-6 lg:p-8 relative overflow-hidden">
+      {/* Glow muscu (lime) plus visible — signature catégorielle. */}
       <div
         aria-hidden
-        className="absolute -top-24 -right-24 h-64 w-64 rounded-full opacity-[0.08] blur-3xl"
+        className="absolute -top-24 -right-24 h-72 w-72 rounded-full opacity-[0.15] blur-3xl"
         style={{ background: "var(--muscu)" }}
       />
+      <div
+        aria-hidden
+        className="absolute -bottom-32 -left-20 h-56 w-56 rounded-full opacity-[0.06] blur-3xl"
+        style={{ background: "var(--accent-2)" }}
+      />
       <div className="relative">
-        <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight mb-1">
+        <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight mb-2 leading-[1.05]">
           {session.name}
         </h1>
-        <p className="text-sm text-text-secondary mb-5">
-          {session.focus} · <span className="num">{session.duration}</span>min ·{" "}
-          <span className="num">{session.exercises.length}</span> exos ·{" "}
-          <span className="num">{totalSets}</span> sets · RIR <span className="num">{rirTarget}</span> ({phaseName})
-        </p>
+        <div className="flex flex-wrap items-center gap-1.5 mb-6">
+          <Badge variant="muscu" size="sm">
+            {session.focus}
+          </Badge>
+          <Badge variant="default" size="sm">
+            {session.duration}min
+          </Badge>
+          <Badge variant="default" size="sm">
+            {session.exercises.length} exos · {totalSets} sets
+          </Badge>
+          <Badge variant="default" size="sm">
+            RIR {rirTarget} · {phaseName}
+          </Badge>
+        </div>
 
         {/* Exercises list — BIG & READABLE */}
         <div className="space-y-2 mb-6">
           {session.exercises.map((ex) => (
             <div
               key={ex.order}
-              className="flex items-center gap-3 py-2.5 px-3 rounded-lg bg-bg-tertiary"
+              className="flex items-center gap-3 py-3 px-4 rounded-xl bg-bg-tertiary border border-border-subtle"
             >
-              <span className="num text-xs text-text-tertiary w-5 flex-shrink-0">
-                {ex.order}
+              <span className="num text-xs text-text-tertiary w-6 flex-shrink-0 font-semibold">
+                {String(ex.order).padStart(2, "0")}
               </span>
-              <span className="flex-1 text-sm text-text-primary truncate">{ex.name}</span>
-              <span className="num text-base font-semibold text-muscu whitespace-nowrap">
+              <span className="flex-1 text-sm font-medium text-text-primary truncate">
+                {ex.name}
+              </span>
+              <span className="num text-base font-semibold text-muscu whitespace-nowrap tabular-nums">
                 {ex.sets}×{ex.reps}
               </span>
             </div>
@@ -428,8 +445,14 @@ function RestDayHero({
   nextSession: HeroSession | null | undefined;
 }) {
   return (
-    <div className="surface-1 p-6 lg:p-8">
-      <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight mb-1">
+    <div className="surface-1 p-6 lg:p-8 relative overflow-hidden">
+      <div
+        aria-hidden
+        className="absolute -top-24 -right-24 h-56 w-56 rounded-full opacity-[0.08] blur-3xl"
+        style={{ background: "var(--accent-2)" }}
+      />
+      <div className="relative">
+      <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight mb-2 leading-[1.05]">
         Jour de repos.
       </h1>
       <p className="text-sm text-text-secondary mb-5">
@@ -455,6 +478,7 @@ function RestDayHero({
           <ChevronRight size={16} className="text-text-tertiary group-hover:text-muscu transition-colors" />
         </Link>
       )}
+      </div>
     </div>
   );
 }
