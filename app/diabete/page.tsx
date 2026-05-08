@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
-import { calculateBolus, getInsulinOnBoard } from "@/lib/insulin-calculator";
+import { calculateBolus, getInsulinOnBoard, getDigestiveComplexity } from "@/lib/insulin-calculator";
 import { DIABETES_CONFIG } from "@/lib/constants";
 import type { MealTime, SplitDoseReminder } from "@/types";
 import type { GlucoseTrend } from "@/lib/libre-link/utils";
@@ -13,6 +13,14 @@ import GlucoseWidget from "@/components/glucose/GlucoseWidget";
 import GlucoseChart from "@/components/glucose/GlucoseChart";
 import CorrectionSuggestion from "@/components/glucose/CorrectionSuggestion";
 import PushOptIn from "@/components/glucose/PushOptIn";
+import {
+  MEAL_TAGS,
+  MEAL_SIZES,
+  inferMacrosFromTag,
+  type MealTagId,
+  type MealSizeId,
+} from "@/lib/meal-tags";
+import { getMealTypeHistory, type ArchivePoint } from "@/lib/meal-analytics";
 import {
   Droplet,
   Syringe,
@@ -32,7 +40,30 @@ import {
   Clock,
   Plus,
   CheckCircle2,
+  Wheat,
+  Soup,
+  Pizza,
+  Sandwich,
+  Salad,
+  Cookie,
+  Beef,
+  Croissant,
+  UtensilsCrossed,
+  Info,
 } from "lucide-react";
+
+// Mapping iconName (lib/meal-tags) → composant lucide-react
+const MEAL_TAG_ICONS = {
+  Wheat,
+  Soup,
+  Pizza,
+  Sandwich,
+  Salad,
+  Cookie,
+  Beef,
+  Croissant,
+  UtensilsCrossed,
+} as const;
 
 type GlucoseTone = "low" | "normal" | "high" | "critical";
 
@@ -123,6 +154,40 @@ export default function DiabetePage() {
   const [proteinGrams, setProteinGrams] = useState<number>(0);
   const [showMacros, setShowMacros] = useState(false);
   const [trendArrow, setTrendArrow] = useState<number | undefined>(undefined);
+
+  // ─── Phase 11 Bloc 2 — Meal tag + size ────────
+  const [mealTag, setMealTag] = useState<MealTagId | undefined>(undefined);
+  const [mealSize, setMealSize] = useState<MealSizeId>("normal");
+  /** Si l'user édite manuellement les macros, on n'écrase plus avec le tag. */
+  const [macrosManuallyEdited, setMacrosManuallyEdited] = useState(false);
+
+  // Quand un tag est sélectionné (et que l'user n'a pas override les macros),
+  // pré-remplir lipides + protéines + déplier le block macros.
+  useEffect(() => {
+    if (!mealTag || macrosManuallyEdited) return;
+    const macros = inferMacrosFromTag(mealTag, mealSize);
+    setFatGrams(macros.fatGrams);
+    setProteinGrams(macros.proteinGrams);
+    if (macros.fatGrams > 0 || macros.proteinGrams > 0) {
+      setShowMacros(true);
+    }
+  }, [mealTag, mealSize, macrosManuallyEdited]);
+
+  // ─── Archive points pour meal analytics (Bloc 2.3) ──────────
+  // Fetch léger one-shot au mount + à chaque nouvelle injection
+  // (refresh débouncé via insulinLogs.length).
+  const [archivePoints, setArchivePoints] = useState<ArchivePoint[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/glucose/archive?days=30", { cache: "no-store" })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (cancelled || !data?.points) return;
+        setArchivePoints(data.points as ArchivePoint[]);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [/* refetch quand on log */]);
 
   // ─── IOB ──────────────────────────────────────
   // Tick toutes les 60s pour rafraîchir l'IOB en temps réel.
@@ -251,6 +316,8 @@ export default function DiabetePage() {
       fatGrams: fatGrams > 0 ? fatGrams : undefined,
       proteinGrams: proteinGrams > 0 ? proteinGrams : undefined,
       trendArrow,
+      mealTag,
+      mealSize: mealTag ? mealSize : undefined,
     });
 
     // ─── Programmer le rappel split dose ──────────
@@ -579,6 +646,77 @@ export default function DiabetePage() {
           </button>
         )}
 
+        {/* Quick-tags repas (Phase 11 Bloc 2.1) */}
+        <div className="mb-4">
+          <p className="label mb-2">Type de repas</p>
+          <div className="grid grid-cols-3 sm:grid-cols-3 gap-2">
+            {MEAL_TAGS.map((t) => {
+              const Icon = MEAL_TAG_ICONS[t.iconName as keyof typeof MEAL_TAG_ICONS] ?? UtensilsCrossed;
+              const active = mealTag === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => {
+                    if (active) {
+                      // Désélection : on garde les macros déjà saisies
+                      setMealTag(undefined);
+                    } else {
+                      setMealTag(t.id);
+                      setMacrosManuallyEdited(false); // re-prefill from tag
+                    }
+                  }}
+                  className={`flex flex-col items-center gap-1 py-2.5 px-1 text-[11px] font-medium rounded-lg border transition-all tap-scale ${
+                    active
+                      ? "bg-diabete/15 border-diabete/40 text-diabete"
+                      : "bg-bg-tertiary border-border-subtle text-text-secondary hover:border-border-default"
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span className="leading-tight text-center">{t.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          {mealTag && (
+            <div className="mt-3 grid grid-cols-3 gap-2 animate-slide-up">
+              {MEAL_SIZES.map((s) => {
+                const active = mealSize === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      setMealSize(s.id);
+                      setMacrosManuallyEdited(false);
+                    }}
+                    className={`py-2 text-xs font-medium rounded-lg border transition-all tap-scale ${
+                      active
+                        ? "bg-diabete/15 border-diabete/40 text-diabete"
+                        : "bg-bg-tertiary border-border-subtle text-text-secondary hover:border-border-default"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {/* Historique par type de repas (Bloc 2.3) */}
+          {mealTag && (() => {
+            const history = getMealTypeHistory(insulinLogs, archivePoints, mealTag, 5);
+            if (history.count < 3 || !history.suggestion) return null;
+            return (
+              <div className="mt-3 rounded-lg bg-accent-2/10 border border-accent-2/25 px-3 py-2 flex items-start gap-2">
+                <Info className="w-3.5 h-3.5 text-accent-2 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-text-secondary leading-snug">
+                  {history.suggestion}
+                </p>
+              </div>
+            );
+          })()}
+        </div>
+
         {/* Macros optionnelles (FPU) */}
         <div className="mb-5">
           <button
@@ -587,7 +725,7 @@ export default function DiabetePage() {
             className="text-xs text-text-tertiary hover:text-diabete transition-colors flex items-center gap-1.5"
           >
             {showMacros ? <ChevronDown className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-            Lipides &amp; protéines (optionnel)
+            Lipides &amp; protéines {mealTag ? "(pré-remplis)" : "(optionnel)"}
           </button>
           {showMacros && (
             <div className="mt-3 grid grid-cols-2 gap-3 animate-slide-up">
@@ -595,7 +733,7 @@ export default function DiabetePage() {
                 label="Lipides"
                 unit="g"
                 value={fatGrams}
-                onChange={setFatGrams}
+                onChange={(v) => { setFatGrams(v); setMacrosManuallyEdited(true); }}
                 min={0}
                 max={200}
               />
@@ -603,7 +741,7 @@ export default function DiabetePage() {
                 label="Protéines"
                 unit="g"
                 value={proteinGrams}
-                onChange={setProteinGrams}
+                onChange={(v) => { setProteinGrams(v); setMacrosManuallyEdited(true); }}
                 min={0}
                 max={200}
               />
@@ -924,6 +1062,21 @@ export default function DiabetePage() {
             </div>
           )}
 
+          {/* Digestive complexity hint (Bloc 2.2) */}
+          {(fatGrams > 0 || proteinGrams > 0) && (() => {
+            const dc = getDigestiveComplexity(carbsGrams, fatGrams, proteinGrams);
+            const tone =
+              dc.level === 'complex' ? 'bg-error/10 border-error/30 text-error'
+              : dc.level === 'moderate' ? 'bg-warning/10 border-warning/30 text-warning'
+              : 'bg-success/10 border-success/30 text-success';
+            return (
+              <div className={`mb-3 rounded-lg border px-3 py-2 flex items-start gap-2 ${tone}`}>
+                <Clock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <p className="text-[11px] leading-snug">{dc.message}</p>
+              </div>
+            );
+          })()}
+
           <button
             type="button"
             onClick={handleLogInjection}
@@ -1115,11 +1268,17 @@ export default function DiabetePage() {
                       </button>
                     </div>
                   </div>
-                  <div className="num flex items-center gap-3 text-[11px] text-text-tertiary">
+                  <div className="num flex items-center gap-3 text-[11px] text-text-tertiary flex-wrap">
                     <span>{log.carbsGrams}g gluc.</span>
                     {(log.fatGrams || log.proteinGrams) && (
                       <span>
                         {log.fatGrams ?? 0}g lip · {log.proteinGrams ?? 0}g prot
+                      </span>
+                    )}
+                    {log.mealTag && (
+                      <span className="text-accent-2">
+                        #{log.mealTag}
+                        {log.mealSize && log.mealSize !== "normal" ? ` · ${log.mealSize}` : ""}
                       </span>
                     )}
                     <span>
