@@ -36,6 +36,16 @@ export interface GlucoseStatsSummary {
   hyperPct: number;
   hypoCount: number;
   hyperCount: number;
+  /** Phase 11 Bloc 4 — Glucose Management Indicator (≈ HbA1c %).
+   *  Formule : 3.31 + 0.02392 × meanGlucose_mg_dL. Référence ADA 2018. */
+  gmi: number;
+  /** Glycemia Risk Index (Klonoff et al.) — score composite 0-100.
+   *  Pondère vlow/low/vhigh/high. Plus c'est haut, plus c'est risqué. */
+  gri: number;
+  /** % temps < 54 mg/dL (vlow, hypo sévère). */
+  vLowPct: number;
+  /** % temps > 250 mg/dL (vhigh, hyper sévère). */
+  vHighPct: number;
 }
 
 export interface TimeBucketStats {
@@ -138,6 +148,10 @@ function round(v: number, d = 0): number {
   return Math.round(v * f) / f;
 }
 
+// Seuil sévère pour GRI (vlow/vhigh distinct des bornes targetRange standards)
+const VLOW_THRESHOLD = 54;
+const VHIGH_THRESHOLD = 250;
+
 function statsForValues(values: number[]): GlucoseStatsSummary {
   if (values.length === 0) {
     return {
@@ -152,6 +166,10 @@ function statsForValues(values: number[]): GlucoseStatsSummary {
       hyperPct: 0,
       hypoCount: 0,
       hyperCount: 0,
+      gmi: 0,
+      gri: 0,
+      vLowPct: 0,
+      vHighPct: 0,
     };
   }
   const avg = values.reduce((s, v) => s + v, 0) / values.length;
@@ -163,16 +181,33 @@ function statsForValues(values: number[]): GlucoseStatsSummary {
     low = 0,
     target = 0,
     high = 0,
-    hyper = 0;
+    hyper = 0,
+    vLow = 0,
+    vHigh = 0;
   for (const v of values) {
+    if (v < VLOW_THRESHOLD) vLow++;
     if (v < GLUCOSE_THRESHOLDS.hypo) hypo++;
     else if (v < GLUCOSE_THRESHOLDS.low) low++;
     else if (v <= GLUCOSE_THRESHOLDS.high) target++;
     else if (v <= GLUCOSE_THRESHOLDS.hyper) high++;
     else hyper++;
+    if (v > VHIGH_THRESHOLD) vHigh++;
   }
 
   const total = values.length;
+  const vLowPct = pct(vLow, total);
+  const lowPct = pct(low, total);
+  const highPct = pct(high, total);
+  const vHighPct = pct(vHigh, total);
+
+  // GMI ≈ HbA1c (formule Bergenstal et al. 2018)
+  const gmi = round(3.31 + 0.02392 * avg, 2);
+
+  // GRI (Klonoff et al. 2022)
+  // GRI = 3.0×vLow + 2.4×low + 1.6×vHigh + 0.8×high (capé à 100)
+  const griRaw = 3.0 * vLowPct + 2.4 * lowPct + 1.6 * vHighPct + 0.8 * highPct;
+  const gri = Math.max(0, Math.min(100, round(griRaw, 1)));
+
   return {
     count: total,
     avg: round(avg),
@@ -180,11 +215,15 @@ function statsForValues(values: number[]): GlucoseStatsSummary {
     cv: round(cv),
     tirPct: pct(target, total),
     hypoPct: pct(hypo, total),
-    lowPct: pct(low, total),
-    highPct: pct(high, total),
+    lowPct,
+    highPct,
     hyperPct: pct(hyper, total),
     hypoCount: hypo,
     hyperCount: hyper,
+    gmi,
+    gri,
+    vLowPct,
+    vHighPct,
   };
 }
 
@@ -558,4 +597,138 @@ export function buildWeeklyReport(input: BuildReportInput): WeeklyReport {
     byProfile,
     riskyHours,
   };
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Phase 11 Bloc 4 — Score quotidien + AGP simplifié
+// ───────────────────────────────────────────────────────────────────────
+
+export interface DailyScore {
+  /** ISO date "YYYY-MM-DD" (jour calendaire local). */
+  date: string;
+  /** Timestamp ms du début de jour (00:00 local). */
+  startMs: number;
+  count: number;
+  avg: number | null;
+  cv: number | null;
+  tirPct: number;
+  hypoCount: number;
+  /** Score composite 0-100. Null si data insuffisante (count < 24 = moins de 6h). */
+  score: number | null;
+}
+
+/**
+ * Score quotidien :
+ *   score = 0.6×TIR + 0.2×(100−CV) + 0.2×hypoFreeBonus
+ *   hypoFreeBonus = 100 si 0 hypo, 50 si 1, 0 si 2+
+ * Renvoie un Map<dateISO, DailyScore>. Les jours absents de l'archive ne
+ * figurent pas dans le résultat (le composant Calendar décide quoi afficher).
+ */
+export function buildDailyScores(points: ArchivedPoint[]): DailyScore[] {
+  if (points.length === 0) return [];
+  // Group par jour calendaire local (YYYY-MM-DD)
+  const byDay = new Map<string, ArchivedPoint[]>();
+  for (const p of points) {
+    const d = new Date(p.t);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key)!.push(p);
+  }
+
+  const result: DailyScore[] = [];
+  for (const [dateKey, dayPoints] of byDay.entries()) {
+    const [yyyy, mm, dd] = dateKey.split("-").map(Number);
+    const startMs = new Date(yyyy, mm - 1, dd, 0, 0, 0, 0).getTime();
+
+    if (dayPoints.length < 24) {
+      result.push({
+        date: dateKey,
+        startMs,
+        count: dayPoints.length,
+        avg: null,
+        cv: null,
+        tirPct: 0,
+        hypoCount: 0,
+        score: null,
+      });
+      continue;
+    }
+
+    const stats = statsForValues(dayPoints.map((p) => p.value));
+    const hypoFreeBonus = stats.hypoCount === 0 ? 100 : stats.hypoCount === 1 ? 50 : 0;
+    const score = round(
+      0.6 * stats.tirPct + 0.2 * Math.max(0, 100 - stats.cv) + 0.2 * hypoFreeBonus,
+      0,
+    );
+    result.push({
+      date: dateKey,
+      startMs,
+      count: stats.count,
+      avg: stats.avg,
+      cv: stats.cv,
+      tirPct: stats.tirPct,
+      hypoCount: stats.hypoCount,
+      score,
+    });
+  }
+
+  return result.sort((a, b) => a.startMs - b.startMs);
+}
+
+export interface AgpSlot {
+  /** Minute du jour (0-1439, par tranche de 30min — 48 valeurs). */
+  minuteOfDay: number;
+  /** "00:00", "00:30", … */
+  label: string;
+  count: number;
+  /** Valeurs triées en ordre croissant pour calculer percentiles. */
+  median: number | null;
+  p10: number | null;
+  p25: number | null;
+  p75: number | null;
+  p90: number | null;
+}
+
+function quantile(sortedAsc: number[], q: number): number | null {
+  if (sortedAsc.length === 0) return null;
+  if (sortedAsc.length === 1) return sortedAsc[0];
+  const pos = (sortedAsc.length - 1) * q;
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  const frac = pos - lo;
+  return sortedAsc[lo] + (sortedAsc[hi] - sortedAsc[lo]) * frac;
+}
+
+/**
+ * AGP simplifié (Ambulatory Glucose Profile) sur 14j (configurable).
+ * 48 tranches de 30min (00:00, 00:30, … 23:30) avec médiane + P10/P25/P75/P90.
+ * Standard : J. Bergenstal et al. — visualisation "modal day" pour
+ * détecter les patterns récurrents (dawn, mid-day, post-meal…).
+ */
+export function buildAgpProfile(points: ArchivedPoint[]): AgpSlot[] {
+  // 48 buckets de 30min
+  const buckets: number[][] = Array.from({ length: 48 }, () => []);
+  for (const p of points) {
+    const d = new Date(p.t);
+    const slotIdx = Math.floor((d.getHours() * 60 + d.getMinutes()) / 30);
+    if (slotIdx >= 0 && slotIdx < 48) buckets[slotIdx].push(p.value);
+  }
+
+  return buckets.map((vals, idx) => {
+    const sorted = [...vals].sort((a, b) => a - b);
+    const startMin = idx * 30;
+    const hh = Math.floor(startMin / 60);
+    const mm = startMin % 60;
+    const label = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+    return {
+      minuteOfDay: startMin,
+      label,
+      count: sorted.length,
+      median: sorted.length === 0 ? null : round(quantile(sorted, 0.5)!),
+      p10: sorted.length === 0 ? null : round(quantile(sorted, 0.1)!),
+      p25: sorted.length === 0 ? null : round(quantile(sorted, 0.25)!),
+      p75: sorted.length === 0 ? null : round(quantile(sorted, 0.75)!),
+      p90: sorted.length === 0 ? null : round(quantile(sorted, 0.9)!),
+    };
+  });
 }

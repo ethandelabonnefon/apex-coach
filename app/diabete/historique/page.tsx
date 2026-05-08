@@ -33,6 +33,8 @@ import {
 } from "recharts";
 import { useStore } from "@/lib/store";
 import { GLUCOSE_THRESHOLDS } from "@/lib/libre-link/config";
+import GlucoseCalendar from "@/components/glucose/GlucoseCalendar";
+import AGPChart from "@/components/glucose/AGPChart";
 import {
   ArrowLeft,
   AlertTriangle,
@@ -45,6 +47,8 @@ import {
   Lightbulb,
   Loader2,
   RefreshCw,
+  LayoutGrid,
+  LineChart as LineIcon,
 } from "lucide-react";
 
 type ArchivePoint = {
@@ -93,6 +97,10 @@ function pct(n: number, total: number): number {
   return Math.round((n / total) * 100);
 }
 
+// Phase 11 Bloc 4 — GMI/GRI seuils sévères
+const VLOW = 54;
+const VHIGH = 250;
+
 function stats(points: ArchivePoint[]) {
   if (points.length === 0) {
     return {
@@ -107,6 +115,8 @@ function stats(points: ArchivePoint[]) {
       hyperPct: 0,
       hypoCount: 0,
       hyperCount: 0,
+      gmi: 0,
+      gri: 0,
     };
   }
   const values = points.map((p) => p.value);
@@ -115,16 +125,29 @@ function stats(points: ArchivePoint[]) {
   const sd = Math.sqrt(variance);
   const cv = avg > 0 ? (sd / avg) * 100 : 0;
 
-  let hypo = 0, low = 0, target = 0, high = 0, hyper = 0;
+  let hypo = 0, low = 0, target = 0, high = 0, hyper = 0, vLow = 0, vHigh = 0;
   for (const v of values) {
+    if (v < VLOW) vLow++;
     if (v < GLUCOSE_THRESHOLDS.hypo) hypo++;
     else if (v < GLUCOSE_THRESHOLDS.low) low++;
     else if (v <= GLUCOSE_THRESHOLDS.high) target++;
     else if (v <= GLUCOSE_THRESHOLDS.hyper) high++;
     else hyper++;
+    if (v > VHIGH) vHigh++;
   }
 
   const total = values.length;
+  const vLowPct = pct(vLow, total);
+  const lowPct = pct(low, total);
+  const highPct = pct(high, total);
+  const vHighPct = pct(vHigh, total);
+
+  // GMI ≈ HbA1c (Bergenstal et al. 2018)
+  const gmi = 3.31 + 0.02392 * avg;
+  // GRI (Klonoff et al. 2022), capé 0-100
+  const griRaw = 3.0 * vLowPct + 2.4 * lowPct + 1.6 * vHighPct + 0.8 * highPct;
+  const gri = Math.max(0, Math.min(100, Math.round(griRaw * 10) / 10));
+
   return {
     count: total,
     avg: Math.round(avg),
@@ -132,11 +155,13 @@ function stats(points: ArchivePoint[]) {
     cv: Math.round(cv),
     tirPct: pct(target, total),
     hypoPct: pct(hypo, total),
-    lowPct: pct(low, total),
-    highPct: pct(high, total),
+    lowPct,
+    highPct,
     hyperPct: pct(hyper, total),
     hypoCount: hypo,
     hyperCount: hyper,
+    gmi: Math.round(gmi * 100) / 100,
+    gri,
   };
 }
 
@@ -196,6 +221,9 @@ export default function DiabeteHistoriquePage() {
   const [data, setData] = useState<ArchiveResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Phase 11 Bloc 4 — toggle Vue courbe vs Vue AGP pour la section line chart
+  const [chartView, setChartView] = useState<"line" | "agp">("line");
 
   const insulinLogs = useStore((s) => s.insulinLogs);
   const diabetesConfig = useStore((s) => s.diabetesConfig);
@@ -595,6 +623,40 @@ export default function DiabeteHistoriquePage() {
               />
             </div>
 
+            {/* Phase 11 Bloc 4 — Métriques cliniques (GMI + GRI) */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 mt-3">
+              <StatTile
+                label="GMI"
+                value={overallStats.gmi.toFixed(1).replace(".", ",")}
+                unit="%"
+                hint="≈ HbA1c estimée"
+                tone={overallStats.gmi < 7 ? "success" : overallStats.gmi < 8 ? "warning" : "error"}
+              />
+              <StatTile
+                label="GRI"
+                value={`${Math.round(overallStats.gri)}`}
+                unit="/ 100"
+                hint={
+                  overallStats.gri < 20
+                    ? "Zone A · excellent"
+                    : overallStats.gri < 40
+                    ? "Zone B · bon"
+                    : overallStats.gri < 60
+                    ? "Zone C · à améliorer"
+                    : overallStats.gri < 80
+                    ? "Zone D · mauvais"
+                    : "Zone E · très mauvais"
+                }
+                tone={
+                  overallStats.gri < 20
+                    ? "success"
+                    : overallStats.gri < 60
+                    ? "warning"
+                    : "error"
+                }
+              />
+            </div>
+
             {/* Barre répartition zones */}
             <div className="mt-5">
               <p className="label mb-2">Répartition temps par zone</p>
@@ -654,6 +716,9 @@ export default function DiabeteHistoriquePage() {
               </div>
             </div>
           </section>
+
+          {/* Phase 11 Bloc 4.3 — Calendrier 30j */}
+          <GlucoseCalendar points={data?.points ?? []} days={Math.min(30, days)} />
 
           {/* Pattern par heure (bar chart 24h) */}
           <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">
@@ -727,6 +792,31 @@ export default function DiabeteHistoriquePage() {
             })()}
           </section>
 
+          {/* Toggle Vue courbe / Vue AGP (Phase 11 Bloc 4.4) */}
+          {chartView === "agp" ? (
+            <>
+              <div className="flex items-center justify-end mb-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setChartView("line")}
+                  className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-md border border-border-subtle text-text-secondary hover:text-diabete hover:border-diabete/40 transition-colors tap-scale"
+                >
+                  <LineIcon className="w-3 h-3" />
+                  Vue courbe
+                </button>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-md border border-diabete/40 bg-diabete/10 text-diabete tap-scale"
+                  disabled
+                >
+                  <LayoutGrid className="w-3 h-3" />
+                  Vue AGP
+                </button>
+              </div>
+              <AGPChart points={data?.points ?? []} days={Math.min(14, days)} />
+            </>
+          ) : (
+          <>
           {/* Line chart de la période */}
           <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">
             <div className="flex items-center justify-between mb-3">
@@ -734,9 +824,29 @@ export default function DiabeteHistoriquePage() {
                 <TrendingUp className="w-4 h-4 text-diabete" />
                 <h2 className="text-base font-semibold text-text-primary">Courbe {days}j</h2>
               </div>
-              <div className="flex items-center gap-2 text-[10px] text-text-tertiary">
-                <Syringe className="w-3 h-3 text-accent-2" />
-                <span>{injectionsInRange.length} injections</span>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-md border border-diabete/40 bg-diabete/10 text-diabete tap-scale"
+                    disabled
+                  >
+                    <LineIcon className="w-3 h-3" />
+                    Courbe
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartView("agp")}
+                    className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-md border border-border-subtle text-text-secondary hover:text-diabete hover:border-diabete/40 transition-colors tap-scale"
+                  >
+                    <LayoutGrid className="w-3 h-3" />
+                    AGP
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] text-text-tertiary">
+                  <Syringe className="w-3 h-3 text-accent-2" />
+                  <span>{injectionsInRange.length} injections</span>
+                </div>
               </div>
             </div>
             <div className="w-full h-64 sm:h-80">
@@ -824,6 +934,8 @@ export default function DiabeteHistoriquePage() {
               )}
             </p>
           </section>
+          </>
+          )}
 
           {/* Meta debug */}
           {data?.meta && (
