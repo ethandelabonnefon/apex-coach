@@ -21,6 +21,52 @@ function getRatioForMeal(config: DiabetesConfig, mealTime: MealTime): number {
   return config.ratios.lunch;
 }
 
+/** Tendance Libre numérique (Abbott) → ajustement insuline en U.
+ *  Phase 11 — slide rule publié pour bolus pré-prandial. */
+function trendAdjustmentUnits(trend?: number): number {
+  switch (trend) {
+    case 1: // SingleDown ↓↓
+      return -1.0;
+    case 2: // FortyFiveDown ↘
+      return -0.5;
+    case 3: // Flat →
+      return 0;
+    case 4: // FortyFiveUp ↗
+      return 0.5;
+    case 5: // SingleUp ↑↑
+      return 1.0;
+    default:
+      return 0;
+  }
+}
+
+function trendArrowChar(trend?: number): string {
+  switch (trend) {
+    case 1: return '↓↓';
+    case 2: return '↘';
+    case 3: return '→';
+    case 4: return '↗';
+    case 5: return '↑↑';
+    default: return '';
+  }
+}
+
+export interface BolusResult {
+  carbBolus: number;
+  correctionBolus: number;
+  fpuBolus: number;
+  trendBolus: number;
+  totalBolus: number;
+  adjustments: string[];
+  reasoning: string[];
+  digestiveComplexity: 'simple' | 'moderate' | 'complex';
+  splitDose?: {
+    now: number;
+    later: number;
+    delayMinutes: number;
+  };
+}
+
 export function calculateBolus(
   carbsGrams: number,
   mealTime: MealTime,
@@ -33,13 +79,13 @@ export function calculateBolus(
    *  (jamais le bolus repas) afin d'éviter le stacking quand l'utilisateur fait
    *  plusieurs corrections d'affilée. Phase 11. */
   currentIOB: number = 0,
-): {
-  carbBolus: number;
-  correctionBolus: number;
-  totalBolus: number;
-  adjustments: string[];
-  reasoning: string[];
-} {
+  /** Phase 11 — lipides du repas (g) pour calcul FPU + split dose. */
+  fatGrams: number = 0,
+  /** Phase 11 — protéines du repas (g) pour calcul FPU. */
+  proteinGrams: number = 0,
+  /** Phase 11 — flèche de tendance Libre (1..5) au moment du bolus. */
+  trendArrow?: number,
+): BolusResult {
   const config = configOverride || DIABETES_CONFIG;
   const ratio = getRatioForMeal(config, mealTime);
   const isf = config.insulinSensitivityFactor;
@@ -47,6 +93,8 @@ export function calculateBolus(
 
   let carbBolus = carbsGrams / ratio;
   let correctionBolus = 0;
+  let fpuBolus = 0;
+  let trendBolus = 0;
   const adjustments: string[] = [];
   const reasoning: string[] = [];
 
@@ -63,7 +111,7 @@ export function calculateBolus(
   // le raisonnement : c'est juste une correction (ou rien) — moins de bruit.
   if (mealTime !== 'other' || carbsGrams > 0) {
     reasoning.push(
-      `Ratio ${mealLabel[mealTime]} : ${unitsPer10g.toFixed(1).replace(".", ",")}U pour 10g → ${carbsGrams}g = ${carbBolus.toFixed(1)}U`
+      `Ratio ${mealLabel[mealTime]} : ${unitsPer10g.toFixed(1).replace(".", ",")}U pour 10g → ${carbsGrams}g = ${carbBolus.toFixed(1).replace(".", ",")}U`
     );
   }
 
@@ -74,7 +122,7 @@ export function calculateBolus(
     // Sensibilité au format naturel : X U pour 50 mg/dL au-dessus
     const unitsPer50mg = 50 / isf;
     reasoning.push(
-      `Correction : ${diff} mg/dL au-dessus de la cible → ${rawCorrection.toFixed(1)}U (${unitsPer50mg.toFixed(1).replace(".", ",")}U pour 50 mg/dL)`
+      `Correction : ${diff} mg/dL au-dessus de la cible → ${rawCorrection.toFixed(1).replace(".", ",")}U (${unitsPer50mg.toFixed(1).replace(".", ",")}U pour 50 mg/dL)`
     );
 
     // T1D-safe : on soustrait l'IOB UNIQUEMENT de la part correction
@@ -96,6 +144,41 @@ export function calculateBolus(
     reasoning.push(`Glycémie basse (${currentGlucose} mg/dL) — considérer des glucides supplémentaires avant l'injection`);
   }
 
+  // ─── FPU (Fat-Protein Units) — Phase 11 ──────────────────────────────
+  // ~50% des protéines se convertissent en glucose sur 5-6h, les lipides
+  // ralentissent la digestion → un repas riche n'est pas couvert par le
+  // Novorapid (~3h15) seul. On calcule un bolus FPU additionnel.
+  let totalFPU = 0;
+  let digestiveComplexity: 'simple' | 'moderate' | 'complex' = 'simple';
+  if (fatGrams > 0 || proteinGrams > 0) {
+    const fatCalories = fatGrams * 9;
+    const proteinCalories = proteinGrams * 4;
+    totalFPU = (fatCalories + proteinCalories) / 100;
+    // 1 FPU ≈ 10g de glucides équivalents → on applique le même ratio
+    const fpuCarbEquivalent = totalFPU * 10;
+    fpuBolus = fpuCarbEquivalent / ratio;
+
+    if (totalFPU >= 3) digestiveComplexity = 'complex';
+    else if (totalFPU >= 1) digestiveComplexity = 'moderate';
+    else digestiveComplexity = 'simple';
+
+    if (totalFPU >= 0.5) {
+      reasoning.push(
+        `FPU : ${fatGrams}g lipides + ${proteinGrams}g protéines = ${totalFPU.toFixed(1).replace(".", ",")} FPU → équivalent ~${fpuCarbEquivalent.toFixed(0)}g glucides → ${fpuBolus.toFixed(1).replace(".", ",")}U supplémentaires`
+      );
+    }
+  }
+
+  // ─── Trend arrow adjustment (slide rule) — Phase 11 ──────────────────
+  trendBolus = trendAdjustmentUnits(trendArrow);
+  if (trendBolus !== 0) {
+    const arrow = trendArrowChar(trendArrow);
+    const sign = trendBolus > 0 ? '+' : '';
+    reasoning.push(
+      `Tendance ${arrow} : ${sign}${trendBolus.toFixed(1).replace(".", ",")}U (glycémie ${trendBolus > 0 ? 'en montée' : 'en descente'} au moment du bolus)`
+    );
+  }
+
   // Warning si bolus repas + IOB élevé (la correction précédente est encore
   // active, surveiller la post-prandiale pour ne pas tomber en hypo).
   if (carbBolus > 0 && currentIOB > 1.5) {
@@ -105,7 +188,7 @@ export function calculateBolus(
     );
   }
 
-  // Ajustements pré-entraînement
+  // Ajustements pré-entraînement (s'appliquent uniquement au bolus glucides)
   if (isPreWorkout && workoutType) {
     if (workoutType === 'running') {
       if (minutesUntilWorkout <= 60) {
@@ -127,7 +210,14 @@ export function calculateBolus(
   // Stylo Novorapid d'Ethan = pas de demi-unités. On arrondit au-dessus
   // pour éviter de sous-doser (le risque "hyper" est plus prévisible que
   // le risque "hypo brutal" en post-prandial avec une dose insuffisante).
-  const rawTotal = Math.max(0, carbBolus + correctionBolus);
+  // On inclut FPU + trendBolus dans le total quand pas de split (cas où
+  // FPU est petit ou non renseigné). Si split actif → only carb+correction
+  // dans "now".
+  const useSplit = totalFPU >= 1;
+  const rawTotalNoSplit = Math.max(0, carbBolus + correctionBolus + trendBolus + fpuBolus);
+  const rawTotalWithSplit = Math.max(0, carbBolus + correctionBolus + trendBolus);
+
+  const rawTotal = useSplit ? rawTotalWithSplit : rawTotalNoSplit;
   const totalBolus = Math.ceil(rawTotal);
   if (rawTotal > 0 && totalBolus !== Math.round(rawTotal * 10) / 10) {
     reasoning.push(
@@ -135,7 +225,42 @@ export function calculateBolus(
     );
   }
 
-  return { carbBolus, correctionBolus, totalBolus, adjustments, reasoning };
+  // ─── Split dose — Phase 11 ────────────────────────────────────────────
+  let splitDose: BolusResult['splitDose'];
+  if (useSplit && fpuBolus > 0) {
+    const laterUnits = Math.ceil(fpuBolus);
+    const delayMinutes =
+      totalFPU >= 3 ? 150 :
+      totalFPU >= 2 ? 120 :
+      90;
+    splitDose = {
+      now: totalBolus,
+      later: laterUnits,
+      delayMinutes,
+    };
+    const hours = Math.floor(delayMinutes / 60);
+    const mins = delayMinutes % 60;
+    const delayLabel = mins === 0 ? `${hours}h` : `${hours}h${mins.toString().padStart(2, '0')}`;
+    const complexityLabel =
+      digestiveComplexity === 'complex' ? 'Repas complexe' : 'Repas modéré';
+    const digestionHours = digestiveComplexity === 'complex' ? '~5h' : '~3-4h';
+    reasoning.push(
+      `${complexityLabel} (${totalFPU.toFixed(1).replace(".", ",")} FPU) : la digestion va durer ${digestionHours}. Suggestion split : ${totalBolus}U maintenant, puis ${laterUnits}U dans ${delayLabel}.`
+    );
+    adjustments.push(`Split dose : +${laterUnits}U dans ${delayLabel}`);
+  }
+
+  return {
+    carbBolus,
+    correctionBolus,
+    fpuBolus,
+    trendBolus,
+    totalBolus,
+    adjustments,
+    reasoning,
+    digestiveComplexity,
+    splitDose,
+  };
 }
 
 export function estimateGlucoseImpact(
@@ -171,6 +296,45 @@ export function estimateGlucoseImpact(
   const estimatedTrough = Math.min(...timeline.slice(4).map((t) => t.glucose));
 
   return { estimatedPeak, estimatedTrough, timeline: timeline.filter((_, i) => i <= 16) };
+}
+
+/**
+ * Score de complexité digestive basé sur les macros — Phase 11.
+ * Réutilisable hors calcul bolus (UI badges, analytics meal-tag).
+ */
+export function getDigestiveComplexity(
+  carbsGrams: number,
+  fatGrams: number,
+  proteinGrams: number,
+): {
+  level: 'simple' | 'moderate' | 'complex';
+  estimatedDigestionHours: number;
+  message: string;
+  fpu: number;
+} {
+  const fpu = (fatGrams * 9 + proteinGrams * 4) / 100;
+  if (fpu >= 3) {
+    return {
+      level: 'complex',
+      estimatedDigestionHours: 5,
+      message: 'Digestion longue (~5h). Re-check glycémie à T+3h.',
+      fpu,
+    };
+  }
+  if (fpu >= 1.5) {
+    return {
+      level: 'moderate',
+      estimatedDigestionHours: 3.5,
+      message: 'Digestion modérée (~3-4h). Surveille à T+2h30.',
+      fpu,
+    };
+  }
+  return {
+    level: 'simple',
+    estimatedDigestionHours: 2,
+    message: 'Digestion rapide (~2h). Pic glycémique attendu à T+45min.',
+    fpu,
+  };
 }
 
 export function getInsulinOnBoard(

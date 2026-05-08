@@ -1,6 +1,6 @@
 // APEX Coach — Service Worker
-// v2 : ajout des handlers push (hypo/hyper alerts) + notificationclick
-const CACHE_NAME = "apex-coach-v2";
+// v3 : Phase 11 — split dose reminders (FPU)
+const CACHE_NAME = "apex-coach-v3";
 
 const PRECACHE_URLS = [
   "/",
@@ -101,8 +101,9 @@ self.addEventListener("push", (event) => {
     badge: "/icons/icon-192.png",
     tag: payload.type || "apex-alert",
     // Les alertes hypo/hyper sont urgentes → renotify + vibration
-    renotify: payload.type === "hypo" || payload.type === "hyper",
-    requireInteraction: payload.type === "hypo",
+    // Phase 11 : "split-dose" → vibration normale, requireInteraction
+    renotify: payload.type === "hypo" || payload.type === "hyper" || payload.type === "split-dose",
+    requireInteraction: payload.type === "hypo" || payload.type === "split-dose",
     vibrate: payload.type === "hypo" ? [200, 100, 200, 100, 400] : [200, 100, 200],
     data: {
       url: payload.url || "/diabete",

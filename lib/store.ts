@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { USER_PROFILE, DIABETES_CONFIG, DIABETES_PROFILES_DEFAULT, MUSCU_PROGRAM } from './constants';
-import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile } from '@/types';
+import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile, SplitDoseReminder } from '@/types';
 
 interface CompletedWorkout {
   id: string;
@@ -82,6 +82,12 @@ interface AppState {
   insulinLogs: InsulinLog[];
   addInsulinLog: (log: InsulinLog) => void;
   removeInsulinLog: (id: string) => void;
+
+  // Phase 11 — Split dose reminders (FPU)
+  splitDoseReminders: SplitDoseReminder[];
+  addSplitDoseReminder: (reminder: SplitDoseReminder) => void;
+  updateSplitDoseReminder: (id: string, updates: Partial<SplitDoseReminder>) => void;
+  removeSplitDoseReminder: (id: string) => void;
 
   // Nutrition
   meals: Meal[];
@@ -265,6 +271,20 @@ export const useStore = create<AppState>()(
       })),
       removeInsulinLog: (id) => set((s) => ({
         insulinLogs: s.insulinLogs.filter((log) => log.id !== id),
+      })),
+
+      // Phase 11 — Split dose reminders
+      splitDoseReminders: [],
+      addSplitDoseReminder: (reminder) => set((s) => ({
+        splitDoseReminders: [reminder, ...s.splitDoseReminders].slice(0, 50),
+      })),
+      updateSplitDoseReminder: (id, updates) => set((s) => ({
+        splitDoseReminders: s.splitDoseReminders.map((r) =>
+          r.id === id ? { ...r, ...updates } : r,
+        ),
+      })),
+      removeSplitDoseReminder: (id) => set((s) => ({
+        splitDoseReminders: s.splitDoseReminders.filter((r) => r.id !== id),
       })),
 
       meals: [],

@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useStore } from "@/lib/store";
 import { calculateBolus, getInsulinOnBoard } from "@/lib/insulin-calculator";
 import { DIABETES_CONFIG } from "@/lib/constants";
-import type { MealTime } from "@/types";
+import type { MealTime, SplitDoseReminder } from "@/types";
+import type { GlucoseTrend } from "@/lib/libre-link/utils";
 import { Badge } from "@/components/ui/Badge";
 import { useGlucose } from "@/hooks/useGlucose";
 import GlucoseWidget from "@/components/glucose/GlucoseWidget";
@@ -19,6 +20,7 @@ import {
   Settings,
   AlertTriangle,
   ChevronRight,
+  ChevronDown,
   Dumbbell,
   Footprints,
   TrendingUp,
@@ -27,6 +29,9 @@ import {
   Trash2,
   History,
   Sparkles,
+  Clock,
+  Plus,
+  CheckCircle2,
 } from "lucide-react";
 
 type GlucoseTone = "low" | "normal" | "high" | "critical";
@@ -67,6 +72,29 @@ function formatUper10g(gPerU: number): string {
   return `${rounded.toFixed(1).replace(".", ",")}U`;
 }
 
+// Map de la trend Libre (string) → numérique pour le calculateur
+function trendStringToNumber(trend: GlucoseTrend | string | undefined): number | undefined {
+  switch (trend) {
+    case "SingleDown": return 1;
+    case "FortyFiveDown": return 2;
+    case "Flat": return 3;
+    case "FortyFiveUp": return 4;
+    case "SingleUp": return 5;
+    default: return undefined;
+  }
+}
+
+function trendNumberToArrow(trend?: number): string {
+  switch (trend) {
+    case 1: return "↓↓";
+    case 2: return "↘";
+    case 3: return "→";
+    case 4: return "↗";
+    case 5: return "↑↑";
+    default: return "—";
+  }
+}
+
 export default function DiabetePage() {
   const {
     profile,
@@ -76,6 +104,10 @@ export default function DiabetePage() {
     insulinLogs,
     addInsulinLog,
     removeInsulinLog,
+    splitDoseReminders,
+    addSplitDoseReminder,
+    updateSplitDoseReminder,
+    removeSplitDoseReminder,
   } = useStore();
 
   // ─── Bolus calculator ─────────────────────────
@@ -86,11 +118,14 @@ export default function DiabetePage() {
   const [workoutType, setWorkoutType] = useState<"muscu" | "running" | null>(null);
   const [minutesUntilWorkout, setMinutesUntilWorkout] = useState(60);
 
+  // ─── Phase 11 — FPU + trend arrow ─────────────
+  const [fatGrams, setFatGrams] = useState<number>(0);
+  const [proteinGrams, setProteinGrams] = useState<number>(0);
+  const [showMacros, setShowMacros] = useState(false);
+  const [trendArrow, setTrendArrow] = useState<number | undefined>(undefined);
+
   // ─── IOB ──────────────────────────────────────
-  // On le calcule AVANT le bolus pour pouvoir le passer au calculateur
-  // (réduction de la part correction pour éviter le stacking).
-  // Tick toutes les 60s pour rafraîchir l'IOB en temps réel sans nécessiter
-  // une nouvelle injection (sinon l'IOB resterait figé visuellement).
+  // Tick toutes les 60s pour rafraîchir l'IOB en temps réel.
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 60_000);
@@ -102,13 +137,27 @@ export default function DiabetePage() {
       .map((log) => {
         const injectedAt = new Date(log.injectedAt);
         const minutesAgo = (now - injectedAt.getTime()) / 60000;
-        return { units: log.units, minutesAgo };
+        return { units: log.units, minutesAgo, mealType: log.mealType, injectedAt };
       })
       .filter(
         (inj) =>
           inj.minutesAgo < DIABETES_CONFIG.insulinActiveDuration && inj.minutesAgo >= 0
       );
     return getInsulinOnBoard(recentInjections);
+  }, [insulinLogs, nowTick]);
+
+  // Détails de la dernière injection active (pour message contextualisé IOB)
+  const lastActiveInjection = useMemo(() => {
+    const now = nowTick;
+    const candidates = insulinLogs
+      .map((log) => {
+        const injectedAt = new Date(log.injectedAt);
+        const minutesAgo = (now - injectedAt.getTime()) / 60000;
+        return { log, minutesAgo, injectedAt };
+      })
+      .filter((c) => c.minutesAgo < DIABETES_CONFIG.insulinActiveDuration && c.minutesAgo >= 0)
+      .sort((a, b) => a.minutesAgo - b.minutesAgo);
+    return candidates[0] ?? null;
   }, [insulinLogs, nowTick]);
 
   const bolusResult = useMemo(
@@ -122,6 +171,9 @@ export default function DiabetePage() {
         minutesUntilWorkout,
         diabetesConfig,
         iob.totalIOB,
+        fatGrams,
+        proteinGrams,
+        trendArrow,
       ),
     [
       carbsGrams,
@@ -132,14 +184,13 @@ export default function DiabetePage() {
       minutesUntilWorkout,
       diabetesConfig,
       iob.totalIOB,
+      fatGrams,
+      proteinGrams,
+      trendArrow,
     ]
   );
 
   // ─── Override manuel des unités ────────────────
-  // Le calculateur propose une dose, mais l'utilisateur peut l'ajuster
-  // (ex: stylo qui ne fait que des entiers, intuition diabète, mode "Autre"
-  // où l'on tape une dose libre, etc.). On reset l'override quand le calc
-  // change pour éviter qu'une vieille saisie reste collée.
   const [unitsOverride, setUnitsOverride] = useState<number | null>(null);
   useEffect(() => {
     setUnitsOverride(null);
@@ -151,12 +202,23 @@ export default function DiabetePage() {
     workoutType,
     minutesUntilWorkout,
     iob.totalIOB,
+    fatGrams,
+    proteinGrams,
+    trendArrow,
   ]);
   const finalUnits = unitsOverride ?? bolusResult.totalBolus;
 
   // ─── Quick logs ───────────────────────────────
   const [glucoseValue, setGlucoseValue] = useState(110);
   const [glucoseTrend, setGlucoseTrend] = useState("stable");
+
+  // ─── Toast split dose ─────────────────────────
+  const [splitToast, setSplitToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!splitToast) return;
+    const id = setTimeout(() => setSplitToast(null), 6000);
+    return () => clearTimeout(id);
+  }, [splitToast]);
 
   function handleLogGlucose() {
     addGlucoseReading({
@@ -174,9 +236,11 @@ export default function DiabetePage() {
     const overrideNote = overridden
       ? `manuel (calc proposait ${bolusResult.totalBolus}U)`
       : "";
-    const notes = [baseNote, overrideNote].filter(Boolean).join(" · ");
+    const splitNote = bolusResult.splitDose ? `split 1/2` : "";
+    const notes = [baseNote, overrideNote, splitNote].filter(Boolean).join(" · ");
+    const injectionId = crypto.randomUUID();
     addInsulinLog({
-      id: crypto.randomUUID(),
+      id: injectionId,
       units: finalUnits,
       insulinType: profile.insulinRapid,
       mealType: mealTime,
@@ -184,8 +248,32 @@ export default function DiabetePage() {
       glucoseBefore: currentGlucose,
       notes,
       injectedAt: new Date(),
+      fatGrams: fatGrams > 0 ? fatGrams : undefined,
+      proteinGrams: proteinGrams > 0 ? proteinGrams : undefined,
+      trendArrow,
     });
-    // Reset l'override après log pour ne pas qu'il reste collé sur le suivant.
+
+    // ─── Programmer le rappel split dose ──────────
+    if (bolusResult.splitDose) {
+      const reminderId = crypto.randomUUID();
+      const triggerAt = new Date(Date.now() + bolusResult.splitDose.delayMinutes * 60_000);
+      const reminder: SplitDoseReminder = {
+        id: reminderId,
+        parentInjectionId: injectionId,
+        units: bolusResult.splitDose.later,
+        triggerAt: triggerAt.toISOString(),
+        createdAt: new Date().toISOString(),
+        status: 'pending',
+      };
+      addSplitDoseReminder(reminder);
+      const hours = Math.floor(bolusResult.splitDose.delayMinutes / 60);
+      const mins = bolusResult.splitDose.delayMinutes % 60;
+      const delayLabel = mins === 0 ? `${hours}h` : `${hours}h${mins.toString().padStart(2, '0')}`;
+      setSplitToast(
+        `Rappel programmé : ${bolusResult.splitDose.later}U dans ${delayLabel} pour couvrir les graisses/protéines.`
+      );
+    }
+
     setUnitsOverride(null);
   }
 
@@ -204,16 +292,118 @@ export default function DiabetePage() {
     iob.totalIOB > 2 ? "warning" : "info";
 
   // ─── Raccourci "Utiliser la valeur live" pour le calculateur bolus ─────
-  // On n'auto-remplit PAS (T1D : explicite > implicite). L'utilisateur
-  // clique pour synchroniser depuis le capteur.
   const { current: liveGlucose } = useGlucose({ mode: "current" });
   const liveValueForBolus = liveGlucose?.value;
+  const liveTrend = trendStringToNumber(liveGlucose?.trend);
+
+  // ─── Phase 11 : check des split-dose reminders dûs ─────────────
+  // À chaque tick (60s), on regarde si un rappel pending arrive à échéance.
+  // On envoie une notification locale via le service worker si possible
+  // (l'app peut être en background mais ouverte récemment), sinon on
+  // affiche un toast dans la page.
+  const [activeReminders, setActiveReminders] = useState<SplitDoseReminder[]>([]);
+  useEffect(() => {
+    const now = Date.now();
+    const due = splitDoseReminders.filter(
+      (r) => r.status === 'pending' && new Date(r.triggerAt).getTime() <= now
+    );
+    setActiveReminders(due);
+
+    // Tirer une notif locale pour chaque rappel dû non-fired
+    if (typeof window !== "undefined" && "serviceWorker" in navigator && "Notification" in window) {
+      due.forEach((r) => {
+        if (Notification.permission === "granted") {
+          navigator.serviceWorker.ready.then((reg) => {
+            reg.showNotification("Rappel split dose", {
+              body: `Il est temps de faire ${r.units}U pour couvrir les graisses/protéines de ton repas.`,
+              icon: "/icons/icon-192.png",
+              badge: "/icons/icon-192.png",
+              tag: `split-${r.id}`,
+              data: { url: "/diabete", type: "split-dose" },
+            });
+          }).catch(() => {});
+        }
+        // Marque comme fired pour ne pas le re-tirer à chaque tick
+        updateSplitDoseReminder(r.id, { status: 'fired' });
+      });
+    }
+  }, [splitDoseReminders, nowTick, updateSplitDoseReminder]);
+
+  // Rappels pending pour affichage (incluant ceux fired non-dismissed)
+  const pendingReminders = useMemo(
+    () => splitDoseReminders.filter((r) => r.status !== 'dismissed'),
+    [splitDoseReminders]
+  );
+
+  function handleConfirmSplitDose(reminder: SplitDoseReminder) {
+    const injectionId = crypto.randomUUID();
+    addInsulinLog({
+      id: injectionId,
+      units: reminder.units,
+      insulinType: profile.insulinRapid,
+      mealType: 'other',
+      carbsGrams: 0,
+      glucoseBefore: liveValueForBolus ?? currentGlucose,
+      notes: 'split 2/2 (FPU)',
+      injectedAt: new Date(),
+      isSplitDose: true,
+      parentInjectionId: reminder.parentInjectionId,
+    });
+    removeSplitDoseReminder(reminder.id);
+  }
+
+  function handleDismissSplitDose(reminder: SplitDoseReminder) {
+    removeSplitDoseReminder(reminder.id);
+  }
+
+  // ─── Pre-workout advisor (Bloc 1.4) ─────────────────────────
+  const advisorState = useMemo(() => {
+    if (!isPreWorkout || !workoutType) return null;
+    const isf = diabetesConfig.insulinSensitivityFactor;
+    const activeDuration = diabetesConfig.insulinActiveDuration;
+    // Estimation simple de la baisse causée par l'IOB d'ici le sport
+    const fractionDuringWindow = Math.min(1, minutesUntilWorkout / activeDuration);
+    const estimatedDropFromIOB = iob.totalIOB * isf * fractionDuringWindow;
+    const estimatedGlucoseAtWorkout = Math.round(currentGlucose - estimatedDropFromIOB);
+
+    let tone: 'safe' | 'caution' | 'risk' = 'safe';
+    let message = '';
+    let carbsNeeded = 0;
+
+    if (workoutType === 'muscu') {
+      if (estimatedGlucoseAtWorkout < 120) {
+        tone = 'risk';
+        carbsNeeded = Math.max(15, Math.ceil((140 - estimatedGlucoseAtWorkout) / 4));
+        message = `Risque d'hypo en début de séance. Mange ${carbsNeeded}g de glucides avant.`;
+      } else if (estimatedGlucoseAtWorkout > 250) {
+        tone = 'caution';
+        message = "Glycémie trop haute pour la muscu. Fais ta correction et attends 30min.";
+      } else {
+        tone = 'safe';
+        message = "Tu es safe pour la muscu. La glycémie va probablement monter de +30 à +50 mg/dL pendant la séance.";
+      }
+    } else {
+      // running
+      if (estimatedGlucoseAtWorkout < 140) {
+        tone = 'risk';
+        carbsNeeded = Math.max(15, Math.ceil((150 - estimatedGlucoseAtWorkout) / 4));
+        message = `Risque d'hypo en running. Mange ${carbsNeeded}g de glucides rapides avant.`;
+      } else if (estimatedGlucoseAtWorkout > 250) {
+        tone = 'caution';
+        message = "Glycémie trop haute. Vérifie les cétones avant de courir.";
+      } else {
+        tone = 'safe';
+        message = "Tu es safe pour le running. Emporte du sucre au cas où.";
+      }
+    }
+
+    return { tone, message, estimatedGlucoseAtWorkout, carbsNeeded };
+  }, [isPreWorkout, workoutType, minutesUntilWorkout, iob.totalIOB, currentGlucose, diabetesConfig]);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto stagger">
       {/* ── HERO : Glycémie + IOB ── */}
       <section className="surface-1 rounded-3xl p-6 sm:p-8 mb-4 relative overflow-hidden">
-        {/* Glow lavender en fond */}
         <div
           aria-hidden
           className="absolute -top-24 -left-16 h-64 w-64 rounded-full opacity-[0.10] blur-3xl"
@@ -227,7 +417,6 @@ export default function DiabetePage() {
               {profile.insulinRapid} · {profile.cgmType}
             </h1>
           </div>
-          {/* Nav rapide — icônes seules pour gagner de la place sur mobile */}
           <div className="flex gap-1.5">
             <NavIconLink href="/diabete/historique" label="Historique">
               <History className="w-4 h-4" />
@@ -242,13 +431,11 @@ export default function DiabetePage() {
         </div>
 
         <div className="relative grid sm:grid-cols-2 gap-4">
-          {/* Glucose hero — live FreeStyle Libre avec fallback manuel */}
           <GlucoseWidget
             fallbackValue={lastValue}
             fallbackRecordedAt={lastGlucose?.recordedAt}
           />
 
-          {/* IOB hero */}
           <div className="surface-2 rounded-2xl p-5 flex items-center gap-5">
             <div className="shrink-0 w-12 h-12 rounded-xl bg-info/10 flex items-center justify-center">
               <Syringe className={`w-5 h-5 ${iobTone === "warning" ? "text-warning" : "text-info"}`} />
@@ -285,6 +472,67 @@ export default function DiabetePage() {
         <CorrectionSuggestion />
       </div>
 
+      {/* ── RAPPELS SPLIT DOSE en attente ── */}
+      {pendingReminders.length > 0 && (
+        <section className="surface-1 rounded-3xl p-5 mb-4 border border-accent-2/30">
+          <div className="flex items-center gap-2 mb-3">
+            <Clock className="w-4 h-4 text-diabete" />
+            <h2 className="text-base font-semibold text-text-primary">
+              Rappel{pendingReminders.length > 1 ? "s" : ""} split dose
+            </h2>
+          </div>
+          <div className="space-y-2">
+            {pendingReminders.map((r) => {
+              const triggerMs = new Date(r.triggerAt).getTime();
+              const now = nowTick;
+              const minutesRemaining = Math.round((triggerMs - now) / 60000);
+              const isDue = minutesRemaining <= 0;
+              return (
+                <div
+                  key={r.id}
+                  className={`rounded-xl p-3 flex items-center justify-between gap-3 ${
+                    isDue ? 'bg-diabete/15 border border-diabete/40' : 'bg-bg-tertiary border border-border-subtle'
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-text-primary">
+                      {isDue
+                        ? `À faire maintenant : ${r.units}U`
+                        : `Dans ${minutesRemaining} min : ${r.units}U`}
+                    </p>
+                    <p className="text-[11px] text-text-tertiary mt-0.5">
+                      {new Date(r.triggerAt).toLocaleTimeString("fr-FR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}{" "}
+                      · couverture FPU
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleConfirmSplitDose(r)}
+                      className="bg-diabete text-ink text-xs font-semibold px-3 py-2 rounded-lg tap-scale flex items-center gap-1"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Logger
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDismissSplitDose(r)}
+                      aria-label="Annuler le rappel"
+                      className="p-2 rounded-md text-text-tertiary hover:text-error hover:bg-error/10 transition-colors tap-scale"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* ── CALCULATEUR BOLUS (action primaire) ── */}
       <section className="surface-1 rounded-3xl p-6 sm:p-8 mb-4 glow-accent">
         <div className="flex items-center gap-2 mb-5">
@@ -293,7 +541,7 @@ export default function DiabetePage() {
         </div>
 
         {/* Inputs */}
-        <div className="grid grid-cols-2 gap-3 mb-5">
+        <div className="grid grid-cols-2 gap-3 mb-3">
           <BolusInput
             label="Glucides"
             unit="g"
@@ -309,22 +557,59 @@ export default function DiabetePage() {
             onChange={setCurrentGlucose}
             min={40}
             max={500}
+            suffix={trendArrow ? trendNumberToArrow(trendArrow) : undefined}
           />
         </div>
 
-        {liveValueForBolus !== undefined && liveValueForBolus !== currentGlucose && (
+        {liveValueForBolus !== undefined && (liveValueForBolus !== currentGlucose || trendArrow !== liveTrend) && (
           <button
             type="button"
-            onClick={() => setCurrentGlucose(liveValueForBolus)}
-            className="mb-5 w-full text-xs text-diabete hover:text-diabete/80 transition-colors py-2 rounded-lg border border-diabete/25 bg-diabete/5 tap-scale flex items-center justify-center gap-1.5"
+            onClick={() => {
+              setCurrentGlucose(liveValueForBolus);
+              if (liveTrend) setTrendArrow(liveTrend);
+            }}
+            className="mb-3 w-full text-xs text-diabete hover:text-diabete/80 transition-colors py-2 rounded-lg border border-diabete/25 bg-diabete/5 tap-scale flex items-center justify-center gap-1.5"
           >
             <span
               className="dot-pulse h-1.5 w-1.5 rounded-full bg-success"
               aria-hidden
             />
-            Utiliser la valeur live (<span className="num">{liveValueForBolus}</span> mg/dL)
+            Utiliser la valeur live (<span className="num">{liveValueForBolus}</span>{" "}
+            {liveTrend ? trendNumberToArrow(liveTrend) : ""} mg/dL)
           </button>
         )}
+
+        {/* Macros optionnelles (FPU) */}
+        <div className="mb-5">
+          <button
+            type="button"
+            onClick={() => setShowMacros((v) => !v)}
+            className="text-xs text-text-tertiary hover:text-diabete transition-colors flex items-center gap-1.5"
+          >
+            {showMacros ? <ChevronDown className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+            Lipides &amp; protéines (optionnel)
+          </button>
+          {showMacros && (
+            <div className="mt-3 grid grid-cols-2 gap-3 animate-slide-up">
+              <BolusInput
+                label="Lipides"
+                unit="g"
+                value={fatGrams}
+                onChange={setFatGrams}
+                min={0}
+                max={200}
+              />
+              <BolusInput
+                label="Protéines"
+                unit="g"
+                value={proteinGrams}
+                onChange={setProteinGrams}
+                min={0}
+                max={200}
+              />
+            </div>
+          )}
+        </div>
 
         {/* Meal selector */}
         <div className="mb-5">
@@ -336,8 +621,6 @@ export default function DiabetePage() {
                 type="button"
                 onClick={() => {
                   setMealTime(m.value);
-                  // En "Autre" (sans repas), on remet les glucides à 0
-                  // pour ne pas suggérer un bolus repas par erreur.
                   if (m.value === "other") setCarbsGrams(0);
                 }}
                 className={`py-2 text-xs font-medium rounded-lg border transition-all tap-scale ${
@@ -421,23 +704,114 @@ export default function DiabetePage() {
                 min={0}
                 max={360}
               />
+
+              {/* Pre-workout advisor */}
+              {advisorState && (
+                <div
+                  className={`rounded-xl p-3 border ${
+                    advisorState.tone === 'risk'
+                      ? 'bg-error/10 border-error/30 text-error'
+                      : advisorState.tone === 'caution'
+                      ? 'bg-warning/10 border-warning/30 text-warning'
+                      : 'bg-success/10 border-success/30 text-success'
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    {workoutType === 'muscu' ? (
+                      <Dumbbell className="w-4 h-4 shrink-0 mt-0.5" />
+                    ) : (
+                      <Footprints className="w-4 h-4 shrink-0 mt-0.5" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold leading-snug">
+                        {advisorState.message}
+                      </p>
+                      <p className="text-[11px] mt-1 opacity-80">
+                        Glycémie estimée à T+{minutesUntilWorkout}min :{" "}
+                        <span className="num font-semibold">
+                          {advisorState.estimatedGlucoseAtWorkout}
+                        </span>{" "}
+                        mg/dL
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
 
+        {/* IOB stacking encadré (Phase 11) */}
+        {iob.totalIOB > 1 && (
+          <div className="rounded-2xl bg-warning/10 border border-warning/30 p-4 mb-5">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <p className="text-sm font-semibold text-text-primary">
+                  IOB actif :{" "}
+                  <span className="num text-warning">{iob.totalIOB.toFixed(1)}</span>U
+                  {lastActiveInjection && (
+                    <span className="text-text-tertiary text-xs font-normal">
+                      {" "}
+                      ({lastActiveInjection.log.mealType} de{" "}
+                      {new Date(lastActiveInjection.injectedAt).toLocaleTimeString("fr-FR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })})
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs text-text-secondary leading-relaxed">
+                  Le bolus glucides{" "}
+                  <span className="num font-semibold">
+                    ({bolusResult.carbBolus.toFixed(1).replace(".", ",")}U)
+                  </span>{" "}
+                  n&apos;est PAS réduit (la nourriture arrive).{" "}
+                  {bolusResult.correctionBolus > 0
+                    ? `La correction est réduite anti-stacking : ${bolusResult.correctionBolus.toFixed(1).replace(".", ",")}U.`
+                    : "Pas de correction nécessaire."}
+                </p>
+                <p className="text-xs text-text-secondary leading-relaxed">
+                  Total effectif avec IOB :{" "}
+                  <span className="num font-semibold text-warning">
+                    {finalUnits}U + {iob.totalIOB.toFixed(1).replace(".", ",")}U
+                  </span>{" "}
+                  = ~
+                  <span className="num font-semibold">
+                    {(finalUnits + iob.totalIOB).toFixed(1).replace(".", ",")}U
+                  </span>{" "}
+                  travaillant sur ta glycémie.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Résultat hero — éditable */}
         <div className="rounded-2xl bg-diabete/10 border border-diabete/30 p-5">
           <div className="flex items-center justify-between mb-4">
-            <p className="label" style={{ color: "var(--diabete)" }}>Dose à injecter</p>
-            {iob.totalIOB > 0.5 && (
-              <Badge variant="warning" size="sm">
-                <AlertTriangle className="w-3 h-3 mr-1" />
-                IOB {iob.totalIOB}U
-              </Badge>
-            )}
+            <p className="label" style={{ color: "var(--diabete)" }}>
+              {bolusResult.splitDose ? "Maintenant" : "Dose à injecter"}
+            </p>
+            <div className="flex items-center gap-1.5">
+              {bolusResult.digestiveComplexity !== 'simple' && (fatGrams > 0 || proteinGrams > 0) && (
+                <Badge
+                  variant={bolusResult.digestiveComplexity === 'complex' ? 'warning' : 'default'}
+                  size="sm"
+                >
+                  {bolusResult.digestiveComplexity === 'complex' ? 'Complexe' : 'Modéré'}
+                </Badge>
+              )}
+              {iob.totalIOB > 0.5 && (
+                <Badge variant="warning" size="sm">
+                  <AlertTriangle className="w-3 h-3 mr-1" />
+                  IOB {iob.totalIOB}U
+                </Badge>
+              )}
+            </div>
           </div>
 
-          {/* Stepper +/- — l'utilisateur garde le contrôle final */}
+          {/* Stepper +/- */}
           <div className="flex items-center justify-center gap-4 mb-3">
             <button
               type="button"
@@ -463,6 +837,26 @@ export default function DiabetePage() {
             </button>
           </div>
 
+          {/* Split dose later */}
+          {bolusResult.splitDose && (
+            <div className="text-center mb-3 rounded-lg bg-accent-2/10 border border-accent-2/30 px-3 py-2">
+              <p className="text-[10px] text-accent-2 uppercase tracking-wide font-semibold">
+                Puis dans{" "}
+                {Math.floor(bolusResult.splitDose.delayMinutes / 60)}h
+                {bolusResult.splitDose.delayMinutes % 60 > 0
+                  ? bolusResult.splitDose.delayMinutes % 60
+                  : ""}
+              </p>
+              <p className="num text-2xl font-semibold text-accent-2 mt-0.5">
+                {bolusResult.splitDose.later}
+                <span className="text-sm text-accent-2/70 ml-1">U</span>
+              </p>
+              <p className="text-[10px] text-text-tertiary mt-0.5">
+                couverture FPU (graisses + protéines)
+              </p>
+            </div>
+          )}
+
           {/* Indicateur suggestion calc + reset si modifié */}
           <div className="text-center mb-4">
             {unitsOverride !== null && unitsOverride !== bolusResult.totalBolus ? (
@@ -480,6 +874,7 @@ export default function DiabetePage() {
             )}
           </div>
 
+          {/* Breakdown */}
           <div className="grid grid-cols-2 gap-2 mb-4">
             <div className="bg-bg-tertiary rounded-lg px-3 py-2">
               <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Glucides</p>
@@ -493,6 +888,30 @@ export default function DiabetePage() {
                 {bolusResult.correctionBolus.toFixed(1)}<span className="text-xs text-text-tertiary">U</span>
               </p>
             </div>
+            {bolusResult.fpuBolus > 0 && (
+              <div className="bg-bg-tertiary rounded-lg px-3 py-2">
+                <p className="text-[10px] text-text-tertiary uppercase tracking-wide">FPU</p>
+                <p className="num text-base font-semibold text-accent-2">
+                  {bolusResult.fpuBolus.toFixed(1)}<span className="text-xs text-text-tertiary">U</span>
+                </p>
+              </div>
+            )}
+            {bolusResult.trendBolus !== 0 && (
+              <div className="bg-bg-tertiary rounded-lg px-3 py-2">
+                <p className="text-[10px] text-text-tertiary uppercase tracking-wide">
+                  Tendance {trendNumberToArrow(trendArrow)}
+                </p>
+                <p
+                  className={`num text-base font-semibold ${
+                    bolusResult.trendBolus > 0 ? "text-warning" : "text-success"
+                  }`}
+                >
+                  {bolusResult.trendBolus > 0 ? "+" : ""}
+                  {bolusResult.trendBolus.toFixed(1).replace(".", ",")}
+                  <span className="text-xs text-text-tertiary">U</span>
+                </p>
+              </div>
+            )}
           </div>
 
           {bolusResult.adjustments.length > 0 && (
@@ -532,9 +951,18 @@ export default function DiabetePage() {
         </div>
       </section>
 
+      {/* ── Toast split dose ── */}
+      {splitToast && (
+        <div className="fixed bottom-24 lg:bottom-6 left-1/2 -translate-x-1/2 z-50 max-w-md w-[92vw] sm:w-auto rounded-xl bg-accent-2/15 border border-accent-2/40 px-4 py-3 backdrop-blur-md shadow-lg animate-slide-up">
+          <div className="flex items-start gap-3">
+            <Clock className="w-4 h-4 text-accent-2 shrink-0 mt-0.5" />
+            <p className="text-xs text-text-primary leading-snug">{splitToast}</p>
+          </div>
+        </div>
+      )}
+
       {/* ── GRID : Glucose log + Injection history ── */}
       <div className="grid lg:grid-cols-2 gap-4 mb-4">
-        {/* Log glycémie rapide */}
         <section className="surface-1 rounded-3xl p-6">
           <div className="flex items-center gap-2 mb-4">
             <Droplet className="w-4 h-4 text-diabete" />
@@ -583,7 +1011,6 @@ export default function DiabetePage() {
             Enregistrer
           </button>
 
-          {/* Historique compact */}
           {glucoseReadings.length > 0 && (
             <div className="mt-4 pt-4 border-t border-border-subtle">
               <p className="label mb-2">Dernières lectures</p>
@@ -622,7 +1049,6 @@ export default function DiabetePage() {
           )}
         </section>
 
-        {/* Historique injections */}
         <section className="surface-1 rounded-3xl p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
@@ -664,6 +1090,11 @@ export default function DiabetePage() {
                       >
                         {log.mealType}
                       </Badge>
+                      {log.isSplitDose && (
+                        <Badge variant="default" size="sm">
+                          split
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="num text-[10px] text-text-tertiary">
@@ -686,6 +1117,11 @@ export default function DiabetePage() {
                   </div>
                   <div className="num flex items-center gap-3 text-[11px] text-text-tertiary">
                     <span>{log.carbsGrams}g gluc.</span>
+                    {(log.fatGrams || log.proteinGrams) && (
+                      <span>
+                        {log.fatGrams ?? 0}g lip · {log.proteinGrams ?? 0}g prot
+                      </span>
+                    )}
                     <span>
                       Glyc.{" "}
                       <span
@@ -709,12 +1145,12 @@ export default function DiabetePage() {
         </section>
       </div>
 
-      {/* ── Push notifications (alertes hypo/hyper) ── */}
+      {/* ── Push notifications ── */}
       <div className="mb-4">
         <PushOptIn />
       </div>
 
-      {/* ── Footer : mon programme d'insuline (4 ratios) ── */}
+      {/* ── Footer ratios ── */}
       <section className="surface-1 rounded-3xl p-5">
         <div className="flex items-center justify-between mb-3">
           <p className="label">Mon programme</p>
@@ -764,6 +1200,7 @@ function BolusInput({
   onChange,
   min,
   max,
+  suffix,
 }: {
   label: string;
   unit: string;
@@ -771,6 +1208,7 @@ function BolusInput({
   onChange: (v: number) => void;
   min: number;
   max: number;
+  suffix?: string;
 }) {
   return (
     <label className="block">
@@ -786,6 +1224,7 @@ function BolusInput({
           className="num w-full bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-3 text-xl font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
         />
         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-text-tertiary uppercase tracking-wide pointer-events-none">
+          {suffix ? <span className="num text-sm text-diabete mr-1">{suffix}</span> : null}
           {unit}
         </span>
       </div>
@@ -838,7 +1277,6 @@ function RatioChip({
   );
 }
 
-/** Bouton-icône compact pour la nav rapide du header (page /diabete). */
 function NavIconLink({
   href,
   label,

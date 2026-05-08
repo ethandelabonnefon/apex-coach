@@ -127,6 +127,37 @@ export interface InsulinLog {
   injectedAt: Date;
   /** ID du profil ratio actif au moment de l'injection (Phase 10a). */
   profileId?: string;
+  // ─── Phase 11 — Meal context ────────────────────────────────────────
+  /** Lipides du repas en grammes (optionnel — copié depuis Yazio). */
+  fatGrams?: number;
+  /** Protéines du repas en grammes (optionnel). */
+  proteinGrams?: number;
+  /** Quick-tag visuel du repas (ex: "pates", "pizza", "snack-sucre"…). */
+  mealTag?: string;
+  /** Taille du repas (multiplie les valeurs moyennes du tag). */
+  mealSize?: 'normal' | 'big' | 'huge';
+  /** Tendance Libre au moment de l'injection (Abbott numérique 1..5). */
+  trendArrow?: number;
+  /** True si c'est la 2e injection d'un split (FPU). */
+  isSplitDose?: boolean;
+  /** Lien vers la 1re injection si split. */
+  parentInjectionId?: string;
+}
+
+/**
+ * Rappel programmé pour la seconde injection d'un split dose (FPU).
+ * Persisté côté client (Zustand persist) — le service worker peut lire
+ * cette structure pour déclencher une notification approximative.
+ */
+export interface SplitDoseReminder {
+  id: string;
+  parentInjectionId: string;
+  units: number;
+  triggerAt: string;        // ISO timestamp
+  createdAt: string;        // ISO
+  mealLabel?: string;       // ex: "pâtes", "pizza"
+  /** "pending" | "fired" | "dismissed" — pour ne pas re-tirer le rappel */
+  status: 'pending' | 'fired' | 'dismissed';
 }
 
 export interface Meal {

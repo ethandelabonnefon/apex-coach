@@ -377,9 +377,9 @@ Le projet est une PWA fonctionnelle deployee sur Vercel. **Toutes les fonctionna
   - **Génération 100% manuelle, par décision produit** : Ethan préfère déclencher le bilan à la demande quand il a besoin d'analyser une période — pas de cron dominical, pas de push notif, pas de persist KV des bilans. Le bouton "Générer / Régénérer" sur `/diabete/historique` est l'unique entry point. Cette décision simplifie l'archi (pas de Phase 10d) et évite la fatigue de notification. Si jamais on revient là-dessus plus tard, l'infra (route + moteur stats) est déjà prête, il suffirait d'ajouter `/api/cron/weekly-bilan` qui appelle l'endpoint et envoie la push.
   - **Phase 10b+c déployée et live en prod (25 avril 2026)** : `dpl_8v1H1sacJQebxJfD3Dm3Z6mVeVjn` — testé sur 7j (126 points, 0 injection enregistrée à ce stade). Claude joue parfaitement son rôle de filet de sécurité : il identifie le pic post-déjeuner (13-15h à 189-200 mg/dL = pattern "remontée 16h" documenté), félicite TIR 79,4%, mais refuse de proposer des ajustements ratios sans data d'injections. Les 3 warnings affichés ("pas assez de data", "impossible d'analyser sans injections", "reviens avec plus de data") sont la preuve que le system prompt T1D-strict tient. **Pour que les bilans deviennent actionnables, Ethan doit logger ses injections** via le calculateur de bolus de `/diabete` — chaque injection enregistrée alimente `byMeal`, `postMeal` curve T+0/+1h/+2h/+3h, et `byProfile` pour comparer Sèche vs PDM.
 
-## Module Diabète T1 — État final (avril 2026)
+## Module Diabète T1 — État actuel (avril 2026) et Roadmap Phase 11+
 
-Le module diabète est désormais **complet et stable**. Pipeline end-to-end :
+### Pipeline existant (complet et stable)
 - **Live data** : LibreLink Up → glycémie temps réel (Phase 6) + graphique 8h (Phase 7)
 - **Calculateur bolus** : multi-profils ratios (Phase 10a) + format naturel "X U pour 10g" (Phase 5)
 - **Alertes safety** : push iOS hypo <70 / hyper >250 avec backoff anti-spam (Phase 7) + correction auto-suggérée si glucose >180 et IOB <0,5U (Phase 7)
@@ -387,7 +387,73 @@ Le module diabète est désormais **complet et stable**. Pipeline end-to-end :
 - **Page historique** : 7/14/30/90j avec stats récap, pattern par heure, courbe + injections overlay (Phase 10a)
 - **Bilan IA à la demande** : Claude Sonnet 4 avec system prompt T1D-strict, suggestions incrémentales validées par diabéto (Phase 10b+c)
 
-Pas de roadmap T1D active. Évolutions futures possibles si besoin : Phase 10d (cron dominical), import historique LibreView (rétroactif), export CSV pour partage diabéto, intégration Dexcom G7 si Ethan change de capteur.
+### Profil diabète Ethan (mai 2026) — à utiliser comme contexte pour toute décision
+- **Schéma insuline** : Novorapid (rapide, stylo) + Lantus (basale, stylo)
+- **Basale** : 28U Lantus le soir ~19h20-19h30, au moment du dîner
+- **Ratios rapide** : Matin 1,5U/10g — Midi 1U/10g — Goûter 1,2U/10g — Soir 1U/10g
+- **ISF** : 100 mg/dL par U (0,5U corrige 50 mg/dL au-dessus de cible 110)
+- **Durée active insuline** : 195 min (~3h15)
+- **Sport** : muscu ou running le soir après dîner (~20h), parfois weekend l'après-midi (rarement le matin)
+- **Capteur** : FreeStyle Libre 2 via LibreLink Up
+
+### Problèmes glycémiques identifiés (mai 2026)
+1. **Hyperglycémie nocturne post-gros repas** : grosses portions de pâtes le soir (70g+ glucides) → digestion 4-5h dépasse la durée d'action du Novorapid (~3h15) → montée nocturne. Cas classique de FPU (Fat-Protein Units) non couvert. Solution : split dose (2e injection à T+2h30-3h)
+2. **Stacking IOB goûter 17h30 + dîner 19h + sport 20h** : chevauchement de deux bolus rapprochés + muscu → soit hypo (IOB cumulé trop fort) soit hyper (sous-dosage par peur de l'hypo). Le système doit calculer l'IOB combiné et donner un avis contextuel pré-sport
+3. **Absence de contexte repas dans les analyses** : seuls les glucides sont loggés, pas le type de repas ni les macros complètes (lipides, protéines). Le bilan IA ne peut pas distinguer un ratio mal calibré d'un repas à digestion lente
+4. **Ethan utilise Yazio** pour le suivi nutrition (calories, macros détaillées) mais pas de connexion API → import manuel possible (copier les macros ou screenshot)
+
+### Roadmap Phase 11 — "Diabète Intelligence Layer" (mai 2026)
+Architecture en 6 blocs, validée par Ethan :
+
+**Bloc 1 — Bolus Calculator v2** (priorité 1, impact immédiat)
+- Champs optionnels lipides (g) + protéines (g) → calcul FPU → suggestion split dose : "Fais X U maintenant, re-dose Y U dans 2h30" + push notification rappel à T+2h30
+- Trend arrow adjustment : flèche Libre ↗ au moment du bolus → +0,5U ; ↘ → -0,5U ; ↑↑ → +1U ; ↓↓ → -1U (slide rule publié)
+- Alerte IOB stacking : "Tu as encore X U actives du goûter de 17h34. Total suggéré = Y U, dont Z U déjà couvertes"
+- Pre-workout advisor contextuel : IOB résiduel + glycémie actuelle + heure sport → recommandation glucides ou "tu es safe"
+
+**Bloc 2 — Meal Logger intelligent** (priorité 2, alimente tout le reste)
+- Quick-tags visuels au moment du bolus : type repas (Pâtes, Riz, Pizza, Sandwich, etc.) + taille (Normal/Gros/Énorme) — 2 taps max
+- Champs optionnels protéines (g) + lipides (g) (copier depuis Yazio)
+- Score complexité digestive automatique : repas "simple" (pic 1-2h) vs "complexe" (pic 3-5h) → alerte "Re-check à T+3h"
+- Historique par type : "Tes 5 derniers 'Pâtes+viande' → delta moyen +65 mg/dL à T+4h → la prochaine fois, split dose"
+
+**Bloc 3 — Pattern Engine proactif** (priorité 3, alertes push automatiques)
+- Règle des 3 jours (standard clinique) : même phénomène 3j consécutifs ou 4x/7j → push notification
+- Patterns détectés : nuit hyper (>180 entre 23h-6h), hypo récurrente même créneau, pic post-meal excessif (>220 à T+3h pour un mealType donné), dawn phenomenon actif (>160 entre 5h-8h), CV hebdo qui se dégrade (>36%)
+- Chaque alerte inclut une suggestion d'action concrète (micro-ajustement)
+
+**Bloc 4 — Métriques cliniques avancées** (priorité 4, page historique enrichie)
+- GMI (estimated HbA1c) = 3.31 + 0.02392 × moyenne_glucose_mg/dL
+- GRI (Glycemia Risk Index) score composite 0-100 pondérant sévérité+durée hors plage
+- Score quotidien 0-100 dans un calendrier heatmap (TIR + hypos + variabilité)
+- AGP simplifié 14j : médiane + bandes P25-P75 par tranche 30min
+
+**Bloc 5 — Bilan IA v2 contextualisé** (priorité 5, après blocs 2+3)
+- Enrichir le contexte Claude avec : types de repas + macros, sessions sport (heure/type/durée depuis store muscu/running), IOB au moment des événements, patterns détectés par le moteur déterministe, profil actif au moment de chaque bolus
+- Insights croisés type : "Tes hypos du mardi/jeudi soir coïncident avec muscu post-dîner + IOB >3U. Suggestion : réduire bolus goûter de 0,5U les jours sport"
+
+**Bloc 6 — Sport-Glucose Correlation Engine** (priorité 6)
+- Auto-tag glycémie aux checkpoints : T-30min, T+0, T+30, T+60, T+120 autour d'une séance loggée
+- Dashboard corrélation : "Après muscu, tu montes de +45 mg/dL dans les 45min puis redescends à T+3h"
+- Recommandation pré-sport basée sur TON historique, pas des moyennes académiques
+
+Évolutions futures possibles (hors roadmap active) : import historique LibreView, export CSV pour partage diabéto, intégration Dexcom G7 si changement capteur, connexion API Yazio si disponible.
+
+### Phase 11 — Bloc 1 : Bolus Calculator v2 (mai 2026)
+Première salve de la "Diabète Intelligence Layer". Le calculateur de bolus passe d'un simple ratio + correction à un advisor multi-facteurs.
+
+- **FPU (Fat-Protein Units)** : `lib/insulin-calculator.ts` accepte maintenant `fatGrams` et `proteinGrams`. Calcule `totalFPU = (fat*9 + prot*4) / 100`, dérive `fpuBolus = (totalFPU * 10) / ratio`, et classe la complexité digestive en `simple` (< 1 FPU, ~2h), `moderate` (1-3 FPU, ~3-4h) ou `complex` (≥3 FPU, ~5h). Helper réutilisable `getDigestiveComplexity()` exporté.
+- **Split dose suggéré** : si `totalFPU >= 1` → return inclut `splitDose: { now, later, delayMinutes }` avec délai 90/120/150min selon FPU (1/2/3+). `now` = bolus glucides+correction+trend, `later` = `ceil(fpuBolus)` (stylo, pas de demi-unités). Reasoning naturel "Repas complexe (3,3 FPU) : digestion ~5h. Suggestion split : 6U maintenant, puis 4U dans 2h30."
+- **Trend arrow adjustment (slide rule)** : `trendArrow` (1=↓↓ ... 5=↑↑) en input → ajustement -1U/-0.5U/0/+0.5U/+1U. Le bouton "Utiliser la valeur live" récupère AUSSI la trend depuis le hook `useGlucose` et la passe au calculateur. La flèche s'affiche dans le champ glycémie (suffixe juste avant `mg/dL`). Reasoning "Tendance ↗ : +0,5U (glycémie en montée au moment du bolus)".
+- **Alerte IOB stacking enrichie** : encadré au-dessus du résultat quand IOB > 1U. Affiche le détail "IOB actif : 2,3U (lunch de 12h45)", explique que le bolus glucides n'est PAS réduit, montre la correction réduite anti-stacking, et calcule le **total effectif** (`finalUnits + IOB`) qui travaille réellement sur la glycémie.
+- **Pre-workout advisor contextuel** : encadré sous le toggle pré-entraînement quand actif. Calcule `estimatedGlucoseAtWorkout = currentGlucose - (IOB × ISF × min(1, minutesUntilWorkout/activeDuration))`. Messages dynamiques :
+  - **Muscu** : <120 → "Risque d'hypo, mange Xg" (rouge), >250 → "Trop haute, corrige et attends 30min" (orange), sinon → "Safe, +30 à +50 mg/dL attendu" (vert)
+  - **Running** : <140 → "Risque d'hypo, mange Xg de glucides rapides" (rouge), >250 → "Vérifie cétones" (orange), sinon → "Safe, emporte du sucre" (vert)
+- **Push notification rappel split dose** : nouveau type `SplitDoseReminder` (types/index.ts) persisté dans le store Zustand (`splitDoseReminders[]` avec `addSplitDoseReminder` / `updateSplitDoseReminder` / `removeSplitDoseReminder`). À chaque tick (60s), la page `/diabete` regarde les rappels `pending` arrivés à échéance → tire `serviceWorker.showNotification()` locale et marque comme `fired`. Service worker `public/sw.js` v3 : `requireInteraction: true` pour `type === "split-dose"`.
+- **UI rappels split dose** : section dédiée au-dessus du calculateur avec liste des rappels en attente (countdown si pas encore dû, surface lime si dû). Boutons "Logger" (auto-crée un `InsulinLog` `isSplitDose: true` avec `parentInjectionId`) ou "Annuler" (poubelle). Toast informatif après log d'une injection avec split dose : "Rappel programmé : 4U dans 2h30…" (auto-disparaît après 6s).
+- **Champs étendus `InsulinLog`** : `fatGrams?`, `proteinGrams?`, `mealTag?`, `mealSize?`, `trendArrow?`, `isSplitDose?`, `parentInjectionId?` — tous optionnels pour rétrocompat avec les anciennes injections persistées. La liste des injections affiche maintenant les macros si présentes (`Xg lip · Yg prot`) et un badge "split" pour les injections de couverture FPU.
+- **Block UI calculateur** : champ "Lipides & protéines (optionnel)" rétractable (collapsé par défaut, ne pollue pas l'UI quand non utilisé). Quand FPU >= 1, le résultat hero affiche "Maintenant : XU" (label) + un bloc lavender "Puis dans 2h30 : YU · couverture FPU". Breakdown grid passe à 4 cases si fpuBolus > 0 ou trendBolus ≠ 0 (Glucides, Correction, FPU, Tendance).
+- **Build TS** : passe sans erreur. Toutes les features testées dans le preview : champ glycémie 87 → flèche →, FPU 25g lip + 30g prot → split 3U + 4U dans 2h30, badge "Complexe", advisor running affiche "Risque d'hypo, mange 16g de glucides rapides".
 - **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
   - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
   - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"
