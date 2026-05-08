@@ -470,6 +470,23 @@ Capture du contexte repas au moment du bolus, sans friction. Alimente les blocs 
 - **UI suggestion historique** : petit encadré lavender (Info icon + texte secondary) sous les chips de taille, visible uniquement si count ≥ 3 ET suggestion non-null. Évite les recommandations basées sur trop peu de data.
 - **Champs étendus `InsulinLog`** : `mealTag` et `mealSize` propagés à chaque `addInsulinLog`. La liste des injections affiche maintenant le tag (ex: `#pates · big` en lavender) en plus des macros.
 - **Build TS** : passe. Testé dans preview : Pâtes + Énorme → 24g lip + 40g prot pré-remplis, split 6U + 4U dans 2h30, badge "Complexe", hint "Digestion longue (~5h). Re-check à T+3h."
+
+### Phase 11 — Bloc 3 : Pattern Engine proactif (mai 2026)
+Détection automatique des patterns glycémiques récurrents avec push notification locale et UI inline. Standard clinique : règle des 3 jours / 4 sur 7.
+
+- **Moteur déterministe** (`lib/glucose-archive/pattern-engine.ts`) : pure function `detectPatterns(points, injections, config, nowMs)` → `DetectedPattern[]`. Aucun import serveur, testable standalone. Trie par sévérité (`alert > warning > info`) en sortie.
+- **5 règles implémentées** :
+  - **night-hyper** (warning) : ≥3 nuits sur les 5 dernières où la moyenne 23h-6h > 180. Suggestion "split dose si repas riche le soir, ou ajustement Lantus avec diabéto".
+  - **recurring-hypo** (alert — priorité absolue) : ≥3 hypos < 70 dans le même créneau de 2h sur 7j (compté en jours uniques, pas en points). Suggestion dynamique selon créneau : 19h-21h → "réduis bolus goûter 0,5U les jours sport", 0h-6h → "basal nocturne trop fort", 12h-14h → "ratio midi trop agressif".
+  - **post-meal-spike** (warning) : ≥3 bolus du même `mealType` (sur 14j, hors split-doses) où la glycémie dépasse 220 dans les 3h post-injection. Compte par `mealType`, prend le top. Suggestion "pré-doser 15min avant ou +0,1U/10g".
+  - **dawn-phenomenon** (info) : ≥3 jours sur 5 où la glycémie 5h-8h > 160 SANS injection nocturne 0h-5h ce jour-là (filtre les corrections de minuit qui auraient masqué le pattern). Suggestion "ajustement Lantus avec diabéto".
+  - **cv-degradation** (info) : CV semaine courante > 36% ET semaine précédente ≤ 36%. Garde-fou : min 50 points par fenêtre. Suggestion "regarde si quelque chose a changé : repas, sport, stress, sommeil".
+- **Architecture client-side** (par décision archi — Phase 12 pourrait archiver les injections en KV pour côté serveur) : la détection tourne dans un hook React, pas un cron. Les injections sont dans le store Zustand côté client. Le moteur s'exécute au mount + à chaque changement d'`insulinLogs`.
+- **Hook `hooks/usePatternDetection.ts`** : fetch `/api/glucose/archive?days=14`, combine avec `insulinLogs` du store, appelle `detectPatterns()`. Cache localStorage avec TTL 6h (`apex-pattern-detection-v1`) — évite recalcul à chaque nav. Compare les ids détectés avec ceux du cache précédent (`notifiedIds`) → tire `serviceWorker.showNotification()` pour les **nouveaux** patterns uniquement (pas de re-tirage si déjà vu cette session).
+- **Persistance dismissed** (`apex-pattern-dismissed-v1`) : Set d'ids ignorés via le bouton "Compris". Filtré côté UI (pas côté hook) pour permettre un reset facile (`resetDismissed()` exposé).
+- **UI sur `/diabete`** : nouvelle section entre la courbe 8h et la correction suggérée. Si 0 pattern visible → rien (pas de section vide). Cards `surface-1` avec border colorée par sévérité (error/warning/border-default), icône lucide en haut-gauche (AlertTriangle / AlertCircle / Info), titre bold + timeWindow uppercase à droite, message en text-secondary, suggestion en italic lavender, bouton "Compris" (X icon) en bas à droite.
+- **Push notification** : `sw.js` tag `pattern-${type}` avec `data.url = "/diabete"` — au tap, focus la page diabète. Le requireInteraction reste à false pour les patterns (différent des hypos).
+- **Build TS** : passe. Testé dans preview avec faux patterns injectés : 3 niveaux de sévérité bien différenciés, dismiss fonctionne (persisté), localStorage cleanup propre.
 - **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
   - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
   - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"

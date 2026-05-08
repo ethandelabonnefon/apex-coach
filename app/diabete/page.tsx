@@ -21,6 +21,8 @@ import {
   type MealSizeId,
 } from "@/lib/meal-tags";
 import { getMealTypeHistory, type ArchivePoint } from "@/lib/meal-analytics";
+import { usePatternDetection } from "@/hooks/usePatternDetection";
+import type { DetectedPattern, PatternSeverity } from "@/lib/glucose-archive/pattern-engine";
 import {
   Droplet,
   Syringe,
@@ -50,6 +52,8 @@ import {
   Croissant,
   UtensilsCrossed,
   Info,
+  AlertCircle,
+  X,
 } from "lucide-react";
 
 // Mapping iconName (lib/meal-tags) → composant lucide-react
@@ -172,6 +176,20 @@ export default function DiabetePage() {
       setShowMacros(true);
     }
   }, [mealTag, mealSize, macrosManuallyEdited]);
+
+  // ─── Pattern detection (Bloc 3) ────────────────────────────
+  const {
+    patterns: detectedPatterns,
+    dismissedIds: patternDismissedIds,
+    dismissPattern,
+  } = usePatternDetection({
+    insulinLogs,
+    diabetesConfig,
+  });
+  const visiblePatterns = useMemo(
+    () => detectedPatterns.filter((p) => !patternDismissedIds.has(p.id)),
+    [detectedPatterns, patternDismissedIds],
+  );
 
   // ─── Archive points pour meal analytics (Bloc 2.3) ──────────
   // Fetch léger one-shot au mount + à chaque nouvelle injection
@@ -533,6 +551,15 @@ export default function DiabetePage() {
       <div className="mb-4">
         <GlucoseChart />
       </div>
+
+      {/* ── PATTERNS DÉTECTÉS (Phase 11 Bloc 3) ── */}
+      {visiblePatterns.length > 0 && (
+        <section className="mb-4 space-y-2">
+          {visiblePatterns.map((p) => (
+            <PatternCard key={p.id} pattern={p} onDismiss={() => dismissPattern(p.id)} />
+          ))}
+        </section>
+      )}
 
       {/* ── CORRECTION SUGGÉRÉE (hyper) ── */}
       <div className="mb-4">
@@ -1454,5 +1481,75 @@ function NavIconLink({
     >
       {children}
     </Link>
+  );
+}
+
+function severityStyles(s: PatternSeverity): {
+  containerClass: string;
+  iconClass: string;
+  Icon: typeof AlertTriangle;
+} {
+  switch (s) {
+    case "alert":
+      return {
+        containerClass: "surface-1 border border-error/40 bg-error/5",
+        iconClass: "text-error",
+        Icon: AlertTriangle,
+      };
+    case "warning":
+      return {
+        containerClass: "surface-1 border border-warning/40 bg-warning/5",
+        iconClass: "text-warning",
+        Icon: AlertCircle,
+      };
+    default:
+      return {
+        containerClass: "surface-1 border border-border-default",
+        iconClass: "text-info",
+        Icon: Info,
+      };
+  }
+}
+
+function PatternCard({
+  pattern,
+  onDismiss,
+}: {
+  pattern: DetectedPattern;
+  onDismiss: () => void;
+}) {
+  const { containerClass, iconClass, Icon } = severityStyles(pattern.severity);
+  return (
+    <div className={`rounded-2xl px-4 py-3 ${containerClass}`}>
+      <div className="flex items-start gap-3">
+        <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${iconClass}`} />
+        <div className="flex-1 min-w-0 space-y-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm font-semibold text-text-primary leading-snug">
+              {pattern.title}
+            </p>
+            <span className="num text-[10px] text-text-tertiary uppercase tracking-wide shrink-0">
+              {pattern.timeWindow}
+            </span>
+          </div>
+          <p className="text-xs text-text-secondary leading-relaxed">
+            {pattern.message}
+          </p>
+          <p className="text-xs text-diabete italic leading-relaxed">
+            {pattern.suggestion}
+          </p>
+          <div className="flex items-center justify-end pt-1">
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="flex items-center gap-1 text-[11px] text-text-tertiary hover:text-text-secondary transition-colors tap-scale px-2 py-1 rounded-md"
+            >
+              <X className="w-3 h-3" />
+              Compris
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
