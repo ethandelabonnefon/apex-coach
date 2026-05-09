@@ -35,7 +35,9 @@ import { useStore } from "@/lib/store";
 import { GLUCOSE_THRESHOLDS } from "@/lib/libre-link/config";
 import GlucoseCalendar from "@/components/glucose/GlucoseCalendar";
 import AGPChart from "@/components/glucose/AGPChart";
+import SportGlucoseCorrelation from "@/components/glucose/SportGlucoseCorrelation";
 import { usePatternDetection } from "@/hooks/usePatternDetection";
+import type { SportSession } from "@/lib/sport-glucose-analytics";
 import {
   ArrowLeft,
   AlertTriangle,
@@ -235,6 +237,30 @@ export default function DiabeteHistoriquePage() {
     insulinLogs,
     diabetesConfig,
   });
+
+  // Phase 11 Bloc 6 — sessions sport mappées en SportSession[] pour la
+  // corrélation glucose. Filtrées à la fenêtre courante.
+  const muscuSportSessions: SportSession[] = useMemo(() => {
+    const fromMs = Date.now() - days * 24 * 60 * 60 * 1000;
+    return completedWorkouts
+      .filter((w) => new Date(w.date).getTime() >= fromMs)
+      .map((w) => ({
+        date: w.date,
+        type: "muscu" as const,
+        durationMin: Math.round(w.duration ?? 60),
+      }));
+  }, [completedWorkouts, days]);
+
+  const runningSportSessions: SportSession[] = useMemo(() => {
+    const fromMs = Date.now() - days * 24 * 60 * 60 * 1000;
+    return completedRunningSessions
+      .filter((r) => new Date(r.date).getTime() >= fromMs)
+      .map((r) => ({
+        date: r.date,
+        type: "running" as const,
+        durationMin: Math.round(r.actualDuration ?? 45),
+      }));
+  }, [completedRunningSessions, days]);
 
   // ─── État Bilan IA (Phase 10c) ────────────────────────────────────────
   const [insight, setInsight] = useState<InsightOutput | null>(null);
@@ -780,6 +806,13 @@ export default function DiabeteHistoriquePage() {
 
           {/* Phase 11 Bloc 4.3 — Calendrier 30j */}
           <GlucoseCalendar points={data?.points ?? []} days={Math.min(30, days)} />
+
+          {/* Phase 11 Bloc 6 — Corrélation sport ↔ glycémie */}
+          <SportGlucoseCorrelation
+            muscuSessions={muscuSportSessions}
+            runningSessions={runningSportSessions}
+            archivePoints={data?.points ?? []}
+          />
 
           {/* Pattern par heure (bar chart 24h) */}
           <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">

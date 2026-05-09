@@ -24,6 +24,13 @@ import { getMealTypeHistory, type ArchivePoint } from "@/lib/meal-analytics";
 import { usePatternDetection } from "@/hooks/usePatternDetection";
 import type { DetectedPattern, PatternSeverity } from "@/lib/glucose-archive/pattern-engine";
 import {
+  enrichSession,
+  computeAvgSportImpact,
+  type SportSession,
+  type EnrichedSportSession,
+} from "@/lib/sport-glucose-analytics";
+import type { ArchivedPoint } from "@/lib/glucose-archive/store";
+import {
   Droplet,
   Syringe,
   Calculator,
@@ -144,6 +151,9 @@ export default function DiabetePage() {
     updateSplitDoseReminder,
     removeSplitDoseReminder,
   } = useStore();
+  // Phase 11 Bloc 6.3 — séances historiques pour personnaliser l'advisor
+  const completedWorkouts = useStore((s) => s.completedWorkouts);
+  const completedRunningSessions = useStore((s) => s.completedRunningSessions);
 
   // ─── Bolus calculator ─────────────────────────
   const [carbsGrams, setCarbsGrams] = useState(60);
@@ -441,7 +451,27 @@ export default function DiabetePage() {
     removeSplitDoseReminder(reminder.id);
   }
 
-  // ─── Pre-workout advisor (Bloc 1.4) ─────────────────────────
+  // ─── Sessions sport enrichies (Bloc 6.3) ──────────────────────────
+  // On les enrichit ici une fois pour réutiliser dans l'advisor sans
+  // recalcul à chaque tick.
+  const enrichedSportSessions: EnrichedSportSession[] = useMemo(() => {
+    const sessions: SportSession[] = [
+      ...completedWorkouts.map((w) => ({
+        date: w.date,
+        type: "muscu" as const,
+        durationMin: Math.round(w.duration ?? 60),
+      })),
+      ...completedRunningSessions.map((r) => ({
+        date: r.date,
+        type: "running" as const,
+        durationMin: Math.round(r.actualDuration ?? 45),
+      })),
+    ];
+    // archivePoints du Bloc 2 (meal-analytics) sont compatibles avec ArchivedPoint
+    return sessions.map((s) => enrichSession(s, archivePoints as ArchivedPoint[]));
+  }, [completedWorkouts, completedRunningSessions, archivePoints]);
+
+  // ─── Pre-workout advisor (Bloc 1.4 + Bloc 6.3) ───────────────────
   const advisorState = useMemo(() => {
     if (!isPreWorkout || !workoutType) return null;
     const isf = diabetesConfig.insulinSensitivityFactor;
@@ -450,6 +480,15 @@ export default function DiabetePage() {
     const fractionDuringWindow = Math.min(1, minutesUntilWorkout / activeDuration);
     const estimatedDropFromIOB = iob.totalIOB * isf * fractionDuringWindow;
     const estimatedGlucoseAtWorkout = Math.round(currentGlucose - estimatedDropFromIOB);
+
+    // Phase 11 Bloc 6.3 — impact réel basé sur les séances trackées
+    // (fallback sur les valeurs académiques si < 3 séances).
+    const personalizedImpact = computeAvgSportImpact(
+      enrichedSportSessions,
+      workoutType,
+      3,
+    );
+    const usedPersonalImpact = personalizedImpact !== null;
 
     let tone: 'safe' | 'caution' | 'risk' = 'safe';
     let message = '';
@@ -465,7 +504,12 @@ export default function DiabetePage() {
         message = "Glycémie trop haute pour la muscu. Fais ta correction et attends 30min.";
       } else {
         tone = 'safe';
-        message = "Tu es safe pour la muscu. La glycémie va probablement monter de +30 à +50 mg/dL pendant la séance.";
+        if (usedPersonalImpact) {
+          const sign = personalizedImpact >= 0 ? "+" : "";
+          message = `Tu es safe pour la muscu. D'après tes séances, ta glycémie va ${personalizedImpact >= 0 ? "monter" : "descendre"} de ${sign}${personalizedImpact} mg/dL en moyenne.`;
+        } else {
+          message = "Tu es safe pour la muscu. La glycémie va probablement monter de +30 à +50 mg/dL pendant la séance.";
+        }
       }
     } else {
       // running
@@ -478,12 +522,38 @@ export default function DiabetePage() {
         message = "Glycémie trop haute. Vérifie les cétones avant de courir.";
       } else {
         tone = 'safe';
-        message = "Tu es safe pour le running. Emporte du sucre au cas où.";
+        if (usedPersonalImpact) {
+          const sign = personalizedImpact >= 0 ? "+" : "";
+          message = `Tu es safe pour le running. D'après tes séances, ta glycémie va ${personalizedImpact >= 0 ? "monter" : "descendre"} de ${sign}${personalizedImpact} mg/dL en moyenne. Emporte du sucre au cas où.`;
+        } else {
+          message = "Tu es safe pour le running. Emporte du sucre au cas où.";
+        }
       }
     }
 
-    return { tone, message, estimatedGlucoseAtWorkout, carbsNeeded };
-  }, [isPreWorkout, workoutType, minutesUntilWorkout, iob.totalIOB, currentGlucose, diabetesConfig]);
+    // Glycémie estimée pendant le sport — affinée si personalisée
+    const estimatedDuringWorkout = usedPersonalImpact
+      ? estimatedGlucoseAtWorkout + personalizedImpact
+      : estimatedGlucoseAtWorkout;
+
+    return {
+      tone,
+      message,
+      estimatedGlucoseAtWorkout,
+      estimatedDuringWorkout,
+      carbsNeeded,
+      personalizedImpact,
+      usedPersonalImpact,
+    };
+  }, [
+    isPreWorkout,
+    workoutType,
+    minutesUntilWorkout,
+    iob.totalIOB,
+    currentGlucose,
+    diabetesConfig,
+    enrichedSportSessions,
+  ]);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto stagger">
@@ -897,7 +967,21 @@ export default function DiabetePage() {
                           {advisorState.estimatedGlucoseAtWorkout}
                         </span>{" "}
                         mg/dL
+                        {advisorState.usedPersonalImpact && (
+                          <>
+                            {" · "}
+                            <span className="num font-semibold">
+                              ~{advisorState.estimatedDuringWorkout}
+                            </span>{" "}
+                            pendant
+                          </>
+                        )}
                       </p>
+                      {advisorState.usedPersonalImpact && (
+                        <p className="text-[10px] mt-0.5 opacity-60">
+                          basé sur tes séances trackées
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

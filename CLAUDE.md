@@ -522,6 +522,19 @@ Enrichissement du `POST /api/diabete/weekly-insight` avec 3 nouveaux signaux cro
   - Citer les **repas spécifiques** ou **dates** qui justifient la suggestion.
 - **Garde-fous existants conservés** (Phase 10c) : pas d'auto-apply, increments max ±10%, données insuffisantes → pas de suggestion concrète, hypos = priorité absolue, JSON strict en sortie.
 - **Build TS** : passe. La route est rétrocompat : un client qui n'envoie pas les nouveaux champs reçoit le même bilan qu'avant (les signaux enrichis sont normalisés en arrays vides).
+
+### Phase 11 — Bloc 6 : Sport-Glucose Correlation Engine (mai 2026)
+Mesurer l'impact RÉEL du sport sur la glycémie d'Ethan, et personnaliser le pre-workout advisor avec ses propres données plutôt que des moyennes académiques.
+
+- **Pure functions** (`lib/sport-glucose-analytics.ts`) :
+  - `enrichSession(session, archivePoints)` calcule 5 checkpoints (T-30, T+0, T+30, T+60, T+120) en cherchant le point archive le plus proche de chaque offset (tolérance ±18min). Renvoie `EnrichedSportSession` avec `delta` (T+30 − T-30), `peak` et `trough`.
+  - `summarizeSportImpact(sessions, type)` agrège les sessions enrichies par type (muscu/running) → `SportImpactSummary` avec `trackedCount`, `avgDelta`, `worstDelta` (pour muscu = max, running = min), `avgCurve` (5 points moyennés).
+  - `computeAvgSportImpact(sessions, type, minSample=3)` exposé pour le pre-workout advisor — retourne null si `trackedCount < minSample` (force le fallback générique).
+  - **Pas de persistance** : tout est calculé à la volée depuis l'archive Vercel KV (qui contient 90j de Libre 2). L'archive est la source de vérité — pas besoin d'un job de "rattrapage" ou de persister les checkpoints. Les nouvelles séances sont enrichies au prochain rendu.
+- **Composant `SportGlucoseCorrelation.tsx`** : 2 onglets Muscu / Running (compteurs inline), 3 stats récap (Trackées / Delta moyen / Pire delta) avec tone dynamique (vert si attendu = +/− selon le type, orange si inattendu, rouge pour worstDelta), insight texte personnalisé ("ta glycémie monte de 56 mg/dL en moyenne pendant la muscu"), courbe LineChart Recharts T-30→T+120 avec ReferenceArea cible 70-180 + ReferenceLine T+0 dashed, recommandation lavender ("Avec une glycémie de départ de 130, tu risques d'être à 186 à T+30min en muscu, basé sur tes 5 dernières séances").
+- **Intégration `/diabete/historique`** : nouvelle section après le calendrier, avant le pattern par heure. Mappe `completedWorkouts` + `completedRunningSessions` du store en `SportSession[]` (filtrés à la fenêtre courante) et passe les `archivePoints` du fetch existant. Aucun fetch supplémentaire — réutilise les données déjà chargées.
+- **Pre-workout advisor enrichi (Bloc 6.3)** : `app/diabete/page.tsx` calcule `enrichedSportSessions` depuis le store + archive 30j. L'advisor appelle `computeAvgSportImpact()` ; si ≥ 3 séances trackées avec checkpoints valides, le message bascule en mode personnalisé : "D'après tes séances, ta glycémie va monter de +56 mg/dL en moyenne". Affiche aussi `~glycémie pendant` en plus de "à T+Xmin" + une mention discrète "basé sur tes séances trackées". Fallback gracieux (valeurs académiques +30-50 muscu / −40-80 running) si insuffisant.
+- **Build TS** : passe. Vérifié dans preview avec mock 1300 points archive + 5 muscu + 3 running injectées : tab Muscu affiche +56 mg/dL delta moyen (pic à 186 prédit), tab Running passe en bleu sky avec courbe stable (delta +5), recommandations personnalisées affichées correctement.
 - **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
   - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
   - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"
