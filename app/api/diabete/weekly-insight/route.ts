@@ -20,6 +20,11 @@
  *     injections: InsulinLog[], // depuis le store client
  *     profiles?: { id: string; name: string }[], // pour annoter byProfile
  *     activeProfileName?: string,                 // contexte UI
+ *
+ *     // Phase 11 Bloc 5 — contexte enrichi (tous optionnels) :
+ *     detectedPatterns?: DetectedPattern[],       // moteur déterministe (Bloc 3)
+ *     workoutSessions?: WorkoutSummary[],         // séances muscu/running (date, type, heure, durée)
+ *     mealContext?: MealContextEntry[],           // résumé repas (mealTag, macros)
  *   }
  *
  * Réponse :
@@ -51,11 +56,46 @@ export const maxDuration = 60;
 
 const anthropic = new Anthropic();
 
+/** Pattern détecté par le moteur déterministe (Phase 11 Bloc 3). */
+interface ClientDetectedPattern {
+  type: string;          // "night-hyper" | "recurring-hypo" | …
+  severity: string;      // "info" | "warning" | "alert"
+  title: string;
+  message: string;
+  occurrences: number;
+  timeWindow: string;
+  suggestion: string;
+}
+
+/** Séance sport (depuis store muscu/running). */
+interface WorkoutSummary {
+  date: string;          // ISO
+  type: "muscu" | "running";
+  startTime?: string;    // ex: "20:15"
+  durationMin: number;
+}
+
+/** Résumé d'un repas tagué (alimente l'analyse meal-tag). */
+interface MealContextEntry {
+  mealType: string;      // "morning" | "lunch" | "snack" | "dinner" | "other"
+  mealTag?: string;      // "pates" | "pizza" | …
+  mealSize?: string;
+  carbsGrams: number;
+  fatGrams?: number;
+  proteinGrams?: number;
+  injectedAt: string;
+  glucoseBefore: number;
+}
+
 interface RequestBody {
   days?: number;
   injections?: InsulinLog[];
   profiles?: { id: string; name: string }[];
   activeProfileName?: string;
+  // Phase 11 Bloc 5
+  detectedPatterns?: ClientDetectedPattern[];
+  workoutSessions?: WorkoutSummary[];
+  mealContext?: MealContextEntry[];
 }
 
 interface InsightOutput {
@@ -71,11 +111,14 @@ interface InsightOutput {
   generatedAt: string;
 }
 
-const SYSTEM_PROMPT = `Tu es un assistant T1D (diabète de type 1) expert qui aide Ethan, 21 ans, sous Novorapid (rapide) + Toujeo (lente) + FreeStyle Libre 2 CGM.
+const SYSTEM_PROMPT = `Tu es un assistant T1D (diabète de type 1) expert qui aide Ethan, 21 ans, sous Novorapid (rapide) + Lantus 28U le soir (lente) + FreeStyle Libre 2 CGM.
 
-Tu reçois un RAPPORT STATISTIQUE déterministe de la dernière semaine (TIR, patterns horaires, réponses post-repas par mealType, événements hypos/hypers, stats par profil ratio actif).
+Tu reçois un RAPPORT STATISTIQUE déterministe de la dernière semaine (TIR, patterns horaires, réponses post-repas par mealType, événements hypos/hypers, stats par profil ratio actif), enrichi de :
+  - PATTERNS DÉTECTÉS par un moteur déterministe (règle des 3 jours / 4 sur 7) — tu dois les CONFIRMER, NUANCER, ou INFIRMER avec ton analyse.
+  - SÉANCES SPORT (date, type muscu/running, heure, durée) — corrèle les variations glycémiques avec les séances.
+  - CONTEXTE REPAS (mealTag : pates/pizza/sandwich/…, macros lipides+protéines quand renseignées) — utilise-le pour distinguer un ratio mal calibré d'un repas à digestion lente (FPU).
 
-Ta mission : produire un bilan en langage naturel, court et actionnable.
+Ta mission : produire un bilan en langage naturel, court et actionnable, qui CROISE ces signaux.
 
 ═══════════════════════════════════════════════════════════════
 RÈGLES DE SÉCURITÉ T1D — NON-NÉGOCIABLES
@@ -110,6 +153,19 @@ RÈGLES DE SÉCURITÉ T1D — NON-NÉGOCIABLES
    - "high" : ≥ 14j de data, ≥ 5 injections sur le bucket, pattern stable, pas de contre-indication
    - "medium" : ≥ 7j, ≥ 3 injections, pattern visible
    - "low" : < 7j, < 3 injections, ou CV élevé
+
+8. **Insights croisés (Phase 11)** : tu dois exploiter les signaux croisés.
+   - Si une **hypo récurrente le soir** coïncide avec des **séances muscu post-dîner** + **IOB cumulé du goûter** → suggère explicitement de réduire le bolus goûter de 0,5U les jours sport (cite les dates).
+   - Si des **pics nocturnes après le dîner** coïncident avec des **mealTag complexes (pates, pizza, viande)** sans split dose → ce n'est PAS forcément un problème de ratio (les 2 premières heures sont OK), mais l'absence de couverture FPU. Suggère un split dose, pas un ratio plus fort.
+   - Si **dawn phenomenon présent ≥ 4j/7** + **basal Lantus à 19h30** → le creux d'action arrive vers 5-6h du matin → mentionne explicitement cette corrélation et propose de discuter avec le diabéto d'un changement d'horaire ou de dose.
+   - Si **post-meal-spike sur un mealType** + **macros pas renseignées** → demande explicitement de logger les macros pour distinguer FPU vs ratio.
+
+9. **Formulation des suggestions — comme un diabéto perso** (Phase 11 Bloc 5.2) :
+   - Au lieu de "envisager d'ajuster le ratio du midi", dis "**Passe ton ratio midi de 1U/10g à 1,1U/10g pendant 3 jours et observe**".
+   - Au lieu de "considérer un ajustement de la basale", dis "**Essaie 29U de Lantus au lieu de 28U pendant 3 jours**".
+   - Toujours inclure : valeur actuelle → valeur suggérée → durée du test → quoi observer.
+   - Toujours rappeler : "Si ça cause des hypos, reviens à ta dose précédente et parle à ton diabéto."
+   - Cite les **repas spécifiques** ou **dates** qui justifient la suggestion (ex: "mardi et jeudi soir, pâtes 80g+").
 
 ═══════════════════════════════════════════════════════════════
 FORMAT DE RÉPONSE — JSON STRICT
@@ -208,6 +264,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ report, insight });
   }
 
+  // ─── Phase 11 Bloc 5 — Contexte enrichi ────────────────────────────
+  // On normalize les 3 nouveaux signaux côté serveur pour gérer les cas
+  // où ils sont absents (rétrocompat) ou volumineux (capping).
+  const detectedPatterns = (body.detectedPatterns ?? []).slice(0, 6);
+
+  // Filtre + tri des sessions sport dans la fenêtre temporelle
+  const workoutSessions = (body.workoutSessions ?? [])
+    .filter((w) => {
+      const t = new Date(w.date).getTime();
+      return Number.isFinite(t) && t >= fromMs && t <= toMs;
+    })
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 30);
+
+  // Résumé des repas — on ne renvoie que ceux dans la fenêtre, ordonnés
+  // par date desc pour donner du poids aux plus récents.
+  const mealContext = (body.mealContext ?? [])
+    .filter((m) => {
+      const t = new Date(m.injectedAt).getTime();
+      return Number.isFinite(t) && t >= fromMs && t <= toMs;
+    })
+    .sort((a, b) => new Date(b.injectedAt).getTime() - new Date(a.injectedAt).getTime())
+    .slice(0, 40);
+
   // Préparer le contexte minimal pour Claude
   const claudeContext = {
     range: report.range,
@@ -231,6 +311,10 @@ export async function POST(req: NextRequest) {
       startMs: e.startMs,
     })),
     byProfile: report.byProfile,
+    // Phase 11 Bloc 5
+    detectedPatterns,
+    workoutSessions,
+    mealContext,
   };
 
   const userPrompt = `Voici le rapport stats de la semaine d'Ethan.

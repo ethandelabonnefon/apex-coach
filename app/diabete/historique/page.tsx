@@ -35,6 +35,7 @@ import { useStore } from "@/lib/store";
 import { GLUCOSE_THRESHOLDS } from "@/lib/libre-link/config";
 import GlucoseCalendar from "@/components/glucose/GlucoseCalendar";
 import AGPChart from "@/components/glucose/AGPChart";
+import { usePatternDetection } from "@/hooks/usePatternDetection";
 import {
   ArrowLeft,
   AlertTriangle,
@@ -227,6 +228,13 @@ export default function DiabeteHistoriquePage() {
 
   const insulinLogs = useStore((s) => s.insulinLogs);
   const diabetesConfig = useStore((s) => s.diabetesConfig);
+  // Phase 11 Bloc 5 — sources de contexte enrichi pour le bilan IA
+  const completedWorkouts = useStore((s) => s.completedWorkouts);
+  const completedRunningSessions = useStore((s) => s.completedRunningSessions);
+  const { patterns: detectedPatterns } = usePatternDetection({
+    insulinLogs,
+    diabetesConfig,
+  });
 
   // ─── État Bilan IA (Phase 10c) ────────────────────────────────────────
   const [insight, setInsight] = useState<InsightOutput | null>(null);
@@ -245,6 +253,47 @@ export default function DiabeteHistoriquePage() {
     setInsightError(null);
     setInsight(null);
     try {
+      // Phase 11 Bloc 5 — préparer le contexte enrichi
+      const fromMs = Date.now() - days * 24 * 60 * 60 * 1000;
+
+      // Workouts dans la fenêtre (muscu + running)
+      const workoutSessions = [
+        ...completedWorkouts
+          .filter((w) => new Date(w.date).getTime() >= fromMs)
+          .map((w) => ({
+            date: w.date,
+            type: "muscu" as const,
+            durationMin: Math.round(w.duration ?? 60),
+          })),
+        ...completedRunningSessions
+          .filter((r) => new Date(r.date).getTime() >= fromMs)
+          .map((r) => ({
+            date: r.date,
+            type: "running" as const,
+            durationMin: Math.round(r.actualDuration ?? 45),
+          })),
+      ];
+
+      // Meal context — injections taguées avec leurs macros
+      const mealContext = insulinLogs
+        .filter((log) => {
+          const t = new Date(log.injectedAt).getTime();
+          return t >= fromMs && !log.isSplitDose;
+        })
+        .map((log) => ({
+          mealType: log.mealType,
+          mealTag: log.mealTag,
+          mealSize: log.mealSize,
+          carbsGrams: log.carbsGrams,
+          fatGrams: log.fatGrams,
+          proteinGrams: log.proteinGrams,
+          injectedAt:
+            log.injectedAt instanceof Date
+              ? log.injectedAt.toISOString()
+              : new Date(log.injectedAt).toISOString(),
+          glucoseBefore: log.glucoseBefore,
+        }));
+
       const res = await fetch("/api/diabete/weekly-insight", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -256,6 +305,18 @@ export default function DiabeteHistoriquePage() {
             name: p.name,
           })),
           activeProfileName,
+          // Phase 11 Bloc 5
+          detectedPatterns: detectedPatterns.map((p) => ({
+            type: p.type,
+            severity: p.severity,
+            title: p.title,
+            message: p.message,
+            occurrences: p.occurrences,
+            timeWindow: p.timeWindow,
+            suggestion: p.suggestion,
+          })),
+          workoutSessions,
+          mealContext,
         }),
       });
       if (!res.ok) {

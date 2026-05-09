@@ -500,6 +500,28 @@ Enrichissement de la page `/diabete/historique` avec les 4 métriques cliniques 
 - **`AGPChart.tsx`** : ComposedChart Recharts avec 2 bandes Area (lavender 10% opacité pour P10-P90, 22% pour P25-P75) + 1 Line lime médiane. Bande de fond verte 70-180 (target), seuils 70 (rouge) et 180 (orange) en pointillés. XAxis ticks 00:00/04:00/08:00/12:00/16:00/20:00. Tooltip custom surface-2 avec médiane + percentiles. Garde-fou : "pas assez de données" si totalCount < 50.
 - **Toggle Vue courbe / Vue AGP** dans `/diabete/historique` : state `chartView: 'line' | 'agp'`. Boutons icon+label dans le header de la section ; en mode AGP, la section line chart originale est remplacée par `<AGPChart>` (header simplifié au-dessus du chart). Préserve l'expérience existante : par défaut `line`.
 - **Build TS** : passe. Vérifié dans preview avec mock fetch (2976 points sur 30j) : GMI 6,8%, GRI 10/100 Zone A, calendrier 30j heatmap colorée par score, toggle AGP affiche médiane lime + bandes lavender + tooltip 19:30 médiane 157.
+
+### Phase 11 — Bloc 5 : Bilan IA v2 contextualisé (mai 2026)
+Enrichissement du `POST /api/diabete/weekly-insight` avec 3 nouveaux signaux croisés et reformulation des suggestions en mode "diabéto perso".
+
+- **Body API étendu** (rétrocompat — tous les nouveaux champs sont optionnels) :
+  - `detectedPatterns?: ClientDetectedPattern[]` — patterns du moteur déterministe (Bloc 3) : type, severity, title, message, occurrences, timeWindow, suggestion. Capés à 6.
+  - `workoutSessions?: WorkoutSummary[]` — séances muscu/running depuis `completedWorkouts` + `completedRunningSessions` du store. Filtrés à la fenêtre temporelle, triés desc, capés à 30. Schéma : `{ date, type, startTime?, durationMin }`.
+  - `mealContext?: MealContextEntry[]` — `InsulinLog[]` filtrés à la fenêtre (hors split-doses) et mappés vers `{ mealType, mealTag?, mealSize?, carbsGrams, fatGrams?, proteinGrams?, injectedAt, glucoseBefore }`. Capés à 40.
+- **Préparation côté client (`/diabete/historique`)** : `generateInsight()` lit `usePatternDetection` + workouts du store, calcule `fromMs` selon `days`, normalise les dates en ISO et envoie le tout au POST.
+- **System prompt v2** : nouvelle introduction qui liste les 3 signaux enrichis et demande explicitement à Claude de les **CROISER** (confirmer/nuancer/infirmer les patterns détectés, corréler sport ↔ glycémie, distinguer ratio mal calibré vs digestion lente FPU).
+- **Règle 8 — Insights croisés** :
+  - Hypo récurrente le soir + muscu post-dîner + IOB cumulé du goûter → suggérer réduction goûter avec dates précises.
+  - Pics nocturnes + mealTag complexe (pates/pizza/viande) sans split → c'est le FPU, pas le ratio.
+  - Dawn ≥ 4j/7 + Lantus 19h30 → mentionner explicitement la corrélation horaire.
+  - Post-meal-spike + macros non renseignées → demander de logger pour départager.
+- **Règle 9 — Formulation diabéto perso (Bloc 5.2)** : suggestions formulées comme un endocrinologue donnant des consignes claires :
+  - "Passe ton ratio midi de 1U/10g à 1,1U/10g pendant 3 jours et observe" (au lieu de "envisager d'ajuster").
+  - Toujours : valeur actuelle → valeur suggérée → durée du test → quoi observer.
+  - Toujours : "Si ça cause des hypos, reviens à ta dose précédente et parle à ton diabéto."
+  - Citer les **repas spécifiques** ou **dates** qui justifient la suggestion.
+- **Garde-fous existants conservés** (Phase 10c) : pas d'auto-apply, increments max ±10%, données insuffisantes → pas de suggestion concrète, hypos = priorité absolue, JSON strict en sortie.
+- **Build TS** : passe. La route est rétrocompat : un client qui n'envoie pas les nouveaux champs reçoit le même bilan qu'avant (les signaux enrichis sont normalisés en arrays vides).
 - **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
   - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
   - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"
