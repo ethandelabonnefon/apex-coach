@@ -213,7 +213,20 @@ export function calculateBolus(
   // On inclut FPU + trendBolus dans le total quand pas de split (cas où
   // FPU est petit ou non renseigné). Si split actif → only carb+correction
   // dans "now".
-  const useSplit = totalFPU >= 1;
+  //
+  // Seuils split dose (Phase 11, ajustés mai 2026) : on ne suggère un
+  // split QUE pour les vrais repas lourds (pâtes, pizza, viande+accomp.).
+  //   - FPU ≥ 2.0       → digestion vraiment longue, bolus glucides
+  //                        seul ne suffit pas
+  //   - carbsGrams ≥ 40 → un repas léger en glucides ne pose pas de
+  //                        problème d'absorption tardive même avec FPU
+  //                        élevé (cas salade + huile/protéines)
+  //   - fpuBolus ≥ 1.5  → si l'apport FPU calculé est < 1,5U, le split
+  //                        donnerait <2U arrondi → pas la peine de
+  //                        casser en deux
+  // Les 3 conditions doivent être réunies. Sinon, le FPU est intégré
+  // directement au bolus principal.
+  const useSplit = totalFPU >= 2 && carbsGrams >= 40 && fpuBolus >= 1.5;
   const rawTotalNoSplit = Math.max(0, carbBolus + correctionBolus + trendBolus + fpuBolus);
   const rawTotalWithSplit = Math.max(0, carbBolus + correctionBolus + trendBolus);
 
@@ -229,10 +242,9 @@ export function calculateBolus(
   let splitDose: BolusResult['splitDose'];
   if (useSplit && fpuBolus > 0) {
     const laterUnits = Math.ceil(fpuBolus);
-    const delayMinutes =
-      totalFPU >= 3 ? 150 :
-      totalFPU >= 2 ? 120 :
-      90;
+    // Délai = 150min pour repas très lourds (FPU ≥ 3, ex: pâtes énorme,
+    // pizza, viande+accomp), 120min sinon (cas standard).
+    const delayMinutes = totalFPU >= 3 ? 150 : 120;
     splitDose = {
       now: totalBolus,
       later: laterUnits,

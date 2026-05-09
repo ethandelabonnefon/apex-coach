@@ -535,6 +535,21 @@ Mesurer l'impact RÉEL du sport sur la glycémie d'Ethan, et personnaliser le pr
 - **Intégration `/diabete/historique`** : nouvelle section après le calendrier, avant le pattern par heure. Mappe `completedWorkouts` + `completedRunningSessions` du store en `SportSession[]` (filtrés à la fenêtre courante) et passe les `archivePoints` du fetch existant. Aucun fetch supplémentaire — réutilise les données déjà chargées.
 - **Pre-workout advisor enrichi (Bloc 6.3)** : `app/diabete/page.tsx` calcule `enrichedSportSessions` depuis le store + archive 30j. L'advisor appelle `computeAvgSportImpact()` ; si ≥ 3 séances trackées avec checkpoints valides, le message bascule en mode personnalisé : "D'après tes séances, ta glycémie va monter de +56 mg/dL en moyenne". Affiche aussi `~glycémie pendant` en plus de "à T+Xmin" + une mention discrète "basé sur tes séances trackées". Fallback gracieux (valeurs académiques +30-50 muscu / −40-80 running) si insuffisant.
 - **Build TS** : passe. Vérifié dans preview avec mock 1300 points archive + 5 muscu + 3 running injectées : tab Muscu affiche +56 mg/dL delta moyen (pic à 186 prédit), tab Running passe en bleu sky avec courbe stable (delta +5), recommandations personnalisées affichées correctement.
+
+### Phase 11 — Ajustement seuils split dose (mai 2026)
+Retour terrain Ethan : pour une salade (8g lip + 12g prot, FPU 1.2), le système suggérait un split dose alors que la salade ne pose aucun problème de digestion lente. Le seuil initial `totalFPU >= 1` était trop bas et générait des faux positifs sur tous les repas modérés.
+
+- **Nouveaux seuils** dans `lib/insulin-calculator.ts` (`useSplit`) — les 3 doivent être réunis :
+  - `totalFPU >= 2.0` — vraie digestion longue, pas juste "un peu de matière grasse"
+  - `carbsGrams >= 40` — un repas léger en carbs ne pose pas de problème d'absorption tardive même avec FPU élevé (cas salade + huile + protéines)
+  - `fpuBolus >= 1.5` — si l'apport calculé est < 1,5U, le split donnerait < 2U arrondi → casser en deux apporte zéro valeur
+- **Délais simplifiés** : `delayMinutes = totalFPU >= 3 ? 150 : 120` (le palier 90min n'est plus atteignable puisqu'on ne split plus en dessous de 2 FPU).
+- **Cas validés en preview** :
+  - Salade 30g/8/12 (FPU 1.2) → pas de split ✅
+  - Sandwich 50g/12/15 (FPU 1.68) → pas de split ✅
+  - Pâtes normal 60g/15/25 (FPU 2.35) → split 6U + 3U dans 2h ✅
+  - Pâtes énorme (FPU 3.76) → split avec délai 2h30 ✅
+- Le badge "Modéré" / "Complexe" reste affiché dès qu'on renseigne des macros (info utile sur la digestion), mais le split dose ne se déclenche plus que sur les vrais repas lourds.
 - **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
   - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
   - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"
