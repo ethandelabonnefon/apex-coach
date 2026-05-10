@@ -601,6 +601,19 @@ Nouvelle section **"Briefing pré-sport"** sur `/diabete` qui sert d'advisor "fi
 - **Cas validés en preview** :
   - Glyc 65 + muscu 30min (pas IOB, pas split) → 1 reco "Mange 17g de glucides rapides" (rouge)
   - Glyc normale + IOB 5.7U + split 4U/15min + running 30min → 3 recos : 51g glucides + Réduire à 2U + Décaler de 1h30, glycémie estimée -53 au début (donc grosse hypo prédite), boutons d'action fonctionnels.
+
+### Phase 11 — Calibrage briefing pré-sport (mai 2026)
+Retour terrain Ethan : pour une fenêtre de 180min, le système recommandait "Mange 191g de glucides rapides" avec une glycémie estimée à -633 mg/dL. La formule pure `IOB × ISF × fraction(temps)` est mathématiquement correcte mais ignore les facteurs compensateurs (digestion en cours, contre-régulation hormonale, glucides résiduels du repas) → prédictions absurdes pour les fenêtres longues.
+
+- **Plafonnement physiologique** : `PRACTICAL_DROP_CAP = 0.5` — la fraction de drop appliquée est plafonnée à 50% du potentiel total `IOB × ISF`. Reflète mieux la réalité observée chez les T1D bien régulés (en pratique l'IOB chute moins que le théorique car d'autres facteurs compensent).
+- **Floor à 40 mg/dL** : `estimatedAtWorkoutStart = max(40, raw)` — en dessous c'est juste pas réaliste, l'utilisateur aurait corrigé bien avant.
+- **Cap glucides à 60g** : la recommandation `eat-carbs` ne propose plus de chiffres absurdes.
+- **Fenêtre > 120min** → bascule sur une recommandation honnête : *"Re-vérifie ta glycémie 30 min avant le sport"*. À cette distance, les facteurs compensateurs dominent et la prédiction perd toute valeur. Plutôt qu'un chiffre faussement précis, on demande à l'utilisateur de revenir à 30-60min du sport pour une prédiction fiable.
+- **Cas validés** :
+  - 5 min → "Mange 19g" (réaliste)
+  - 30 min → 3 recos cohérentes (23g glucides + Réduire à 3U + Décaler)
+  - 90 min → mêmes recos
+  - 180 min → "Re-vérifie ta glycémie 30 min avant" (plus de chiffre absurde)
 - **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
   - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
   - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"

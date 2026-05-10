@@ -373,7 +373,15 @@ export function computePreSportBriefing(input: {
   // 1. Estimation glycémie au début du sport
   // - drop dû à l'IOB pendant la fenêtre minutesUntilWorkout
   // - drop additionnel si le split tombe avant le sport
-  const fractionDuringWindow = Math.min(1, minutesUntilWorkout / insulinActiveMinutes);
+  //
+  // ⚠️ Calibrage important : la formule pure (IOB × ISF × fraction) donne
+  // des prédictions absurdes pour les fenêtres longues car elle ignore les
+  // facteurs compensateurs (digestion en cours, contre-régulation, glucides
+  // résiduels du repas). On plafonne donc le drop pratique à un max
+  // physiologique (≈ 50% du potentiel total IOB×ISF) qui reflète mieux
+  // la réalité observée chez les T1D bien régulés.
+  const PRACTICAL_DROP_CAP = 0.5; // facteur de plafonnement vs potentiel total
+  const fractionDuringWindow = Math.min(PRACTICAL_DROP_CAP, minutesUntilWorkout / insulinActiveMinutes);
   const dropFromIob = iobUnits * isfMgPerU * fractionDuringWindow;
 
   let dropFromSplit = 0;
@@ -382,14 +390,20 @@ export function computePreSportBriefing(input: {
     pendingSplitMinutesUntil !== undefined &&
     pendingSplitMinutesUntil < minutesUntilWorkout;
   if (splitFallsBeforeWorkout) {
-    // Le split sera fait avant le sport. Il aura X minutes pour agir avant
-    // le sport (X = minutesUntilWorkout - pendingSplitMinutesUntil).
     const splitActiveMinutes = minutesUntilWorkout - (pendingSplitMinutesUntil ?? 0);
-    const splitFraction = Math.min(1, splitActiveMinutes / insulinActiveMinutes);
+    const splitFraction = Math.min(PRACTICAL_DROP_CAP, splitActiveMinutes / insulinActiveMinutes);
     dropFromSplit = pendingSplitUnits * isfMgPerU * splitFraction;
   }
 
-  const estimatedAtWorkoutStart = Math.round(currentGlucose - dropFromIob - dropFromSplit);
+  // Floor à 40 mg/dL : en dessous c'est juste pas réaliste (l'utilisateur
+  // aurait corrigé bien avant). Évite des recommandations absurdes type
+  // "mange 191g de glucides".
+  const rawEstimate = currentGlucose - dropFromIob - dropFromSplit;
+  const estimatedAtWorkoutStart = Math.max(40, Math.round(rawEstimate));
+
+  // Détection : fenêtre trop longue → la prédiction n'est plus fiable
+  // (au-delà de 120min les facteurs compensateurs dominent).
+  const windowTooLong = minutesUntilWorkout > 120;
 
   // 2. Estimation pendant le sport (intègre l'impact sport)
   const sportImpact =
@@ -407,11 +421,37 @@ export function computePreSportBriefing(input: {
   const recos: ReturnType<typeof computePreSportBriefing>["recommendations"] = [];
   let risk: 'safe' | 'caution' | 'risk' = 'safe';
 
+  // ─── Fenêtre trop longue → recommandation prudente ─────────
+  // Au-delà de 2h, la prédiction n'est plus fiable. On invite l'utilisateur
+  // à re-vérifier sa glycémie 30min avant son sport plutôt que d'agir sur
+  // la base d'un chiffre absurde.
+  if (windowTooLong) {
+    risk = 'caution';
+    recos.push({
+      type: 'check-glucose',
+      headline: 'Re-vérifie ta glycémie 30 min avant le sport',
+      detail: `À ${minutesUntilWorkout} min d'écart, beaucoup de choses peuvent évoluer (digestion en cours, contre-régulation). Reviens ici à 30-60 min du sport pour une prédiction fiable.`,
+    });
+    // On retourne quand même les estimations pour info, mais sans recos
+    // alarmistes basées sur un chiffre peu fiable.
+    return {
+      estimatedAtWorkoutStart,
+      estimatedDuringWorkout: estimatedAtWorkoutStart + (
+        personalSportImpact !== null && personalSportImpact !== undefined
+          ? personalSportImpact
+          : workoutType === 'muscu' ? 40 : -60
+      ),
+      risk,
+      recommendations: recos,
+    };
+  }
+
   // ─── Risque hypo en début de sport ─────────────────────────
   if (estimatedAtWorkoutStart < 90 || (estimatedAtWorkoutStart < 110 && isFalling)) {
     risk = 'risk';
     const target = workoutType === 'running' ? 150 : 130;
-    const carbsNeeded = Math.max(15, Math.ceil((target - estimatedAtWorkoutStart) / 4));
+    // Plafonné à 60g (au-delà c'est plus une collation qu'un re-sucrage).
+    const carbsNeeded = Math.min(60, Math.max(15, Math.ceil((target - estimatedAtWorkoutStart) / 4)));
     recos.push({
       type: 'eat-carbs',
       headline: `Mange ${carbsNeeded}g de glucides rapides avant le sport`,
