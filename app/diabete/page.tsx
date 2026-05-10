@@ -3,7 +3,12 @@
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
-import { calculateBolus, getInsulinOnBoard, getDigestiveComplexity } from "@/lib/insulin-calculator";
+import {
+  calculateBolus,
+  getInsulinOnBoard,
+  getDigestiveComplexity,
+  getInjectionTimingAdvice,
+} from "@/lib/insulin-calculator";
 import { DIABETES_CONFIG } from "@/lib/constants";
 import type { MealTime, SplitDoseReminder } from "@/types";
 import type { GlucoseTrend } from "@/lib/libre-link/utils";
@@ -1184,6 +1189,37 @@ export default function DiabetePage() {
               <div className={`mb-3 rounded-lg border px-3 py-2 flex items-start gap-2 ${tone}`}>
                 <Clock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 <p className="text-[11px] leading-snug">{dc.message}</p>
+              </div>
+            );
+          })()}
+
+          {/* Conseil de timing d'injection (pré-bolus / pendant / après) */}
+          {(() => {
+            const timing = getInjectionTimingAdvice(
+              currentGlucose,
+              carbsGrams,
+              mealTime,
+              trendArrow,
+              isPreWorkout,
+            );
+            if (!timing) return null;
+            const tone =
+              timing.tone === 'early'
+                ? 'bg-warning/10 border-warning/30 text-warning'
+                : timing.tone === 'with-meal'
+                ? 'bg-info/10 border-info/30 text-info'
+                : 'bg-diabete/10 border-diabete/30 text-diabete';
+            return (
+              <div className={`mb-3 rounded-lg border px-3 py-2 flex items-start gap-2 ${tone}`}>
+                <Clock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold leading-snug">
+                    {timing.headline}
+                  </p>
+                  <p className="text-[10px] leading-snug opacity-80 mt-0.5">
+                    {timing.rationale}
+                  </p>
+                </div>
               </div>
             );
           })()}

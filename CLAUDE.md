@@ -550,6 +550,22 @@ Retour terrain Ethan : pour une salade (8g lip + 12g prot, FPU 1.2), le système
   - Pâtes normal 60g/15/25 (FPU 2.35) → split 6U + 3U dans 2h ✅
   - Pâtes énorme (FPU 3.76) → split avec délai 2h30 ✅
 - Le badge "Modéré" / "Complexe" reste affiché dès qu'on renseigne des macros (info utile sur la digestion), mais le split dose ne se déclenche plus que sur les vrais repas lourds.
+
+### Phase 11 — Conseil de timing d'injection (mai 2026)
+Ajout d'un hint contextualisé sous le breakdown bolus pour indiquer **quand** injecter (avant/pendant/après le repas) selon la glycémie actuelle et la trend.
+
+- **Helper** `getInjectionTimingAdvice()` dans `lib/insulin-calculator.ts` — pure function qui retourne `{ tone, headline, rationale } | null` selon 5 cas :
+  1. Glycémie < 90 OU trend ↓↓ → **"Injecte au moment du repas"** (info, bleu) — pas de pré-bolus, sinon hypo précoce
+  2. Trend descendante simple (↘) → **"Injecte au moment du repas"** — laisse la glycémie se stabiliser
+  3. Glycémie > 180 OU trend montante (↗ / ↑↑) → **"Injecte 20-30 min avant le repas"** (warning, orange) — pré-bolus plus long
+  4. Snack avec < 20g glucides → **"Injecte au moment du goûter"** — absorption rapide, pas critique
+  5. Cas standard (en plage, trend stable) → **"Injecte idéalement 15 min avant le repas"** (diabete, lavender) — pré-bolus T1D classique
+- Renvoie `null` quand pas de repas (`carbsGrams === 0` OU `mealTime === 'other'`) ou en mode pré-workout (l'advisor sport prend le relais).
+- **UI** : encadré coloré sous le hint digestive complexity, juste avant le bouton "Enregistrer l'injection". Headline en bold, rationale en text-[10px] opacity-80. Icône Clock à gauche.
+- **Cas validés en preview** :
+  - 60g + 120 mg/dL → "15 min avant" (lavender)
+  - 60g + 75 mg/dL → "au moment du repas" (info)
+  - 60g + 210 mg/dL → "20-30 min avant" (warning)
 - **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
   - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
   - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"

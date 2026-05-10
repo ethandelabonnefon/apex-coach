@@ -311,6 +311,93 @@ export function estimateGlucoseImpact(
 }
 
 /**
+ * Conseil de timing d'injection — Phase 11.
+ *
+ * Le pré-bolus 15min avant le repas est le standard T1D pour anticiper le
+ * pic glycémique des glucides. Mais ça dépend du contexte :
+ *  - Glycémie basse / trend descendante → injecter au moment du repas
+ *    (ou même 15min après) pour éviter une hypo précoce
+ *  - Glycémie haute / trend montante → injecter 20-30 min avant pour
+ *    laisser à l'insuline le temps d'agir avant le pic
+ *  - Snack / petit repas → moins critique, au moment du repas suffit
+ *  - Pré-workout → géré par l'advisor pré-sport, on ne dit rien ici
+ *
+ * Renvoie null pour les saisies sans repas (correction seule, mealTime "other"
+ * sans glucides) — pas de conseil de timing pertinent.
+ */
+export function getInjectionTimingAdvice(
+  currentGlucose: number,
+  carbsGrams: number,
+  mealTime: MealTime,
+  trendArrow?: number,
+  isPreWorkout: boolean = false,
+): {
+  tone: 'standard' | 'early' | 'delay' | 'with-meal';
+  /** Phrase courte type "Injecte 15 min avant le repas". */
+  headline: string;
+  /** Justification en une phrase. */
+  rationale: string;
+} | null {
+  // Pas de repas → pas de conseil
+  if (carbsGrams === 0 || mealTime === 'other') return null;
+  // En mode pré-sport, l'advisor sport prend le relais
+  if (isPreWorkout) return null;
+
+  const isFalling = trendArrow === 1 || trendArrow === 2; // ↓↓ ou ↘
+  const isRising = trendArrow === 4 || trendArrow === 5;  // ↗ ou ↑↑
+  const isSnack = mealTime === 'snack';
+
+  // 1. Glycémie basse OU en chute → injecter pendant le repas, pas avant
+  if (currentGlucose < 90 || trendArrow === 1) {
+    return {
+      tone: 'with-meal',
+      headline: 'Injecte au moment du repas',
+      rationale:
+        currentGlucose < 90
+          ? `Glycémie ${currentGlucose} mg/dL : pas de pré-bolus, sinon risque d'hypo précoce.`
+          : 'Glycémie en chute : pas de pré-bolus, attends que ça se stabilise.',
+    };
+  }
+
+  // 2. Trend descendante simple → injecte au moment du repas
+  if (isFalling) {
+    return {
+      tone: 'with-meal',
+      headline: 'Injecte au moment du repas',
+      rationale: 'Glycémie en descente : un pré-bolus risquerait de te faire tomber bas avant le pic glucides.',
+    };
+  }
+
+  // 3. Glycémie haute (>180) ou trend montante → pré-bolus plus long
+  if (currentGlucose > 180 || isRising) {
+    return {
+      tone: 'early',
+      headline: 'Injecte 20-30 min avant le repas',
+      rationale:
+        currentGlucose > 180
+          ? `Glycémie ${currentGlucose} mg/dL : laisse à l'insuline le temps de redescendre avant que les glucides arrivent.`
+          : 'Glycémie en montée : pré-bolus plus long pour anticiper le pic.',
+    };
+  }
+
+  // 4. Snack avec peu de glucides → moins critique
+  if (isSnack && carbsGrams < 20) {
+    return {
+      tone: 'with-meal',
+      headline: 'Injecte au moment du goûter',
+      rationale: 'Petit snack : pas besoin de pré-bolus, l\'absorption est rapide.',
+    };
+  }
+
+  // 5. Cas standard : glycémie en plage, trend stable → pré-bolus 15min
+  return {
+    tone: 'standard',
+    headline: 'Injecte idéalement 15 min avant le repas',
+    rationale: 'Pré-bolus standard : l\'insuline commence à agir avant le pic glycémique des glucides.',
+  };
+}
+
+/**
  * Score de complexité digestive basé sur les macros — Phase 11.
  * Réutilisable hors calcul bolus (UI badges, analytics meal-tag).
  */
