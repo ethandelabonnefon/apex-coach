@@ -286,7 +286,18 @@ Refonte créative après analyse de Linear, Raycast, Arc, Strava, MacroFactor. I
 
 ## Etat Actuel du Projet
 
-Le projet est une PWA fonctionnelle deployee sur Vercel. **Toutes les fonctionnalites planifiees sont implementees.** Les modules principaux (diagnostic, generation programme, coach IA, suivi diabete, running tracking, nutrition tracking) sont operationnels. Le build TypeScript passe sans erreur.
+Le projet est une PWA fonctionnelle deployee sur Vercel. **Toutes les fonctionnalites planifiees sont implementees**, incluant la **Phase 11 "Diabète Intelligence Layer" (mai 2026, 6 blocs + 5 itérations de calibrage)**. Les modules principaux (diagnostic, generation programme, coach IA, suivi diabete, running tracking, nutrition tracking) sont operationnels. Le build TypeScript strict passe sans erreur. Validé en preview navigateur cas par cas.
+
+### Phase la plus récente (mai 2026) : Diabète Intelligence Layer
+- **Bolus Calculator v2** : FPU + split dose, trend arrow adjustment, IOB stacking advisor, pre-workout advisor, conseil de timing d'injection
+- **Meal Logger** : 9 quick-tags (Pâtes, Riz, Pizza…) × 3 tailles avec pré-fill macros, score complexité digestive, historique par tag avec suggestions
+- **Pattern Engine** : 5 règles cliniques (nuit-hyper, recurring-hypo, post-meal-spike, dawn, CV-degradation) avec push notif locale + UI cartes dismiss
+- **Métriques cliniques** : GMI (HbA1c estimée), GRI Klonoff zones A-E, calendrier 30j heatmap par score quotidien, AGP 14j (médiane + P25-P75)
+- **Bilan IA v2** : enrichissement contexte Claude (patterns + sport + macros), insights croisés, suggestions diabéto-style
+- **Sport-Glucose Correlation** : 5 checkpoints T-30→T+120 calculés à la volée, 2 onglets muscu/running, recommandation pré-sport perso
+- **Briefing pré-sport indépendant** : advisor "filet de sécurité" qui détecte IOB + glycémie live + split en attente → recos actionnables (manger glucides, réduire/décaler la 2e dose) avec boutons inline qui modifient le store
+
+Voir `### Phase 11 — "Diabète Intelligence Layer"` plus bas pour les détails par bloc.
 
 ### Fonctionnalites completees recemment (avril 2026) :
 - Suivi hebdomadaire running avec tracking par seance (distance, duree, pace, glycemie, ressenti)
@@ -402,42 +413,37 @@ Le projet est une PWA fonctionnelle deployee sur Vercel. **Toutes les fonctionna
 3. **Absence de contexte repas dans les analyses** : seuls les glucides sont loggés, pas le type de repas ni les macros complètes (lipides, protéines). Le bilan IA ne peut pas distinguer un ratio mal calibré d'un repas à digestion lente
 4. **Ethan utilise Yazio** pour le suivi nutrition (calories, macros détaillées) mais pas de connexion API → import manuel possible (copier les macros ou screenshot)
 
-### Roadmap Phase 11 — "Diabète Intelligence Layer" (mai 2026)
-Architecture en 6 blocs, validée par Ethan :
+### Phase 11 — "Diabète Intelligence Layer" (livrée mai 2026) ✅
 
-**Bloc 1 — Bolus Calculator v2** (priorité 1, impact immédiat)
-- Champs optionnels lipides (g) + protéines (g) → calcul FPU → suggestion split dose : "Fais X U maintenant, re-dose Y U dans 2h30" + push notification rappel à T+2h30
-- Trend arrow adjustment : flèche Libre ↗ au moment du bolus → +0,5U ; ↘ → -0,5U ; ↑↑ → +1U ; ↓↓ → -1U (slide rule publié)
-- Alerte IOB stacking : "Tu as encore X U actives du goûter de 17h34. Total suggéré = Y U, dont Z U déjà couvertes"
-- Pre-workout advisor contextuel : IOB résiduel + glycémie actuelle + heure sport → recommandation glucides ou "tu es safe"
+Architecture en **6 blocs livrés** + 5 itérations de calibrage post-livraison. Tout déployé sur `main`, build TS strict passe, validé en preview navigateur.
 
-**Bloc 2 — Meal Logger intelligent** (priorité 2, alimente tout le reste)
-- Quick-tags visuels au moment du bolus : type repas (Pâtes, Riz, Pizza, Sandwich, etc.) + taille (Normal/Gros/Énorme) — 2 taps max
-- Champs optionnels protéines (g) + lipides (g) (copier depuis Yazio)
-- Score complexité digestive automatique : repas "simple" (pic 1-2h) vs "complexe" (pic 3-5h) → alerte "Re-check à T+3h"
-- Historique par type : "Tes 5 derniers 'Pâtes+viande' → delta moyen +65 mg/dL à T+4h → la prochaine fois, split dose"
+**Status par bloc** :
 
-**Bloc 3 — Pattern Engine proactif** (priorité 3, alertes push automatiques)
-- Règle des 3 jours (standard clinique) : même phénomène 3j consécutifs ou 4x/7j → push notification
-- Patterns détectés : nuit hyper (>180 entre 23h-6h), hypo récurrente même créneau, pic post-meal excessif (>220 à T+3h pour un mealType donné), dawn phenomenon actif (>160 entre 5h-8h), CV hebdo qui se dégrade (>36%)
-- Chaque alerte inclut une suggestion d'action concrète (micro-ajustement)
+| Bloc | Status | Commit principal |
+|---|---|---|
+| 1 — Bolus Calculator v2 (FPU + trend + IOB advisor) | ✅ livré | `2f94e98` |
+| 2 — Meal Logger intelligent (quick-tags + complexité + historique) | ✅ livré | `e963047` |
+| 3 — Pattern Engine proactif (5 règles + push notif locale) | ✅ livré | `f72c7fd` |
+| 4 — Métriques cliniques avancées (GMI + GRI + Calendrier + AGP) | ✅ livré | `4552296` |
+| 5 — Bilan IA v2 contextualisé (patterns + sport + meal context) | ✅ livré | `5c06948` |
+| 6 — Sport-Glucose Correlation Engine | ✅ livré | `215f743` |
 
-**Bloc 4 — Métriques cliniques avancées** (priorité 4, page historique enrichie)
-- GMI (estimated HbA1c) = 3.31 + 0.02392 × moyenne_glucose_mg/dL
-- GRI (Glycemia Risk Index) score composite 0-100 pondérant sévérité+durée hors plage
-- Score quotidien 0-100 dans un calendrier heatmap (TIR + hypos + variabilité)
-- AGP simplifié 14j : médiane + bandes P25-P75 par tranche 30min
+**Itérations de calibrage post-livraison** :
+- `0eb5b8b` Seuils split dose relevés (FPU ≥ 2 + carbs ≥ 40 + fpuBolus ≥ 1.5) — fix faux positifs sur salades / sandwichs
+- `d201774` Conseil de timing d'injection (pré-bolus / pendant / après) selon glycémie + trend
+- `c547a91` Briefing pré-sport indépendant (advisor "filet de sécurité" entre injections)
+- `b90adae` Calibrage briefing pré-sport (caps physiologiques, fenêtre > 120min → "re-vérifie")
+- `de8edf9` Trend Libre intégrée au calcul + transparence UI complète (breakdown des drops)
 
-**Bloc 5 — Bilan IA v2 contextualisé** (priorité 5, après blocs 2+3)
-- Enrichir le contexte Claude avec : types de repas + macros, sessions sport (heure/type/durée depuis store muscu/running), IOB au moment des événements, patterns détectés par le moteur déterministe, profil actif au moment de chaque bolus
-- Insights croisés type : "Tes hypos du mardi/jeudi soir coïncident avec muscu post-dîner + IOB >3U. Suggestion : réduire bolus goûter de 0,5U les jours sport"
+**Recap fonctionnel pour Ethan** :
+- Le calculateur de bolus de `/diabete` est maintenant un advisor multi-facteurs : **glucides + macros (FPU split dose) + trend Libre + IOB stacking + pre-workout + meal-tag history + conseil de timing d'injection**
+- La page `/diabete/historique` affiche **GMI (HbA1c estimée), GRI Klonoff, calendrier heatmap 30j, AGP 14j, corrélation sport-glycémie 2 onglets, patterns détectés, bilan IA hebdomadaire à la demande**
+- La section **"Briefing pré-sport"** (toggle on `/diabete`) est l'advisor "filet de sécurité" entre deux moments d'injection — détecte automatiquement IOB + glycémie live + split dose en attente, donne des recommandations actionnables (manger glucides, réduire ou décaler la 2e dose) avec **boutons d'action inline** qui modifient directement le store Zustand
+- Tous les calculs ont des **garde-fous physiologiques** (caps drop, floors glycémie, alternatives "re-vérifie ta glycémie 30min avant" pour les fenêtres trop longues)
 
-**Bloc 6 — Sport-Glucose Correlation Engine** (priorité 6)
-- Auto-tag glycémie aux checkpoints : T-30min, T+0, T+30, T+60, T+120 autour d'une séance loggée
-- Dashboard corrélation : "Après muscu, tu montes de +45 mg/dL dans les 45min puis redescends à T+3h"
-- Recommandation pré-sport basée sur TON historique, pas des moyennes académiques
+**Détails complets** : voir les sections `### Phase 11 — Bloc N` ci-dessous.
 
-Évolutions futures possibles (hors roadmap active) : import historique LibreView, export CSV pour partage diabéto, intégration Dexcom G7 si changement capteur, connexion API Yazio si disponible.
+**Évolutions futures possibles (hors roadmap active)** : import historique LibreView, export CSV pour partage diabéto, intégration Dexcom G7 si changement capteur, connexion API Yazio si disponible, persistance des checkpoints sport (actuellement calculés à la volée depuis l'archive — suffisant tant que l'archive 90j tient).
 
 ### Phase 11 — Bloc 1 : Bolus Calculator v2 (mai 2026)
 Première salve de la "Diabète Intelligence Layer". Le calculateur de bolus passe d'un simple ratio + correction à un advisor multi-facteurs.
