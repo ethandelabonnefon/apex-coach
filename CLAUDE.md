@@ -643,6 +643,53 @@ Retour terrain : "il faut que le briefing prenne ma glycémie actuelle, qu'il vo
   - Glyc 100 ↘ + IOB 0 + muscu 30min → breakdown "100 (actuel) -21 (trend)" → estimated 79 → "Mange 15g"
   - Glyc 67 → + IOB 0 → breakdown "67 (actuel)" → estimated 67 → "Mange 16g"
 - **Hook `useGlucose` étendu** : utilisation de `refetch` et `lastFetchedAt` pour driver le bouton refresh (avec animation Activity spin pendant la requête).
+
+### Phase 11 — Calibrage final split dose (mai 2026, basé sur recherche scientifique)
+Retour terrain Ethan : "20g lipides + 20g protéines (crêpes Nutella + pain de mie complet) → le système suggère un split dose de 4U dans 1h30, mais en pratique je n'en ai pas besoin." Recherche menée sur les guidelines NHS Cambridge / Whittington / ADA / Pankowska Warsaw method.
+
+**Findings scientifiques** :
+- 1 FPU = 100 kcal (fat × 9 + prot × 4) = équivalent à 10g glucides
+- **Seuil "high-fat" = > 30g lipides** (NHS Cambridge, Whittington, Calgary)
+- **Seuil "high-protein" = > 40g protéines** (idem)
+- Un repas peut avoir FPU élevé sans atteindre ces seuils → pas split-worthy
+- **Index glycémique compte** : glucides rapides + lipides → digestion principale rapide même avec FPU élevé (ADA Diabetes Care 2015)
+- **MDI (stylos) ≠ pompe** : étude récente trouve "no benefit and mild hypoglycemia common" pour le split MDI → seuils plus stricts + 50/50 préféré au 100% différé
+
+**Calibrage final** (`lib/insulin-calculator.ts` + `lib/meal-tags.ts`) :
+
+1. **Seuils cumulatifs durcis** (les 5 doivent être réunis) :
+   - `totalFPU >= 2.5` (au lieu de 2.0)
+   - `fat >= 30 OU prot >= 40` (NOUVEAU — seuils absolus NHS/ADA)
+   - `carbsGrams >= 50` (au lieu de 40)
+   - `fpuBolus >= 1.5` (inchangé)
+   - `glycemicProfile !== 'fast'` (NOUVEAU — voir 2)
+
+2. **Profil glycémique par tag** (nouveau champ `glycemicProfile: 'fast' | 'medium' | 'slow'` sur `MealTag`) :
+   - **slow** : pates, riz, pizza, plat-viande
+   - **medium** : sandwich, autre
+   - **fast** : salade, snack-sucre, petit-dej (tag pour crêpes/pain blanc/céréales)
+   - Helper exporté `getGlycemicProfile(tagId)`
+
+3. **Délais Pankowska adaptés MDI** :
+   - FPU 2.5-3 → **90 min**
+   - FPU 3-4 → **120 min**
+   - FPU > 4 → **150 min**
+
+4. **Split 50/50** (nouveau) : quand split actif, 50% du fpuBolus est intégré au bolus initial, 50% en 2e injection. Cf NHS MDI "split 50/50 préféré au 100% différé" pour limiter le risque d'hypo précoce. Sans split → 100% du fpuBolus dans bolus initial (ou rien si FPU minime).
+
+5. **Reasoning pédagogique** : si fastCarbs + FPU + carbs rempliraient les autres seuils mais glucides rapides → message explicite "Pas de split dose : tu manges des glucides rapides (X FPU mais digestion principale rapide). Le bolus initial couvre tout."
+
+**Cas validés** :
+| Repas | FPU | Avant | Après |
+|---|---|---|---|
+| Crêpes Nutella + pain de mie 60g/20/20 (cas Ethan) | 2.6 | Split 4U dans 1h30 | Pas de split (glucides rapides) ✅ |
+| Salade 30g/8/12 | 1.2 | Pas de split | Pas de split ✅ |
+| Sandwich 50g/12/15 | 1.7 | Pas de split | Pas de split ✅ |
+| Pâtes normal 60g/15/25 | 2.4 | Split | Pas de split (15g lip < 30, 25g prot < 40) — bolus intègre FPU |
+| Pâtes énorme 100g/35/50 | 5.2 | Split | Split 3U dans 2h30 ✅ |
+| Pizza 80g/30/25 | 3.7 | Split | Split 2U dans 2h ✅ |
+| Viande+accomp. 60g/25/45 | 4.1 | Split | Split 3U dans 2h30 ✅ |
+| Petit-déj XL 100g/30/35 | 4.1 | Split | Pas de split (glucides rapides) ✅ |
 - **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
   - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
   - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"

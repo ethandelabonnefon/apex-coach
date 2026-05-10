@@ -85,6 +85,9 @@ export function calculateBolus(
   proteinGrams: number = 0,
   /** Phase 11 — flèche de tendance Libre (1..5) au moment du bolus. */
   trendArrow?: number,
+  /** Phase 11 (calibrage mai 2026) — profil glycémique du tag repas pour
+   *  désactiver le split sur glucides rapides (crêpes, snack sucré, etc.). */
+  glycemicProfile?: 'fast' | 'medium' | 'slow',
 ): BolusResult {
   const config = configOverride || DIABETES_CONFIG;
   const ratio = getRatioForMeal(config, mealTime);
@@ -210,27 +213,44 @@ export function calculateBolus(
   // Stylo Novorapid d'Ethan = pas de demi-unités. On arrondit au-dessus
   // pour éviter de sous-doser (le risque "hyper" est plus prévisible que
   // le risque "hypo brutal" en post-prandial avec une dose insuffisante).
-  // On inclut FPU + trendBolus dans le total quand pas de split (cas où
-  // FPU est petit ou non renseigné). Si split actif → only carb+correction
-  // dans "now".
   //
-  // Seuils split dose (Phase 11, ajustés mai 2026) : on ne suggère un
-  // split QUE pour les vrais repas lourds (pâtes, pizza, viande+accomp.).
-  //   - FPU ≥ 2.0       → digestion vraiment longue, bolus glucides
-  //                        seul ne suffit pas
-  //   - carbsGrams ≥ 40 → un repas léger en glucides ne pose pas de
-  //                        problème d'absorption tardive même avec FPU
-  //                        élevé (cas salade + huile/protéines)
-  //   - fpuBolus ≥ 1.5  → si l'apport FPU calculé est < 1,5U, le split
-  //                        donnerait <2U arrondi → pas la peine de
-  //                        casser en deux
-  // Les 3 conditions doivent être réunies. Sinon, le FPU est intégré
-  // directement au bolus principal.
-  const useSplit = totalFPU >= 2 && carbsGrams >= 40 && fpuBolus >= 1.5;
-  const rawTotalNoSplit = Math.max(0, carbBolus + correctionBolus + trendBolus + fpuBolus);
-  const rawTotalWithSplit = Math.max(0, carbBolus + correctionBolus + trendBolus);
+  // Seuils split dose (Phase 11, calibrage final mai 2026 basé sur les
+  // guidelines NHS Cambridge / Whittington / ADA + Pankowska Warsaw method).
+  //
+  // **Critères cumulatifs** — TOUS doivent être réunis pour suggérer un split :
+  //   - FPU ≥ 2.5             → seuil "vraiment riche" (vs 1.0 effet
+  //                              modélisable mais pas split-worthy)
+  //   - fat ≥ 30 OU prot ≥ 40 → seuils absolus NHS pour "high-fat" et
+  //                              "high-protein" — un repas peut avoir
+  //                              FPU élevé sans atteindre ces seuils
+  //                              (ex: 20g lip + 20g prot = 2.6 FPU mais
+  //                              en dessous des deux seuils → pas split)
+  //   - carbsGrams ≥ 50       → un repas léger en glucides ne génère pas
+  //                              de "trou de couverture" tardif même avec
+  //                              FPU élevé
+  //   - fpuBolus ≥ 1.5        → si l'apport calculé est < 1.5U, le split
+  //                              donnerait < 2U arrondi → pas la peine
+  //   - glycemicProfile ≠ 'fast' → glucides rapides (crêpes Nutella, pain
+  //                                de mie, snack sucré, petit-déj cérèales)
+  //                                → digestion principale rapide même avec
+  //                                lipides → split contre-productif
+  const fastCarbs = glycemicProfile === 'fast';
+  const meetsClinicalHigh = fatGrams >= 30 || proteinGrams >= 40;
+  const useSplit =
+    totalFPU >= 2.5 &&
+    meetsClinicalHigh &&
+    carbsGrams >= 50 &&
+    fpuBolus >= 1.5 &&
+    !fastCarbs;
 
-  const rawTotal = useSplit ? rawTotalWithSplit : rawTotalNoSplit;
+  // Quand split actif → on intègre 50% du fpuBolus dans le bolus initial,
+  // 50% sera fait plus tard. Cf guidelines NHS MDI : split 50/50 préféré
+  // au 100% différé pour limiter le risque d'hypo précoce en MDI (stylos).
+  // Sans split → fpuBolus 100% dans le bolus initial (ou rien si FPU minime).
+  const fpuBolusNow = useSplit ? fpuBolus / 2 : fpuBolus;
+  const fpuBolusLater = useSplit ? fpuBolus / 2 : 0;
+
+  const rawTotal = Math.max(0, carbBolus + correctionBolus + trendBolus + fpuBolusNow);
   const totalBolus = Math.ceil(rawTotal);
   if (rawTotal > 0 && totalBolus !== Math.round(rawTotal * 10) / 10) {
     reasoning.push(
@@ -238,13 +258,22 @@ export function calculateBolus(
     );
   }
 
-  // ─── Split dose — Phase 11 ────────────────────────────────────────────
+  // ─── Split dose 50/50 — Phase 11 (calibrage mai 2026) ─────────────────
   let splitDose: BolusResult['splitDose'];
-  if (useSplit && fpuBolus > 0) {
-    const laterUnits = Math.ceil(fpuBolus);
-    // Délai = 150min pour repas très lourds (FPU ≥ 3, ex: pâtes énorme,
-    // pizza, viande+accomp), 120min sinon (cas standard).
-    const delayMinutes = totalFPU >= 3 ? 150 : 120;
+  if (useSplit && fpuBolusLater > 0) {
+    // Stylo MDI sans demi-unités : laterUnits arrondi au-dessus
+    const laterUnits = Math.max(1, Math.ceil(fpuBolusLater));
+    // Délais Pankowska adaptés MDI : pic de digestion vs durée d'action
+    // du Novorapid (~3h15). Cap à 150min car au-delà la 1ère injection
+    // commence à finir et le risque d'hypo précoce baisse mais l'utilité
+    // du split aussi.
+    //   FPU 2.5-3   → 90 min  (digestion ~3-4h, mi-temps)
+    //   FPU 3-4     → 120 min (digestion ~4-5h)
+    //   FPU > 4     → 150 min (digestion 5h+, repas très lourd)
+    const delayMinutes =
+      totalFPU >= 4 ? 150 :
+      totalFPU >= 3 ? 120 :
+      90;
     splitDose = {
       now: totalBolus,
       later: laterUnits,
@@ -257,9 +286,15 @@ export function calculateBolus(
       digestiveComplexity === 'complex' ? 'Repas complexe' : 'Repas modéré';
     const digestionHours = digestiveComplexity === 'complex' ? '~5h' : '~3-4h';
     reasoning.push(
-      `${complexityLabel} (${totalFPU.toFixed(1).replace(".", ",")} FPU) : la digestion va durer ${digestionHours}. Suggestion split : ${totalBolus}U maintenant, puis ${laterUnits}U dans ${delayLabel}.`
+      `${complexityLabel} (${totalFPU.toFixed(1).replace(".", ",")} FPU) : la digestion va durer ${digestionHours}. Split 50/50 : ${totalBolus}U maintenant (incluant 50% du FPU), puis ${laterUnits}U dans ${delayLabel}.`
     );
     adjustments.push(`Split dose : +${laterUnits}U dans ${delayLabel}`);
+  } else if (fastCarbs && totalFPU >= 2.5 && carbsGrams >= 50) {
+    // Cas explicite : repas qui SERAIT split-worthy mais glucides rapides
+    // → on l'explique pour pédagogie
+    reasoning.push(
+      `Pas de split dose : tu manges des glucides rapides (${totalFPU.toFixed(1).replace(".", ",")} FPU mais digestion principale rapide). Le bolus initial couvre tout.`
+    );
   }
 
   return {

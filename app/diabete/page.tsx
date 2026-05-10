@@ -23,6 +23,7 @@ import {
   MEAL_TAGS,
   MEAL_SIZES,
   inferMacrosFromTag,
+  getGlycemicProfile,
   type MealTagId,
   type MealSizeId,
 } from "@/lib/meal-tags";
@@ -286,6 +287,7 @@ export default function DiabetePage() {
         fatGrams,
         proteinGrams,
         trendArrow,
+        getGlycemicProfile(mealTag),
       ),
     [
       carbsGrams,
@@ -299,6 +301,7 @@ export default function DiabetePage() {
       fatGrams,
       proteinGrams,
       trendArrow,
+      mealTag,
     ]
   );
 

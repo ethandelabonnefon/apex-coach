@@ -25,6 +25,15 @@ export type MealTagId =
 
 export type DigestiveComplexity = "simple" | "moderate" | "complex";
 
+/**
+ * Profil glycémique dominant des glucides du tag — Phase 11 (mai 2026).
+ * Sert à décider si un split dose FPU est pertinent : un repas avec
+ * glucides RAPIDES garde un pic glycémique précoce même avec lipides
+ * élevés (ex: crêpes Nutella + pain de mie). Le split dose n'est utile
+ * que pour des glucides LENTS (digestion vraiment étalée).
+ */
+export type GlycemicProfile = "fast" | "medium" | "slow";
+
 export interface MealTag {
   id: MealTagId;
   label: string;
@@ -32,18 +41,20 @@ export interface MealTag {
   avgFat: number;         // g (taille "normal")
   avgProtein: number;     // g (taille "normal")
   complexity: DigestiveComplexity;
+  /** Profil glycémique dominant — détermine si split dose pertinent. */
+  glycemicProfile: GlycemicProfile;
 }
 
 export const MEAL_TAGS: ReadonlyArray<MealTag> = [
-  { id: "pates",       label: "Pâtes",            iconName: "Wheat",            avgFat: 15, avgProtein: 25, complexity: "complex" },
-  { id: "riz",         label: "Riz",              iconName: "Soup",             avgFat: 10, avgProtein: 20, complexity: "moderate" },
-  { id: "pizza",       label: "Pizza",            iconName: "Pizza",            avgFat: 25, avgProtein: 20, complexity: "complex" },
-  { id: "sandwich",    label: "Sandwich",         iconName: "Sandwich",         avgFat: 12, avgProtein: 15, complexity: "moderate" },
-  { id: "salade",      label: "Salade",           iconName: "Salad",            avgFat: 8,  avgProtein: 12, complexity: "simple" },
-  { id: "snack-sucre", label: "Snack sucré",      iconName: "Cookie",           avgFat: 10, avgProtein: 3,  complexity: "simple" },
-  { id: "plat-viande", label: "Viande + accomp.", iconName: "Beef",             avgFat: 20, avgProtein: 35, complexity: "complex" },
-  { id: "petit-dej",   label: "Petit-déj",        iconName: "Croissant",        avgFat: 10, avgProtein: 15, complexity: "moderate" },
-  { id: "autre",       label: "Autre",            iconName: "UtensilsCrossed",  avgFat: 0,  avgProtein: 0,  complexity: "simple" },
+  { id: "pates",       label: "Pâtes",            iconName: "Wheat",            avgFat: 15, avgProtein: 25, complexity: "complex",  glycemicProfile: "slow"   },
+  { id: "riz",         label: "Riz",              iconName: "Soup",             avgFat: 10, avgProtein: 20, complexity: "moderate", glycemicProfile: "slow"   },
+  { id: "pizza",       label: "Pizza",            iconName: "Pizza",            avgFat: 25, avgProtein: 20, complexity: "complex",  glycemicProfile: "slow"   },
+  { id: "sandwich",    label: "Sandwich",         iconName: "Sandwich",         avgFat: 12, avgProtein: 15, complexity: "moderate", glycemicProfile: "medium" },
+  { id: "salade",      label: "Salade",           iconName: "Salad",            avgFat: 8,  avgProtein: 12, complexity: "simple",   glycemicProfile: "fast"   },
+  { id: "snack-sucre", label: "Snack sucré",      iconName: "Cookie",           avgFat: 10, avgProtein: 3,  complexity: "simple",   glycemicProfile: "fast"   },
+  { id: "plat-viande", label: "Viande + accomp.", iconName: "Beef",             avgFat: 20, avgProtein: 35, complexity: "complex",  glycemicProfile: "slow"   },
+  { id: "petit-dej",   label: "Petit-déj",        iconName: "Croissant",        avgFat: 10, avgProtein: 15, complexity: "moderate", glycemicProfile: "fast"   },
+  { id: "autre",       label: "Autre",            iconName: "UtensilsCrossed",  avgFat: 0,  avgProtein: 0,  complexity: "simple",   glycemicProfile: "medium" },
 ] as const;
 
 export type MealSizeId = "normal" | "big" | "huge";
@@ -63,6 +74,11 @@ export const MEAL_SIZES: ReadonlyArray<MealSize> = [
 export function getMealTag(id: string | undefined): MealTag | undefined {
   if (!id) return undefined;
   return MEAL_TAGS.find((t) => t.id === id);
+}
+
+/** Helper : profil glycémique d'un tag (default "medium" si tag inconnu). */
+export function getGlycemicProfile(id: string | undefined): GlycemicProfile {
+  return getMealTag(id)?.glycemicProfile ?? "medium";
 }
 
 export function getMealSize(id: string | undefined): MealSize {
