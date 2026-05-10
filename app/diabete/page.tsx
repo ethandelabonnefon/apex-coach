@@ -8,6 +8,7 @@ import {
   getInsulinOnBoard,
   getDigestiveComplexity,
   getInjectionTimingAdvice,
+  computePreSportBriefing,
 } from "@/lib/insulin-calculator";
 import { DIABETES_CONFIG } from "@/lib/constants";
 import type { MealTime, SplitDoseReminder } from "@/types";
@@ -66,6 +67,9 @@ import {
   Info,
   AlertCircle,
   X,
+  Apple,
+  ZapOff,
+  Activity,
 } from "lucide-react";
 
 // Mapping iconName (lib/meal-tags) → composant lucide-react
@@ -173,6 +177,14 @@ export default function DiabetePage() {
   const [proteinGrams, setProteinGrams] = useState<number>(0);
   const [showMacros, setShowMacros] = useState(false);
   const [trendArrow, setTrendArrow] = useState<number | undefined>(undefined);
+
+  // ─── Phase 11 — Briefing pré-sport indépendant ──────
+  // L'utilisateur peut planifier un sport sans toucher au calculateur de
+  // bolus. Affiche des recommandations actionnables (manger, réduire le
+  // split, décaler, etc.) basées sur l'IOB + glycémie live + split en attente.
+  const [briefingActive, setBriefingActive] = useState(false);
+  const [briefingType, setBriefingType] = useState<"muscu" | "running">("muscu");
+  const [briefingMinutes, setBriefingMinutes] = useState<number>(30);
 
   // ─── Phase 11 Bloc 2 — Meal tag + size ────────
   const [mealTag, setMealTag] = useState<MealTagId | undefined>(undefined);
@@ -476,6 +488,64 @@ export default function DiabetePage() {
     return sessions.map((s) => enrichSession(s, archivePoints as ArchivedPoint[]));
   }, [completedWorkouts, completedRunningSessions, archivePoints]);
 
+  // ─── Briefing pré-sport (advisor indépendant) ─────────────────────
+  // Utilise la glycémie live + IOB + split dose en attente pour donner
+  // des recommandations actionnables. Calculé seulement quand activé.
+  const preSportBriefing = useMemo(() => {
+    if (!briefingActive) return null;
+    // Glycémie de référence : live si dispo, sinon manuel
+    const refGlucose = liveGlucose?.value ?? currentGlucose;
+    const refTrend = liveGlucose ? trendStringToNumber(liveGlucose.trend) : trendArrow;
+
+    // Split dose en attente le plus proche
+    const now = nowTick;
+    const upcomingSplit = splitDoseReminders
+      .filter((r) => r.status === "pending")
+      .map((r) => ({ ...r, minutesUntil: Math.round((new Date(r.triggerAt).getTime() - now) / 60000) }))
+      .filter((r) => r.minutesUntil >= 0)
+      .sort((a, b) => a.minutesUntil - b.minutesUntil)[0];
+
+    const personalImpact = computeAvgSportImpact(enrichedSportSessions, briefingType, 3);
+
+    return computePreSportBriefing({
+      currentGlucose: refGlucose,
+      trendArrow: refTrend,
+      iobUnits: iob.totalIOB,
+      isfMgPerU: diabetesConfig.insulinSensitivityFactor,
+      insulinActiveMinutes: diabetesConfig.insulinActiveDuration,
+      workoutType: briefingType,
+      minutesUntilWorkout: briefingMinutes,
+      pendingSplitUnits: upcomingSplit?.units,
+      pendingSplitMinutesUntil: upcomingSplit?.minutesUntil,
+      personalSportImpact: personalImpact,
+    });
+  }, [
+    briefingActive,
+    briefingType,
+    briefingMinutes,
+    liveGlucose,
+    currentGlucose,
+    trendArrow,
+    iob.totalIOB,
+    diabetesConfig,
+    splitDoseReminders,
+    nowTick,
+    enrichedSportSessions,
+  ]);
+
+  // Action : réduire la 2e dose du split en attente (depuis le briefing)
+  function handleReduceSplit(reminderId: string, newUnits: number) {
+    updateSplitDoseReminder(reminderId, { units: newUnits });
+  }
+
+  // Action : décaler le split de 60min (post-sport)
+  function handleDelaySplit(reminderId: string, addMinutes: number) {
+    const r = splitDoseReminders.find((x) => x.id === reminderId);
+    if (!r) return;
+    const newTrigger = new Date(new Date(r.triggerAt).getTime() + addMinutes * 60_000);
+    updateSplitDoseReminder(reminderId, { triggerAt: newTrigger.toISOString() });
+  }
+
   // ─── Pre-workout advisor (Bloc 1.4 + Bloc 6.3) ───────────────────
   const advisorState = useMemo(() => {
     if (!isPreWorkout || !workoutType) return null;
@@ -701,6 +771,191 @@ export default function DiabetePage() {
           </div>
         </section>
       )}
+
+      {/* ── BRIEFING PRÉ-SPORT (advisor indépendant) ── */}
+      <section className="surface-1 rounded-3xl p-5 mb-4">
+        <div className="flex items-center justify-between mb-3 gap-2">
+          <div className="flex items-center gap-2">
+            <Activity className="w-4 h-4 text-diabete" />
+            <h2 className="text-base font-semibold text-text-primary">
+              Briefing pré-sport
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => setBriefingActive((v) => !v)}
+            className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+              briefingActive ? "bg-diabete" : "bg-border-strong"
+            }`}
+            aria-label="Toggle briefing pré-sport"
+          >
+            <span
+              className={`absolute top-0.5 w-5 h-5 rounded-full bg-bg-primary transition-transform ${
+                briefingActive ? "translate-x-5" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+        </div>
+
+        {!briefingActive ? (
+          <p className="text-xs text-text-tertiary leading-relaxed">
+            Active si tu prévois un sport bientôt. On regarde ton IOB, ta
+            glycémie live et tes split doses pour te donner des conseils
+            actionnables (manger des glucides, réduire ou décaler une dose).
+          </p>
+        ) : (
+          <div className="space-y-3 animate-slide-up">
+            {/* Sélecteur sport */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setBriefingType("muscu")}
+                className={`flex items-center gap-2 justify-center py-2 text-xs font-medium rounded-lg border transition-all tap-scale ${
+                  briefingType === "muscu"
+                    ? "bg-muscu/15 border-muscu/40 text-muscu"
+                    : "bg-bg-tertiary border-border-subtle text-text-secondary"
+                }`}
+              >
+                <Dumbbell className="w-3.5 h-3.5" />
+                Muscu
+              </button>
+              <button
+                type="button"
+                onClick={() => setBriefingType("running")}
+                className={`flex items-center gap-2 justify-center py-2 text-xs font-medium rounded-lg border transition-all tap-scale ${
+                  briefingType === "running"
+                    ? "bg-running/15 border-running/40 text-running"
+                    : "bg-bg-tertiary border-border-subtle text-text-secondary"
+                }`}
+              >
+                <Footprints className="w-3.5 h-3.5" />
+                Running
+              </button>
+            </div>
+
+            {/* Slider minutes */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="label">Dans combien de min</p>
+                <span className="num text-xs text-diabete font-semibold">
+                  {briefingMinutes} min
+                </span>
+              </div>
+              <input
+                type="range"
+                min={5}
+                max={180}
+                step={5}
+                value={briefingMinutes}
+                onChange={(e) => setBriefingMinutes(Number(e.target.value))}
+                className="w-full accent-diabete"
+              />
+              <div className="flex justify-between text-[9px] text-text-tertiary mt-0.5">
+                <span>5 min</span>
+                <span>30 min</span>
+                <span>1 h</span>
+                <span>3 h</span>
+              </div>
+            </div>
+
+            {/* Briefing résultats */}
+            {preSportBriefing && (
+              <div
+                className={`rounded-xl p-3 border ${
+                  preSportBriefing.risk === "risk"
+                    ? "bg-error/10 border-error/30"
+                    : preSportBriefing.risk === "caution"
+                    ? "bg-warning/10 border-warning/30"
+                    : "bg-success/10 border-success/30"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2 text-[10px]">
+                  <span className="label" style={{ color: "var(--diabete)" }}>
+                    Glycémie estimée
+                  </span>
+                  <span className="num text-text-secondary">
+                    <span className="font-semibold text-text-primary">
+                      {preSportBriefing.estimatedAtWorkoutStart}
+                    </span>{" "}
+                    au début · ~
+                    <span className="font-semibold text-text-primary">
+                      {preSportBriefing.estimatedDuringWorkout}
+                    </span>{" "}
+                    pendant
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {preSportBriefing.recommendations.map((reco, i) => {
+                    const RecoIcon =
+                      reco.type === "eat-carbs"
+                        ? Apple
+                        : reco.type === "reduce-split"
+                        ? Minus
+                        : reco.type === "delay-split"
+                        ? Clock
+                        : reco.type === "delay-workout"
+                        ? AlertTriangle
+                        : reco.type === "check-glucose"
+                        ? AlertCircle
+                        : CheckCircle2;
+                    const tone =
+                      preSportBriefing.risk === "risk"
+                        ? "text-error"
+                        : preSportBriefing.risk === "caution"
+                        ? "text-warning"
+                        : "text-success";
+                    return (
+                      <div key={i} className="flex items-start gap-2">
+                        <RecoIcon className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${tone}`} />
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-xs font-semibold leading-snug ${tone}`}>
+                            {reco.headline}
+                          </p>
+                          <p className="text-[10px] text-text-secondary mt-0.5 leading-snug">
+                            {reco.detail}
+                          </p>
+                          {/* Actions inline pour reduce-split / delay-split */}
+                          {(reco.type === "reduce-split" || reco.type === "delay-split") &&
+                            (() => {
+                              const split = splitDoseReminders.find(
+                                (r) => r.status === "pending",
+                              );
+                              if (!split) return null;
+                              if (reco.type === "reduce-split" && reco.quantity !== undefined) {
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReduceSplit(split.id, reco.quantity!)}
+                                    className="mt-1.5 text-[10px] font-semibold text-diabete bg-diabete/10 hover:bg-diabete/20 transition-colors px-2 py-1 rounded-md tap-scale"
+                                  >
+                                    Réduire à {reco.quantity}U →
+                                  </button>
+                                );
+                              }
+                              if (reco.type === "delay-split") {
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDelaySplit(split.id, 90)}
+                                    className="mt-1.5 text-[10px] font-semibold text-diabete bg-diabete/10 hover:bg-diabete/20 transition-colors px-2 py-1 rounded-md tap-scale"
+                                  >
+                                    Décaler de 1h30 →
+                                  </button>
+                                );
+                              }
+                              return null;
+                            })()}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
 
       {/* ── CALCULATEUR BOLUS (action primaire) ── */}
       <section className="surface-1 rounded-3xl p-6 sm:p-8 mb-4 glow-accent">

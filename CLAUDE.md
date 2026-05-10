@@ -566,6 +566,41 @@ Ajout d'un hint contextualisé sous le breakdown bolus pour indiquer **quand** i
   - 60g + 120 mg/dL → "15 min avant" (lavender)
   - 60g + 75 mg/dL → "au moment du repas" (info)
   - 60g + 210 mg/dL → "20-30 min avant" (warning)
+
+### Phase 11 — Briefing pré-sport indépendant (mai 2026)
+Nouvelle section **"Briefing pré-sport"** sur `/diabete` qui sert d'advisor "filet de sécurité" entre deux moments d'injection — indépendant du calculateur de bolus. Cas typique : Ethan a déjà fait son bolus dîner avec split dose en attente, et il décide d'aller faire du running 30min plus tard. Le briefing détecte le risque et propose des actions concrètes.
+
+- **Helper** `computePreSportBriefing()` dans `lib/insulin-calculator.ts` — pure function qui prend en input :
+  - `currentGlucose` + `trendArrow` (depuis live ou manuel)
+  - `iobUnits` (insulin on board calculé)
+  - `isfMgPerU` + `insulinActiveMinutes` (config T1D)
+  - `workoutType` + `minutesUntilWorkout` (planifié)
+  - `pendingSplitUnits` + `pendingSplitMinutesUntil` (split dose en attente)
+  - `personalSportImpact` (impact perso depuis Bloc 6, fallback académique)
+  
+  Retourne `{ estimatedAtWorkoutStart, estimatedDuringWorkout, risk, recommendations[] }`.
+
+- **5 types de recommandations** :
+  - `eat-carbs` → "Mange Xg de glucides rapides avant le sport" (calcul `carbsNeeded = ceil((target − estimated) / 4)`)
+  - `reduce-split` → "Réduis ta 2e dose à Xu au lieu de Yu" (suggéré quand split tombe avant un running ou quand estimé < 100)
+  - `delay-split` → "Ou décale ta 2e dose à après le sport" (alternative)
+  - `delay-workout` → "Glycémie trop haute, attends 30min" (si > 250 + muscu)
+  - `check-glucose` → "Vérifie tes cétones avant de courir" (si > 250 + running)
+  - `safe` → "Tu peux y aller, rien à ajuster" (fallback OK)
+
+- **UI dans `/diabete`** : nouvelle section entre "Rappels split dose" et le calculateur de bolus, avec :
+  - Toggle on/off (par défaut off — pas de bruit visuel)
+  - Sélecteur **Muscu / Running** (chips lime/sky)
+  - **Slider** "Dans combien de min" (5 → 180min, step 5)
+  - Encadré coloré (red=risk / orange=caution / green=safe) avec **glycémie estimée** au début ET pendant le sport
+  - Liste des recommandations avec icônes lucide-react contextuelles (Apple, Minus, Clock, AlertTriangle, AlertCircle, CheckCircle2)
+  - **Boutons d'action inline** : "Réduire à XU →" et "Décaler de 1h30 →" qui modifient directement le `splitDoseReminder` en attente via `updateSplitDoseReminder()`
+
+- **Auto-détection du split en attente** : le briefing prend automatiquement le split `pending` le plus proche dans le temps. Pas besoin de le sélectionner manuellement.
+
+- **Cas validés en preview** :
+  - Glyc 65 + muscu 30min (pas IOB, pas split) → 1 reco "Mange 17g de glucides rapides" (rouge)
+  - Glyc normale + IOB 5.7U + split 4U/15min + running 30min → 3 recos : 51g glucides + Réduire à 2U + Décaler de 1h30, glycémie estimée -53 au début (donc grosse hypo prédite), boutons d'action fonctionnels.
 - **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
   - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
   - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"

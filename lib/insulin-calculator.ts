@@ -311,6 +311,191 @@ export function estimateGlucoseImpact(
 }
 
 /**
+ * Briefing pré-sport — Phase 11.
+ *
+ * Quand l'utilisateur a déjà fait son bolus repas et planifie un sport
+ * dans X minutes, on évalue le contexte global (IOB + glycémie + split
+ * dose en attente) pour donner des recommandations ACTIONNABLES :
+ *  - Manger des glucides avant le sport
+ *  - Réduire la 2e dose du split dose si elle tombe pendant ou après
+ *    une séance de running (qui fait baisser la glycémie)
+ *  - Reporter le split dose après le sport
+ *
+ * Ce briefing est INDÉPENDANT du calculateur de bolus — il sert de
+ * "filet de sécurité" entre deux moments d'injection.
+ *
+ * Renvoie un set de recommandations classées par priorité (la première
+ * est la plus actionnable). Renvoie [] si pas de risque détecté.
+ */
+export function computePreSportBriefing(input: {
+  currentGlucose: number;
+  trendArrow?: number;
+  iobUnits: number;
+  isfMgPerU: number;          // Insulin Sensitivity Factor (mg/dL par U)
+  insulinActiveMinutes: number; // durée d'action insuline (par défaut 195)
+  workoutType: 'muscu' | 'running';
+  minutesUntilWorkout: number;
+  workoutDurationMinutes?: number;
+  /** Split dose en attente : units + délai jusqu'au moment où il sera dû */
+  pendingSplitUnits?: number;
+  pendingSplitMinutesUntil?: number;
+  /** Impact sport perso (depuis Bloc 6) — fallback sur valeurs académiques. */
+  personalSportImpact?: number | null;
+}): {
+  /** Glycémie estimée au début du sport (compte tenu IOB + split). */
+  estimatedAtWorkoutStart: number;
+  /** Glycémie estimée pendant le sport (en intégrant l'impact sport). */
+  estimatedDuringWorkout: number;
+  /** Niveau de risque global. */
+  risk: 'safe' | 'caution' | 'risk';
+  /** Recommandations classées par priorité (la 1ère = la plus actionnable). */
+  recommendations: {
+    type: 'eat-carbs' | 'reduce-split' | 'delay-split' | 'delay-workout' | 'check-glucose' | 'safe';
+    headline: string;
+    detail: string;
+    /** Quantité numérique associée si pertinent (ex: 15 pour "15g"). */
+    quantity?: number;
+  }[];
+} {
+  const {
+    currentGlucose,
+    trendArrow,
+    iobUnits,
+    isfMgPerU,
+    insulinActiveMinutes,
+    workoutType,
+    minutesUntilWorkout,
+    pendingSplitUnits = 0,
+    pendingSplitMinutesUntil,
+    personalSportImpact,
+  } = input;
+
+  // 1. Estimation glycémie au début du sport
+  // - drop dû à l'IOB pendant la fenêtre minutesUntilWorkout
+  // - drop additionnel si le split tombe avant le sport
+  const fractionDuringWindow = Math.min(1, minutesUntilWorkout / insulinActiveMinutes);
+  const dropFromIob = iobUnits * isfMgPerU * fractionDuringWindow;
+
+  let dropFromSplit = 0;
+  const splitFallsBeforeWorkout =
+    pendingSplitUnits > 0 &&
+    pendingSplitMinutesUntil !== undefined &&
+    pendingSplitMinutesUntil < minutesUntilWorkout;
+  if (splitFallsBeforeWorkout) {
+    // Le split sera fait avant le sport. Il aura X minutes pour agir avant
+    // le sport (X = minutesUntilWorkout - pendingSplitMinutesUntil).
+    const splitActiveMinutes = minutesUntilWorkout - (pendingSplitMinutesUntil ?? 0);
+    const splitFraction = Math.min(1, splitActiveMinutes / insulinActiveMinutes);
+    dropFromSplit = pendingSplitUnits * isfMgPerU * splitFraction;
+  }
+
+  const estimatedAtWorkoutStart = Math.round(currentGlucose - dropFromIob - dropFromSplit);
+
+  // 2. Estimation pendant le sport (intègre l'impact sport)
+  const sportImpact =
+    personalSportImpact !== null && personalSportImpact !== undefined
+      ? personalSportImpact
+      : workoutType === 'muscu'
+      ? 40
+      : -60;
+  const estimatedDuringWorkout = estimatedAtWorkoutStart + sportImpact;
+
+  // 3. Trend descendante = facteur aggravant
+  const isFalling = trendArrow === 1 || trendArrow === 2;
+
+  // 4. Évaluation du risque
+  const recos: ReturnType<typeof computePreSportBriefing>["recommendations"] = [];
+  let risk: 'safe' | 'caution' | 'risk' = 'safe';
+
+  // ─── Risque hypo en début de sport ─────────────────────────
+  if (estimatedAtWorkoutStart < 90 || (estimatedAtWorkoutStart < 110 && isFalling)) {
+    risk = 'risk';
+    const target = workoutType === 'running' ? 150 : 130;
+    const carbsNeeded = Math.max(15, Math.ceil((target - estimatedAtWorkoutStart) / 4));
+    recos.push({
+      type: 'eat-carbs',
+      headline: `Mange ${carbsNeeded}g de glucides rapides avant le sport`,
+      detail: `Ta glycémie estimée au début du ${workoutType} est ${estimatedAtWorkoutStart} mg/dL — trop bas pour démarrer en sécurité.`,
+      quantity: carbsNeeded,
+    });
+  }
+
+  // ─── Split dose qui tombe avant ou pendant le sport ─────────
+  if (splitFallsBeforeWorkout && pendingSplitUnits > 0) {
+    const splitDuringWorkout = workoutType === 'running'
+      ? estimatedDuringWorkout < 120  // running fait baisser, split rajoute
+      : estimatedDuringWorkout < 100; // muscu monte mais split peut compenser
+    if (splitDuringWorkout || estimatedDuringWorkout < 100) {
+      const reducedSplit = Math.max(0, Math.ceil(pendingSplitUnits / 2));
+      risk = risk === 'risk' ? 'risk' : 'caution';
+      recos.push({
+        type: 'reduce-split',
+        headline: `Réduis ta 2e dose à ${reducedSplit}U au lieu de ${pendingSplitUnits}U`,
+        detail: `Le split dose tombe avant ton sport. Avec l'effet ${workoutType === 'running' ? 'hypoglycémiant du running' : 'de l\'IOB'}, ${pendingSplitUnits}U risque d'être trop. Réduis à ${reducedSplit}U.`,
+        quantity: reducedSplit,
+      });
+      recos.push({
+        type: 'delay-split',
+        headline: `Ou décale ta 2e dose à après le sport`,
+        detail: `Reporte le split dose 30min après ta séance — la couverture FPU sera moins risquée à ce moment.`,
+      });
+    }
+  }
+
+  // ─── Hypo prévue PENDANT le sport (sans split en jeu) ──────
+  if (estimatedDuringWorkout < 80 && recos.length === 0) {
+    risk = 'risk';
+    const carbsNeeded = workoutType === 'running' ? 30 : 20;
+    recos.push({
+      type: 'eat-carbs',
+      headline: `Mange ${carbsNeeded}g de glucides avant le sport`,
+      detail: `Ta glycémie va probablement chuter à ~${estimatedDuringWorkout} mg/dL pendant ton ${workoutType}.`,
+      quantity: carbsNeeded,
+    });
+  } else if (estimatedDuringWorkout < 110 && recos.length === 0) {
+    risk = 'caution';
+    recos.push({
+      type: 'eat-carbs',
+      headline: `Prends 10-15g de glucides avant le sport`,
+      detail: `Ta glycémie sera autour de ${estimatedDuringWorkout} mg/dL pendant — un peu juste pour finir la séance sans hypo.`,
+      quantity: 15,
+    });
+  }
+
+  // ─── Hyper en début de sport ───────────────────────────────
+  if (estimatedAtWorkoutStart > 250) {
+    risk = 'caution';
+    recos.push({
+      type: workoutType === 'running' ? 'check-glucose' : 'delay-workout',
+      headline:
+        workoutType === 'running'
+          ? 'Vérifie tes cétones avant de courir'
+          : 'Glycémie trop haute, attends 30min',
+      detail: `Glycémie estimée ${estimatedAtWorkoutStart} mg/dL au début du sport — risque de cétoacidose en aérobie ou faible perf en muscu.`,
+    });
+  }
+
+  // ─── Aucun risque détecté → message safe ───────────────────
+  if (recos.length === 0) {
+    recos.push({
+      type: 'safe',
+      headline: 'Tu peux y aller, rien à ajuster',
+      detail:
+        workoutType === 'muscu'
+          ? `Glycémie estimée ${estimatedAtWorkoutStart} → ~${estimatedDuringWorkout} pendant la muscu (qui fait monter de ~${sportImpact > 0 ? '+' : ''}${sportImpact} mg/dL).`
+          : `Glycémie estimée ${estimatedAtWorkoutStart} → ~${estimatedDuringWorkout} pendant le running. Garde du sucre sur toi au cas où.`,
+    });
+  }
+
+  return {
+    estimatedAtWorkoutStart,
+    estimatedDuringWorkout,
+    risk,
+    recommendations: recos,
+  };
+}
+
+/**
  * Conseil de timing d'injection — Phase 11.
  *
  * Le pré-bolus 15min avant le repas est le standard T1D pour anticiper le
