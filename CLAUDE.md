@@ -614,6 +614,29 @@ Retour terrain Ethan : pour une fenêtre de 180min, le système recommandait "Ma
   - 30 min → 3 recos cohérentes (23g glucides + Réduire à 3U + Décaler)
   - 90 min → mêmes recos
   - 180 min → "Re-vérifie ta glycémie 30 min avant" (plus de chiffre absurde)
+
+### Phase 11 — Trend Libre intégrée + transparence UI briefing (mai 2026)
+Retour terrain : "il faut que le briefing prenne ma glycémie actuelle, qu'il voie la flèche montée/descente/stable, qu'il calcule en fonction". L'IOB et la glycémie de base étaient déjà passés au helper, mais la **trend Libre** ne servait qu'à déclencher des conditions annexes — elle n'impactait pas la prédiction de glycémie. Ajout de l'effet trend dans le calcul + transparence UI complète sur les inputs utilisés.
+
+- **Effet trend dans `computePreSportBriefing`** : `dropFromTrend = -trendVelocity × min(30, minutesUntilWorkout)`. Vitesses Abbott conservatives (mg/dL/min) :
+  - ↓↓ (1) : -1.5 — chute rapide
+  - ↘ (2) : -0.7 — descente
+  - → (3) : 0
+  - ↗ (4) : +0.7 — montée
+  - ↑↑ (5) : +1.5 — montée rapide
+  - Cap à 30min pour éviter le double-comptage avec l'IOB sur les fenêtres longues (la trend reflète déjà l'effet IOB en cours).
+- **`breakdown` exposé en sortie** : `{ glucoseInput, trendArrowUsed, dropFromIob, dropFromSplit, dropFromTrend, sportImpact }` — permet à l'UI d'afficher la décomposition exacte du calcul.
+- **Section "Données utilisées" dans l'UI** : surface-2 entre le slider et le bloc résultats, affiche :
+  - **Glycémie** live avec flèche trend + âge ("100 ↘ (0min)")
+  - **IOB** actuel
+  - **Split en attente** si présent (units + minutes)
+  - Bouton **"Rafraîchir"** (Activity icon) qui force un re-fetch manuel
+- **Auto-refresh à l'activation** : `useEffect` qui appelle `refetchGlucose()` dès que `briefingActive === true` → garantit une lecture fraîche, pas un cache obsolète.
+- **Décomposition inline du calcul** : sous "Glycémie estimée" du bloc résultats, ligne grise type `100 (actuel) -21 (trend)` qui montre exactement comment on est arrivé au chiffre. Pédagogie + confiance.
+- **Cas validés** :
+  - Glyc 100 ↘ + IOB 0 + muscu 30min → breakdown "100 (actuel) -21 (trend)" → estimated 79 → "Mange 15g"
+  - Glyc 67 → + IOB 0 → breakdown "67 (actuel)" → estimated 67 → "Mange 16g"
+- **Hook `useGlucose` étendu** : utilisation de `refetch` et `lastFetchedAt` pour driver le bouton refresh (avec animation Activity spin pendant la requête).
 - **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
   - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
   - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"

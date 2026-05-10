@@ -342,10 +342,19 @@ export function computePreSportBriefing(input: {
   /** Impact sport perso (depuis Bloc 6) — fallback sur valeurs académiques. */
   personalSportImpact?: number | null;
 }): {
-  /** Glycémie estimée au début du sport (compte tenu IOB + split). */
+  /** Glycémie estimée au début du sport (compte tenu IOB + split + trend). */
   estimatedAtWorkoutStart: number;
   /** Glycémie estimée pendant le sport (en intégrant l'impact sport). */
   estimatedDuringWorkout: number;
+  /** Décomposition des drops (transparence UI) — Phase 11. */
+  breakdown: {
+    glucoseInput: number;
+    trendArrowUsed?: number;
+    dropFromIob: number;
+    dropFromSplit: number;
+    dropFromTrend: number;
+    sportImpact: number;
+  };
   /** Niveau de risque global. */
   risk: 'safe' | 'caution' | 'risk';
   /** Recommandations classées par priorité (la 1ère = la plus actionnable). */
@@ -373,6 +382,7 @@ export function computePreSportBriefing(input: {
   // 1. Estimation glycémie au début du sport
   // - drop dû à l'IOB pendant la fenêtre minutesUntilWorkout
   // - drop additionnel si le split tombe avant le sport
+  // - effet de la trend Libre actuelle (extrapolation court terme)
   //
   // ⚠️ Calibrage important : la formule pure (IOB × ISF × fraction) donne
   // des prédictions absurdes pour les fenêtres longues car elle ignore les
@@ -395,10 +405,26 @@ export function computePreSportBriefing(input: {
     dropFromSplit = pendingSplitUnits * isfMgPerU * splitFraction;
   }
 
+  // ─── Effet de la trend Libre — Phase 11 ─────────────────────
+  // La trend reflète le mouvement glycémique en ce moment (signal court
+  // terme). On extrapole linéairement sur la fenêtre du sport, mais on
+  // limite l'effet à 30min max (au-delà la trend perd toute valeur car
+  // elle change rapidement avec les facteurs en jeu).
+  // Vitesses Abbott (mg/dL/min, valeurs conservatives pour pas double-comptage avec IOB) :
+  //   ↓↓ (1) : -1.5  ↘ (2) : -0.7   → (3) : 0   ↗ (4) : +0.7   ↑↑ (5) : +1.5
+  const trendVelocity =
+    trendArrow === 1 ? -1.5 :
+    trendArrow === 2 ? -0.7 :
+    trendArrow === 4 ? 0.7 :
+    trendArrow === 5 ? 1.5 :
+    0;
+  const trendWindow = Math.min(30, minutesUntilWorkout); // cap à 30min
+  const dropFromTrend = -trendVelocity * trendWindow; // positif = baisse
+
   // Floor à 40 mg/dL : en dessous c'est juste pas réaliste (l'utilisateur
   // aurait corrigé bien avant). Évite des recommandations absurdes type
   // "mange 191g de glucides".
-  const rawEstimate = currentGlucose - dropFromIob - dropFromSplit;
+  const rawEstimate = currentGlucose - dropFromIob - dropFromSplit - dropFromTrend;
   const estimatedAtWorkoutStart = Math.max(40, Math.round(rawEstimate));
 
   // Détection : fenêtre trop longue → la prédiction n'est plus fiable
@@ -413,6 +439,15 @@ export function computePreSportBriefing(input: {
       ? 40
       : -60;
   const estimatedDuringWorkout = estimatedAtWorkoutStart + sportImpact;
+
+  const breakdown = {
+    glucoseInput: currentGlucose,
+    trendArrowUsed: trendArrow,
+    dropFromIob: Math.round(dropFromIob),
+    dropFromSplit: Math.round(dropFromSplit),
+    dropFromTrend: Math.round(dropFromTrend),
+    sportImpact,
+  };
 
   // 3. Trend descendante = facteur aggravant
   const isFalling = trendArrow === 1 || trendArrow === 2;
@@ -441,6 +476,7 @@ export function computePreSportBriefing(input: {
           ? personalSportImpact
           : workoutType === 'muscu' ? 40 : -60
       ),
+      breakdown,
       risk,
       recommendations: recos,
     };
@@ -530,6 +566,7 @@ export function computePreSportBriefing(input: {
   return {
     estimatedAtWorkoutStart,
     estimatedDuringWorkout,
+    breakdown,
     risk,
     recommendations: recos,
   };

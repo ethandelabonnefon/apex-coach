@@ -185,6 +185,8 @@ export default function DiabetePage() {
   const [briefingActive, setBriefingActive] = useState(false);
   const [briefingType, setBriefingType] = useState<"muscu" | "running">("muscu");
   const [briefingMinutes, setBriefingMinutes] = useState<number>(30);
+  const [briefingRefreshing, setBriefingRefreshing] = useState(false);
+  // L'auto-refresh est défini plus bas, après la déclaration de useGlucose.
 
   // ─── Phase 11 Bloc 2 — Meal tag + size ────────
   const [mealTag, setMealTag] = useState<MealTagId | undefined>(undefined);
@@ -404,9 +406,21 @@ export default function DiabetePage() {
     iob.totalIOB > 2 ? "warning" : "info";
 
   // ─── Raccourci "Utiliser la valeur live" pour le calculateur bolus ─────
-  const { current: liveGlucose } = useGlucose({ mode: "current" });
+  const { current: liveGlucose, refetch: refetchGlucose, lastFetchedAt: lastLiveFetch } = useGlucose({ mode: "current" });
   const liveValueForBolus = liveGlucose?.value;
   const liveTrend = trendStringToNumber(liveGlucose?.trend);
+
+  // Auto-refresh la glycémie live quand on active le briefing pré-sport
+  // (pour avoir la donnée la plus fraîche possible). Évite de baser une
+  // décision sur une lecture obsolète.
+  useEffect(() => {
+    if (briefingActive) {
+      setBriefingRefreshing(true);
+      Promise.resolve(refetchGlucose()).finally(() => {
+        setBriefingRefreshing(false);
+      });
+    }
+  }, [briefingActive, refetchGlucose]);
 
   // ─── Phase 11 : check des split-dose reminders dûs ─────────────
   // À chaque tick (60s), on regarde si un rappel pending arrive à échéance.
@@ -858,6 +872,78 @@ export default function DiabetePage() {
               </div>
             </div>
 
+            {/* Données utilisées — transparence sur les inputs */}
+            <div className="rounded-xl bg-bg-tertiary border border-border-subtle p-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="label">Données utilisées</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBriefingRefreshing(true);
+                    Promise.resolve(refetchGlucose()).finally(() => {
+                      setBriefingRefreshing(false);
+                    });
+                  }}
+                  disabled={briefingRefreshing}
+                  className="flex items-center gap-1 text-[10px] text-text-tertiary hover:text-diabete transition-colors disabled:opacity-50 tap-scale"
+                >
+                  <Activity className={`w-3 h-3 ${briefingRefreshing ? 'animate-spin' : ''}`} />
+                  {briefingRefreshing ? 'Refresh…' : 'Rafraîchir'}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                {/* Glycémie live */}
+                <div className="flex items-start gap-1.5">
+                  <Droplet className="w-3 h-3 text-diabete shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-[9px] text-text-tertiary uppercase tracking-wide">Glycémie</p>
+                    {liveGlucose ? (
+                      <p className="num text-text-primary font-semibold">
+                        {liveGlucose.value}
+                        <span className="text-text-secondary ml-1">{liveGlucose.arrow}</span>
+                        <span className="text-[9px] text-text-tertiary ml-1">
+                          ({Math.round((Date.now() - new Date(liveGlucose.date).getTime()) / 60000)}min)
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="num text-text-tertiary">{currentGlucose} (manuel)</p>
+                    )}
+                  </div>
+                </div>
+                {/* IOB */}
+                <div className="flex items-start gap-1.5">
+                  <Syringe className="w-3 h-3 text-info shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-[9px] text-text-tertiary uppercase tracking-wide">IOB</p>
+                    <p className="num text-text-primary font-semibold">
+                      {iob.totalIOB.toFixed(1)}
+                      <span className="text-text-tertiary ml-0.5">U</span>
+                    </p>
+                  </div>
+                </div>
+                {/* Split en attente */}
+                {(() => {
+                  const upcomingSplit = splitDoseReminders
+                    .filter((r) => r.status === "pending")
+                    .map((r) => ({ ...r, minutesUntil: Math.round((new Date(r.triggerAt).getTime() - nowTick) / 60000) }))
+                    .filter((r) => r.minutesUntil >= 0)
+                    .sort((a, b) => a.minutesUntil - b.minutesUntil)[0];
+                  if (!upcomingSplit) return null;
+                  return (
+                    <div className="flex items-start gap-1.5 col-span-2">
+                      <Clock className="w-3 h-3 text-accent-2 shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-[9px] text-text-tertiary uppercase tracking-wide">Split en attente</p>
+                        <p className="num text-text-primary font-semibold">
+                          {upcomingSplit.units}U dans {upcomingSplit.minutesUntil}min
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
             {/* Briefing résultats */}
             {preSportBriefing && (
               <div
@@ -884,6 +970,22 @@ export default function DiabetePage() {
                     pendant
                   </span>
                 </div>
+
+                {/* Décomposition du calcul (transparence) */}
+                {(() => {
+                  const b = preSportBriefing.breakdown;
+                  const pieces: string[] = [];
+                  pieces.push(`${b.glucoseInput} (actuel)`);
+                  if (b.dropFromIob > 0) pieces.push(`-${b.dropFromIob} (IOB)`);
+                  if (b.dropFromSplit > 0) pieces.push(`-${b.dropFromSplit} (split)`);
+                  if (b.dropFromTrend > 0) pieces.push(`-${b.dropFromTrend} (trend)`);
+                  else if (b.dropFromTrend < 0) pieces.push(`+${-b.dropFromTrend} (trend)`);
+                  return (
+                    <p className="num text-[10px] text-text-tertiary mb-2 leading-snug">
+                      {pieces.join(" ")}
+                    </p>
+                  );
+                })()}
 
                 <div className="space-y-2">
                   {preSportBriefing.recommendations.map((reco, i) => {
