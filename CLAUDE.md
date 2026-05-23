@@ -690,6 +690,35 @@ Retour terrain Ethan : "20g lipides + 20g protéines (crêpes Nutella + pain de 
 | Pizza 80g/30/25 | 3.7 | Split | Split 2U dans 2h ✅ |
 | Viande+accomp. 60g/25/45 | 4.1 | Split | Split 3U dans 2h30 ✅ |
 | Petit-déj XL 100g/30/35 | 4.1 | Split | Pas de split (glucides rapides) ✅ |
+
+### Phase 11 — Correction split 50/50 → 100% différé (mai 2026, retour terrain)
+Retour terrain Ethan : "Pâtes énormes 100g de glucides + 24g lip + 40g prot → l'app donne 12U + 2U dans 2h → j'ai 5 hypos récurrentes à 12h-14h. J'aurais dû faire 10U + 4U environ."
+
+**Diagnostic** : le split 50/50 implémenté précédemment (basé sur une mauvaise interprétation de NHS Cambridge) chargeait 50% du FPU dans le bolus initial. Pour 100g/24/40, ça donnait 10U glucides + 1.88U FPU = ~12U d'un coup → pic insuline excessif → hypo systématique 1-2h après le repas. Le 2U différé ne compensait pas l'hypo précoce déjà déclenchée.
+
+**Vraie lecture de la littérature** : NHS Cambridge dit "50% of the new dose (carbs + increase) au repas, 50% 1-1.5h après" — c'est un protocole d'étalement TOTAL pour pompes. Pour MDI (stylos), le modèle Pankowska classique (100% glucides au repas + 100% FPU différé en 2e injection ponctuelle) est mieux adapté : pas de pic insuline excessif, couverture séquentielle.
+
+**Fix** (`lib/insulin-calculator.ts`) :
+```typescript
+// AVANT (50/50, causait hypos précoces)
+const fpuBolusNow = useSplit ? fpuBolus / 2 : fpuBolus;
+const fpuBolusLater = useSplit ? fpuBolus / 2 : 0;
+
+// APRÈS (100% différé, Pankowska classique)
+const fpuBolusNow = useSplit ? 0 : fpuBolus;
+const fpuBolusLater = useSplit ? fpuBolus : 0;
+```
+
+**Reasoning mis à jour** : "Split classique : 10U maintenant (juste les glucides), puis 4U dans 2h pour couvrir les graisses/protéines."
+
+**Cas validés** :
+| Repas | FPU | Bug 50/50 | Fix 100% différé |
+|---|---|---|---|
+| 🍝 Pâtes Énorme 100g/24/40 (cas Ethan) | 3.76 | 12U + 2U → hypo | **10U + 4U dans 2h** ✅ |
+| 🍕 Pizza 80g/30/25 | 3.7 | 10U + 2U | **8U + 4U dans 2h** ✅ |
+| 🥩 Viande 60g/25/45 | 4.1 | 8U + 3U | **6U + 5U dans 2h30** ✅ |
+
+Le total insuline reste le même (carbBolus + fpuBolus) mais réparti différemment : pas de surcharge initiale, donc pas d'hypo précoce. Le FPU couvre uniquement la digestion lente, comme prévu par Pankowska.
 - **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
   - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
   - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"

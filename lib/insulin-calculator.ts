@@ -243,12 +243,20 @@ export function calculateBolus(
     fpuBolus >= 1.5 &&
     !fastCarbs;
 
-  // Quand split actif → on intègre 50% du fpuBolus dans le bolus initial,
-  // 50% sera fait plus tard. Cf guidelines NHS MDI : split 50/50 préféré
-  // au 100% différé pour limiter le risque d'hypo précoce en MDI (stylos).
-  // Sans split → fpuBolus 100% dans le bolus initial (ou rien si FPU minime).
-  const fpuBolusNow = useSplit ? fpuBolus / 2 : fpuBolus;
-  const fpuBolusLater = useSplit ? fpuBolus / 2 : 0;
+  // Quand split actif → 100% des glucides+correction au repas, 100% du FPU
+  // différé en 2e injection (modèle Pankowska classique).
+  //
+  // ⚠️ FIX mai 2026 : on avait initialement implémenté un split 50/50
+  // (50% FPU initial, 50% différé) basé sur une mauvaise interprétation
+  // de NHS Cambridge. Retour terrain Ethan : pour 100g pâtes énorme +
+  // 24g lip + 40g prot, le 50/50 donnait 12U initial → hypo systématique
+  // à 12h-14h (1-2h post-repas). Le modèle Pankowska classique (100% FPU
+  // différé) donne 10U initial + 4U à T+2h, sans pic insuline excessif.
+  //
+  // Sans split → fpuBolus 100% dans le bolus initial (ou rien si FPU
+  // minime, ce qui est le cas par défaut pour les repas non split-worthy).
+  const fpuBolusNow = useSplit ? 0 : fpuBolus;
+  const fpuBolusLater = useSplit ? fpuBolus : 0;
 
   const rawTotal = Math.max(0, carbBolus + correctionBolus + trendBolus + fpuBolusNow);
   const totalBolus = Math.ceil(rawTotal);
@@ -286,7 +294,7 @@ export function calculateBolus(
       digestiveComplexity === 'complex' ? 'Repas complexe' : 'Repas modéré';
     const digestionHours = digestiveComplexity === 'complex' ? '~5h' : '~3-4h';
     reasoning.push(
-      `${complexityLabel} (${totalFPU.toFixed(1).replace(".", ",")} FPU) : la digestion va durer ${digestionHours}. Split 50/50 : ${totalBolus}U maintenant (incluant 50% du FPU), puis ${laterUnits}U dans ${delayLabel}.`
+      `${complexityLabel} (${totalFPU.toFixed(1).replace(".", ",")} FPU) : la digestion va durer ${digestionHours}. Split classique : ${totalBolus}U maintenant (juste les glucides), puis ${laterUnits}U dans ${delayLabel} pour couvrir les graisses/protéines.`
     );
     adjustments.push(`Split dose : +${laterUnits}U dans ${delayLabel}`);
   } else if (fastCarbs && totalFPU >= 2.5 && carbsGrams >= 50) {
