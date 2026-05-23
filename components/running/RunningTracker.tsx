@@ -126,7 +126,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
           {/* Carte avec trace complète (Phase B) */}
           {summary.points.length >= 2 && (
             <section className="surface-1 rounded-2xl overflow-hidden mb-4 relative">
-              <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-bg-tertiary/80 backdrop-blur-md rounded-full px-2.5 py-1 border border-border-subtle">
+              <div className="absolute top-3 left-3 z-[500] flex items-center gap-1.5 bg-bg-tertiary/80 backdrop-blur-md rounded-full px-2.5 py-1 border border-border-subtle">
                 <MapPin className="w-3 h-3 text-running" />
                 <span className="text-[10px] uppercase tracking-wide text-text-secondary font-semibold">
                   Trace GPS
@@ -135,7 +135,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
               <div style={{ height: 280 }}>
                 <RunningMap points={summary.points} mode="replay" />
               </div>
-              <div className="absolute bottom-3 right-3 z-10 flex flex-col items-end gap-1 text-[9px] text-text-tertiary">
+              <div className="absolute bottom-3 right-3 z-[500] flex flex-col items-end gap-1 text-[9px] text-text-tertiary">
                 <div className="flex items-center gap-1 bg-bg-tertiary/80 backdrop-blur-md rounded-full px-2 py-0.5 border border-border-subtle">
                   <span className="w-1.5 h-1.5 rounded-full bg-success" />
                   <span>Départ</span>
@@ -247,8 +247,11 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
         <RunningMap points={tracker.points} mode="live" />
       </div>
 
-      {/* Overlay top : header glass */}
-      <div className="absolute top-0 inset-x-0 z-10 glass border-b border-border-subtle">
+      {/* Overlay top : header glass.
+          z-[1000] obligatoire : Leaflet utilise z-100 à z-800 sur ses
+          panes internes (tilePane, markerPane, tooltipPane, controls).
+          Sans ça, nos overlays sont cachés derrière les markers Leaflet. */}
+      <div className="absolute top-0 inset-x-0 z-[1000] glass border-b border-border-subtle">
         <div className="flex items-center justify-between p-3 sm:p-4">
           <div className="flex items-center gap-2">
             <Footprints className="w-5 h-5 text-running" />
@@ -284,8 +287,8 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
         )}
       </div>
 
-      {/* Overlay bottom : stats + boutons en glass */}
-      <div className="absolute bottom-0 inset-x-0 z-10 glass border-t border-border-subtle">
+      {/* Overlay bottom : stats + boutons en glass (z-[1000] cf top). */}
+      <div className="absolute bottom-0 inset-x-0 z-[1000] glass border-t border-border-subtle">
         {/* Stats compactes — 4 colonnes */}
         <div className="grid grid-cols-4 gap-2 px-3 py-3 sm:px-4">
           <OverlayStat label="Durée" value={formatDuration(tracker.durationSec)} />
