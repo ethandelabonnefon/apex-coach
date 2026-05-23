@@ -28,6 +28,7 @@ import {
   type MealSizeId,
 } from "@/lib/meal-tags";
 import { getMealTypeHistory, getAvgMacrosForTag, type ArchivePoint } from "@/lib/meal-analytics";
+import { openYazio } from "@/lib/external-apps";
 import { usePatternDetection } from "@/hooks/usePatternDetection";
 import type { DetectedPattern, PatternSeverity } from "@/lib/glucose-archive/pattern-engine";
 import {
@@ -1241,20 +1242,30 @@ export default function DiabetePage() {
             const tag = MEAL_TAGS.find((t) => t.id === mealTag);
             if (!tag || tag.glycemicProfile !== 'slow') return null;
             return (
-              <div className="mt-3 rounded-lg bg-warning/10 border border-warning/25 px-3 py-2 flex items-start gap-2">
+              <div className="mt-3 rounded-lg bg-warning/10 border border-warning/25 px-3 py-2.5 flex items-start gap-2">
                 <Info className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
                 <div className="min-w-0 flex-1">
                   <p className="text-[11px] text-text-secondary leading-snug">
                     Repas riche : pour une dose précise, copie tes vraies macros depuis Yazio
                     plutôt que le preset.
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowMacros(true)}
-                    className="mt-1 text-[10px] font-semibold text-warning hover:underline tap-scale"
-                  >
-                    Ouvrir lipides &amp; protéines →
-                  </button>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openYazio()}
+                      className="text-[11px] font-semibold text-ink bg-warning hover:bg-warning/90 transition-colors px-3 py-1.5 rounded-md tap-scale flex items-center gap-1.5"
+                    >
+                      <Apple className="w-3 h-3" />
+                      Ouvrir Yazio →
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowMacros(true)}
+                      className="text-[10px] font-semibold text-warning hover:underline tap-scale"
+                    >
+                      Saisir manuellement
+                    </button>
+                  </div>
                 </div>
               </div>
             );
