@@ -94,7 +94,13 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
   if (showSummary && summary) {
     const tooShort = summary.distanceMeters < 100;
     return (
-      <div className="fixed inset-0 z-50 bg-bg-primary/95 backdrop-blur-md overflow-y-auto">
+      <div
+        className="fixed inset-0 z-50 bg-bg-primary/95 backdrop-blur-md overflow-y-auto"
+        style={{
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
+      >
         <div className="max-w-2xl mx-auto p-4 sm:p-6 stagger">
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -250,8 +256,13 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
       {/* Overlay top : header glass.
           z-[1000] obligatoire : Leaflet utilise z-100 à z-800 sur ses
           panes internes (tilePane, markerPane, tooltipPane, controls).
-          Sans ça, nos overlays sont cachés derrière les markers Leaflet. */}
-      <div className="absolute top-0 inset-x-0 z-[1000] glass border-b border-border-subtle">
+          Sans ça, nos overlays sont cachés derrière les markers Leaflet.
+          paddingTop safe-area-inset-top : sur iPhone, descend le header
+          sous la barre système (heure/wifi/batterie). */}
+      <div
+        className="absolute top-0 inset-x-0 z-[1000] glass border-b border-border-subtle"
+        style={{ paddingTop: "env(safe-area-inset-top)" }}
+      >
         <div className="flex items-center justify-between p-3 sm:p-4">
           <div className="flex items-center gap-2">
             <Footprints className="w-5 h-5 text-running" />
@@ -287,8 +298,13 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
         )}
       </div>
 
-      {/* Overlay bottom : stats + boutons en glass (z-[1000] cf top). */}
-      <div className="absolute bottom-0 inset-x-0 z-[1000] glass border-t border-border-subtle">
+      {/* Overlay bottom : stats + boutons en glass (z-[1000] cf top).
+          paddingBottom safe-area-inset-bottom : sur iPhone, évite que
+          les boutons soient cachés par le home indicator. */}
+      <div
+        className="absolute bottom-0 inset-x-0 z-[1000] glass border-t border-border-subtle"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
         {/* Stats compactes — 4 colonnes */}
         <div className="grid grid-cols-4 gap-2 px-3 py-3 sm:px-4">
           <OverlayStat label="Durée" value={formatDuration(tracker.durationSec)} />
