@@ -719,6 +719,19 @@ const fpuBolusLater = useSplit ? fpuBolus : 0;
 | 🥩 Viande 60g/25/45 | 4.1 | 8U + 3U | **6U + 5U dans 2h30** ✅ |
 
 Le total insuline reste le même (carbBolus + fpuBolus) mais réparti différemment : pas de surcharge initiale, donc pas d'hypo précoce. Le FPU couvre uniquement la digestion lente, comme prévu par Pankowska.
+
+### Phase 11 — Macros : auto-calibration perso + hint Yazio + badge confiance (mai 2026)
+Discussion produit Ethan : "Quelle est la meilleure façon de procéder ? Je clique sur petit/normal/énorme, ou je remplis vraiment précisément les lipides/protéines ?" → réponse : presets OK pour repas légers, mais **macros précises essentielles pour les repas split-worthy** (pâtes, pizza, viande+accomp.). 3 améliorations UI pour guider ce choix :
+
+- **Auto-calibration personnelle** (`getAvgMacrosForTag` dans `lib/meal-analytics.ts`) : calcule la moyenne des macros (fat/prot) saisies réellement dans les 5 derniers `InsulinLog` pour un tag donné. Filtre les split doses pour éviter les doublons. Renvoie `{ count, avgFat, avgProtein }`.
+- **Carte historique macros perso** (dans `/diabete`, sous la grille des tags) : visible uniquement si `count ≥ 3` ET écart vs preset ≥ 5g sur fat ou prot (sinon pas pertinent). Affiche "Tes 5 derniers 'Pâtes' : ~22g lip + 28g prot (preset 15/25)" + bouton **"Utiliser ma moyenne →"** qui remplit fat/prot avec les valeurs perso et flag `macrosManuallyEdited = true` (donc plus de re-override par preset).
+- **Hint Yazio sync** : si l'utilisateur sélectionne un tag avec `glycemicProfile === 'slow'` (pâtes/riz/pizza/viande+accomp.) ET n'a pas encore édité les macros manuellement → encadré warning "Repas riche : pour une dose précise, copie tes vraies macros depuis Yazio plutôt que le preset" + bouton **"Ouvrir lipides & protéines →"** qui déplie le block macros.
+- **Badge de confiance** dans le résultat hero du calculateur, à côté du label "Dose à injecter" :
+  - 🟢 **Macros précises** (success, ShieldCheck) : `macrosManuallyEdited === true` OU macros saisies sans tag
+  - 🟡 **Preset** (warning, Shield) : tag sélectionné, valeurs preset utilisées → tooltip "Override avec tes vrais chiffres Yazio pour fiabilité maximale"
+  - ⚫ **Sans macros** (text-tertiary, ShieldAlert) : aucune macro renseignée → tooltip "OK pour repas léger / correction"
+- État `macrosConfidence: 'precise' | 'preset' | 'none'` calculé via `useMemo` à partir de `fatGrams`, `proteinGrams`, `macrosManuallyEdited`, `mealTag`.
+- **Workflow optimal documenté** (réponse Ethan) : Pâtes/Pizza/Viande+accomp. → toujours macros précises depuis Yazio. Salade/Snack/Petit-déj → presets OK (split dose ne se déclenche pas de toute façon). Repas standard répété → ajuster manuellement à partir du preset.
 - **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
   - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
   - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"

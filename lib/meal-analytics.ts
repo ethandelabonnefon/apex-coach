@@ -130,3 +130,44 @@ export function getMealTypeHistory(
 
   return result;
 }
+
+// ─── Phase 11 — Auto-calibration personnelle des macros par tag ──────
+// Moyennes des macros (lipides/protéines) saisies réellement par
+// l'utilisateur pour un meal-tag donné. Permet d'auto-suggérer ses
+// vraies valeurs perso au lieu des presets statistiques.
+
+export interface AvgMacrosForTag {
+  count: number;            // nb d'occurrences avec macros renseignées
+  avgFat: number | null;
+  avgProtein: number | null;
+}
+
+export function getAvgMacrosForTag(
+  insulinLogs: InsulinLog[],
+  mealTag: string,
+  limit: number = 5,
+): AvgMacrosForTag {
+  const tagged = insulinLogs
+    .filter((log) =>
+      log.mealTag === mealTag &&
+      !log.isSplitDose &&
+      // Au moins une macro renseignée pour compter
+      ((log.fatGrams ?? 0) > 0 || (log.proteinGrams ?? 0) > 0)
+    )
+    .map((log) => ({ ...log, ts: new Date(log.injectedAt).getTime() }))
+    .sort((a, b) => b.ts - a.ts)
+    .slice(0, limit);
+
+  if (tagged.length === 0) {
+    return { count: 0, avgFat: null, avgProtein: null };
+  }
+
+  const fats = tagged.map((l) => l.fatGrams ?? 0);
+  const prots = tagged.map((l) => l.proteinGrams ?? 0);
+
+  return {
+    count: tagged.length,
+    avgFat: Math.round(fats.reduce((s, v) => s + v, 0) / tagged.length),
+    avgProtein: Math.round(prots.reduce((s, v) => s + v, 0) / tagged.length),
+  };
+}

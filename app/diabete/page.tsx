@@ -27,7 +27,7 @@ import {
   type MealTagId,
   type MealSizeId,
 } from "@/lib/meal-tags";
-import { getMealTypeHistory, type ArchivePoint } from "@/lib/meal-analytics";
+import { getMealTypeHistory, getAvgMacrosForTag, type ArchivePoint } from "@/lib/meal-analytics";
 import { usePatternDetection } from "@/hooks/usePatternDetection";
 import type { DetectedPattern, PatternSeverity } from "@/lib/glucose-archive/pattern-engine";
 import {
@@ -71,6 +71,10 @@ import {
   Apple,
   ZapOff,
   Activity,
+  ShieldCheck,
+  ShieldAlert,
+  Shield,
+  Sparkle,
 } from "lucide-react";
 
 // Mapping iconName (lib/meal-tags) → composant lucide-react
@@ -322,6 +326,17 @@ export default function DiabetePage() {
     trendArrow,
   ]);
   const finalUnits = unitsOverride ?? bolusResult.totalBolus;
+
+  // ─── Niveau de confiance des macros (Phase 11, mai 2026) ──────
+  // - "precise" : l'utilisateur a saisi ses macros manuellement (Yazio)
+  // - "preset"  : tag sélectionné mais valeurs preset utilisées
+  // - "none"    : pas de macros du tout (correction seule ou repas léger)
+  const macrosConfidence: 'precise' | 'preset' | 'none' = useMemo(() => {
+    if (fatGrams === 0 && proteinGrams === 0) return 'none';
+    if (macrosManuallyEdited) return 'precise';
+    if (mealTag) return 'preset';
+    return 'precise'; // saisie sans tag = considérée précise
+  }, [fatGrams, proteinGrams, macrosManuallyEdited, mealTag]);
 
   // ─── Quick logs ───────────────────────────────
   const [glucoseValue, setGlucoseValue] = useState(110);
@@ -1177,6 +1192,73 @@ export default function DiabetePage() {
               </div>
             );
           })()}
+
+          {/* Auto-calibration macros perso (Phase 11, mai 2026) */}
+          {mealTag && (() => {
+            const avg = getAvgMacrosForTag(insulinLogs, mealTag, 5);
+            if (avg.count < 3 || avg.avgFat === null || avg.avgProtein === null) return null;
+            // Calcule l'écart vs preset pour décider d'afficher
+            const tag = MEAL_TAGS.find((t) => t.id === mealTag);
+            if (!tag) return null;
+            const sizeMult = MEAL_SIZES.find((s) => s.id === mealSize)?.multiplier ?? 1;
+            const presetFat = Math.round(tag.avgFat * sizeMult);
+            const presetProt = Math.round(tag.avgProtein * sizeMult);
+            const diffFat = Math.abs((avg.avgFat ?? 0) - presetFat);
+            const diffProt = Math.abs((avg.avgProtein ?? 0) - presetProt);
+            // Affiche uniquement si l'écart vs preset est >= 5g (sinon pas pertinent)
+            if (diffFat < 5 && diffProt < 5) return null;
+            return (
+              <div className="mt-3 rounded-lg bg-diabete/10 border border-diabete/25 px-3 py-2.5 flex items-start gap-2">
+                <Sparkle className="w-3.5 h-3.5 text-diabete shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] text-text-primary font-medium leading-snug">
+                    Tes {avg.count} derniers &laquo; {tag.label} &raquo; : ~
+                    <span className="num text-diabete">{avg.avgFat}g</span> lip +{" "}
+                    <span className="num text-diabete">{avg.avgProtein}g</span> prot
+                  </p>
+                  <p className="text-[10px] text-text-tertiary mt-0.5">
+                    Preset : {presetFat}g lip + {presetProt}g prot
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFatGrams(avg.avgFat!);
+                      setProteinGrams(avg.avgProtein!);
+                      setMacrosManuallyEdited(true);
+                      setShowMacros(true);
+                    }}
+                    className="mt-1.5 text-[10px] font-semibold text-diabete bg-diabete/15 hover:bg-diabete/25 transition-colors px-2.5 py-1 rounded-md tap-scale"
+                  >
+                    Utiliser ma moyenne →
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Hint Yazio sync pour repas riches/lourds (slow profile) */}
+          {mealTag && !macrosManuallyEdited && (() => {
+            const tag = MEAL_TAGS.find((t) => t.id === mealTag);
+            if (!tag || tag.glycemicProfile !== 'slow') return null;
+            return (
+              <div className="mt-3 rounded-lg bg-warning/10 border border-warning/25 px-3 py-2 flex items-start gap-2">
+                <Info className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] text-text-secondary leading-snug">
+                    Repas riche : pour une dose précise, copie tes vraies macros depuis Yazio
+                    plutôt que le preset.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowMacros(true)}
+                    className="mt-1 text-[10px] font-semibold text-warning hover:underline tap-scale"
+                  >
+                    Ouvrir lipides &amp; protéines →
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Macros optionnelles (FPU) */}
@@ -1403,11 +1485,29 @@ export default function DiabetePage() {
 
         {/* Résultat hero — éditable */}
         <div className="rounded-2xl bg-diabete/10 border border-diabete/30 p-5">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
             <p className="label" style={{ color: "var(--diabete)" }}>
               {bolusResult.splitDose ? "Maintenant" : "Dose à injecter"}
             </p>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {/* Badge de confiance macros (Phase 11) */}
+              {(() => {
+                const cfg =
+                  macrosConfidence === 'precise'
+                    ? { Icon: ShieldCheck, label: 'Macros précises', cls: 'bg-success/15 text-success border-success/30', title: 'Macros saisies précisément — calcul fiable' }
+                    : macrosConfidence === 'preset'
+                    ? { Icon: Shield, label: 'Preset', cls: 'bg-warning/15 text-warning border-warning/30', title: 'Macros estimées via preset — précision approximative. Override avec tes vrais chiffres Yazio pour fiabilité maximale.' }
+                    : { Icon: ShieldAlert, label: 'Sans macros', cls: 'bg-text-tertiary/15 text-text-tertiary border-text-tertiary/30', title: 'Pas de macros renseignées — bolus calculé sur les glucides uniquement (OK pour repas léger / correction).' };
+                return (
+                  <span
+                    title={cfg.title}
+                    className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold border ${cfg.cls}`}
+                  >
+                    <cfg.Icon className="w-3 h-3" />
+                    {cfg.label}
+                  </span>
+                );
+              })()}
               {bolusResult.digestiveComplexity !== 'simple' && (fatGrams > 0 || proteinGrams > 0) && (
                 <Badge
                   variant={bolusResult.digestiveComplexity === 'complex' ? 'warning' : 'default'}
