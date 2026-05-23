@@ -806,7 +806,27 @@ Démarrage du module **"vrai Strava"** pour le running. Phase A = MVP tracking G
 - **iOS PWA constraints** : background tracking limité côté Safari quand l'écran est verrouillé. Mitigation = Wake Lock qui garde l'écran allumé pendant la séance. Brûle un peu plus de batterie (comme Strava) mais c'est le standard pour PWA tracker.
 - **Build TS** : passe. Validé en preview : bouton CTA rendu sur `/running`, overlay s'ouvre au clic, chrono démarre (0:08 affiché), boutons pause/stop visibles, fallback GPS error correct sur Chromium sans permission.
 
-**Phase B prévue** : intégration carte (MapKit JS ou Leaflet+OSM), trace live, marker position, replay.
+### Phase B — Running tracker : carte Leaflet + trace live (mai 2026)
+Intégration carte sur le tracker GPS. Choix techno : **Leaflet + OpenStreetMap (tiles CartoDB Dark Matter)** — gratuit sans clé API, fonctionne natif iOS Safari/PWA, design dark cohérent avec APEX. Migration vers MapKit JS possible plus tard sans changer l'API du composant.
+
+- **Dépendances ajoutées** : `leaflet@1.9.4`, `react-leaflet@5.0.0`, `@types/leaflet` (devDep).
+- **Composant `RunningMap.tsx`** (`components/running/RunningMap.tsx`) :
+  - 2 modes : `"live"` (auto-pan + marker pulsant sur position courante) et `"replay"` (fit-bounds sur la bounding box, markers début vert / fin rouge).
+  - Polyline sky (`#7FC7FF` = running color) qui se met à jour à chaque nouveau point GPS via `useMemo` sur `points`.
+  - Filtre les points peu fiables (accuracy > 30m) avant de tracer.
+  - Tiles **CartoDB Dark Matter** (gratuit, attribution OSM+CARTO obligatoire mais cachée pour ne pas polluer l'UI). Subdomain `{s}` géré par Leaflet.
+  - Marker pulsant en live = 2 `CircleMarker` superposés (halo r=16 fillOpacity 0.15 + dot r=6 fillOpacity 1).
+  - Throttle auto-pan à 1/sec pour éviter de désorienter l'utilisateur qui zoom manuellement.
+  - `useMap` hook react-leaflet pour les comportements dynamiques (LiveAutoPan, ReplayFitBounds).
+- **Intégration `RunningTracker.tsx`** :
+  - Carte **plein écran en background** (`absolute inset-0`) pendant la séance.
+  - Overlay top en **glass** (header + status GPS + erreurs) avec `backdrop-blur`.
+  - Overlay bottom en glass : 4 stats compactes (Durée / Distance / Allure live / Allure moy.) + boutons Pause/Stop, footer indicator "X pts · ±Ym".
+  - Nouveau composant `OverlayStat` : format vertical compact (label uppercase 9px + valeur num 16-18px).
+  - Au stop → écran de récap avec **carte en mode replay** : trace complète, markers début/fin, fit-bounds auto sur la bounding box. Section dédiée `surface-1` 280px de hauteur avec badge "TRACE GPS" en overlay top-left et légende Départ/Arrivée en bottom-right.
+- **Next.js 16 SSR** : `RunningMap` chargé via `next/dynamic` avec `ssr: false` car Leaflet a besoin du DOM. Loader `Loader2` spin pendant le chargement initial.
+- **Import CSS Leaflet** : `import "leaflet/dist/leaflet.css"` dans `RunningMap.tsx` — Next.js gère l'injection automatique au bundle.
+- **Validé en preview** : carte montée (`mapPresent: true`, 16 tuiles chargées), overlays glass top+bottom détectés à z-10, layout `fixed inset-0 z-50 bg-bg-primary` correct.
 - **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
   - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
   - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"

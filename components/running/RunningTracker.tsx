@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import {
   useRunningTracker,
   type TrackerSummary,
@@ -30,7 +31,18 @@ import {
   X,
   Check,
   Loader2,
+  MapPin,
 } from "lucide-react";
+
+// Leaflet a besoin du DOM → import dynamique sans SSR
+const RunningMap = dynamic(() => import("./RunningMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-full bg-bg-secondary text-text-tertiary">
+      <Loader2 className="w-5 h-5 animate-spin" />
+    </div>
+  ),
+});
 
 interface RunningTrackerProps {
   /** Callback appelé quand l'utilisateur valide la séance. */
@@ -109,6 +121,31 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
                 Tu peux quand même enregistrer ou abandonner.
               </p>
             </div>
+          )}
+
+          {/* Carte avec trace complète (Phase B) */}
+          {summary.points.length >= 2 && (
+            <section className="surface-1 rounded-2xl overflow-hidden mb-4 relative">
+              <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-bg-tertiary/80 backdrop-blur-md rounded-full px-2.5 py-1 border border-border-subtle">
+                <MapPin className="w-3 h-3 text-running" />
+                <span className="text-[10px] uppercase tracking-wide text-text-secondary font-semibold">
+                  Trace GPS
+                </span>
+              </div>
+              <div style={{ height: 280 }}>
+                <RunningMap points={summary.points} mode="replay" />
+              </div>
+              <div className="absolute bottom-3 right-3 z-10 flex flex-col items-end gap-1 text-[9px] text-text-tertiary">
+                <div className="flex items-center gap-1 bg-bg-tertiary/80 backdrop-blur-md rounded-full px-2 py-0.5 border border-border-subtle">
+                  <span className="w-1.5 h-1.5 rounded-full bg-success" />
+                  <span>Départ</span>
+                </div>
+                <div className="flex items-center gap-1 bg-bg-tertiary/80 backdrop-blur-md rounded-full px-2 py-0.5 border border-border-subtle">
+                  <span className="w-1.5 h-1.5 rounded-full bg-error" />
+                  <span>Arrivée</span>
+                </div>
+              </div>
+            </section>
           )}
 
           {/* Stats grid */}
@@ -204,99 +241,117 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
   const isStarting = tracker.status === 'idle';
 
   return (
-    <div className="fixed inset-0 z-50 bg-bg-primary flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 sm:p-6">
-        <div className="flex items-center gap-2">
-          <Footprints className="w-5 h-5 text-running" />
-          <p className="text-sm font-medium text-text-primary">Séance running</p>
-        </div>
-        <button
-          type="button"
-          onClick={handleDiscard}
-          aria-label="Quitter le tracker"
-          className="w-9 h-9 rounded-full bg-bg-tertiary border border-border-subtle flex items-center justify-center text-text-secondary hover:text-error transition-colors tap-scale"
-        >
-          <X className="w-4 h-4" />
-        </button>
+    <div className="fixed inset-0 z-50 bg-bg-primary">
+      {/* Carte plein écran en background */}
+      <div className="absolute inset-0">
+        <RunningMap points={tracker.points} mode="live" />
       </div>
 
-      {/* GPS status */}
-      {tracker.gpsError && (
-        <div className="mx-4 sm:mx-6 mb-4 rounded-xl bg-error/10 border border-error/30 px-3 py-2 flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 text-error shrink-0 mt-0.5" />
-          <p className="text-xs text-error leading-snug">{tracker.gpsError}</p>
+      {/* Overlay top : header glass */}
+      <div className="absolute top-0 inset-x-0 z-10 glass border-b border-border-subtle">
+        <div className="flex items-center justify-between p-3 sm:p-4">
+          <div className="flex items-center gap-2">
+            <Footprints className="w-5 h-5 text-running" />
+            <p className="text-sm font-medium text-text-primary">Séance running</p>
+            {isPaused && (
+              <span className="ml-1 text-[10px] text-warning uppercase tracking-wide font-semibold animate-pulse">
+                · En pause
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={handleDiscard}
+            aria-label="Quitter le tracker"
+            className="w-9 h-9 rounded-full bg-bg-tertiary/80 border border-border-subtle flex items-center justify-center text-text-secondary hover:text-error transition-colors tap-scale"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
-      )}
 
-      {/* Stats hero — durée géante au centre */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6">
-        <p className="label mb-2">Durée</p>
-        <p className="num-hero text-6xl sm:text-7xl font-semibold text-running tabular-nums leading-none">
-          {formatDuration(tracker.durationSec)}
-        </p>
-        {isPaused && (
-          <p className="text-xs text-warning mt-3 uppercase tracking-wide font-semibold animate-pulse">
-            En pause
-          </p>
-        )}
-        {isStarting && (
-          <div className="flex items-center gap-2 mt-3 text-xs text-text-secondary">
-            <Loader2 className="w-3 h-3 animate-spin" />
-            Acquisition GPS…
+        {/* GPS status banner */}
+        {tracker.gpsError && (
+          <div className="mx-3 mb-3 rounded-xl bg-error/15 border border-error/30 px-3 py-2 flex items-start gap-2 backdrop-blur-md">
+            <AlertTriangle className="w-4 h-4 text-error shrink-0 mt-0.5" />
+            <p className="text-xs text-error leading-snug">{tracker.gpsError}</p>
           </div>
         )}
+        {isStarting && !tracker.gpsError && (
+          <div className="mx-3 mb-3 rounded-xl bg-bg-tertiary/80 border border-border-subtle px-3 py-2 flex items-center gap-2 backdrop-blur-md">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-running" />
+            <p className="text-xs text-text-secondary">Acquisition GPS en cours…</p>
+          </div>
+        )}
+      </div>
 
-        {/* Stats secondaires */}
-        <div className="grid grid-cols-3 gap-4 mt-12 w-full max-w-md">
-          <HeroStat label="Distance" value={formatDistance(tracker.distanceMeters)} />
-          <HeroStat label="Allure" value={formatPace(tracker.paceLive)} unit="/km" />
-          <HeroStat label="Allure moy." value={formatPace(tracker.paceAvg)} unit="/km" />
+      {/* Overlay bottom : stats + boutons en glass */}
+      <div className="absolute bottom-0 inset-x-0 z-10 glass border-t border-border-subtle">
+        {/* Stats compactes — 4 colonnes */}
+        <div className="grid grid-cols-4 gap-2 px-3 py-3 sm:px-4">
+          <OverlayStat label="Durée" value={formatDuration(tracker.durationSec)} />
+          <OverlayStat label="Distance" value={formatDistance(tracker.distanceMeters)} />
+          <OverlayStat label="Allure" value={formatPace(tracker.paceLive)} unit="/km" />
+          <OverlayStat label="Moy." value={formatPace(tracker.paceAvg)} unit="/km" />
         </div>
 
+        {/* Boutons */}
+        <div className="px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-center gap-4">
+          {!isPaused ? (
+            <button
+              type="button"
+              onClick={tracker.pause}
+              disabled={isStarting}
+              className="w-14 h-14 rounded-full bg-bg-tertiary/90 border border-border-default flex items-center justify-center text-text-primary hover:bg-bg-hover transition-colors tap-scale disabled:opacity-40 backdrop-blur-md"
+              aria-label="Pause"
+            >
+              <Pause className="w-5 h-5" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={tracker.resume}
+              className="w-14 h-14 rounded-full bg-running/30 border border-running/50 flex items-center justify-center text-running hover:bg-running/40 transition-colors tap-scale backdrop-blur-md"
+              aria-label="Reprendre"
+            >
+              <Play className="w-5 h-5 ml-0.5" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleStop}
+            disabled={isStarting}
+            className="w-18 h-18 rounded-full bg-running text-ink flex items-center justify-center font-bold transition-all tap-scale disabled:opacity-40 hover:bg-running/90 shadow-xl shadow-running/30"
+            style={{ width: '4.5rem', height: '4.5rem' }}
+            aria-label="Arrêter et enregistrer"
+          >
+            <Square className="w-6 h-6" fill="currentColor" />
+          </button>
+        </div>
+
+        {/* Indicator GPS points (très discret) */}
         {tracker.points.length > 0 && (
-          <p className="num text-[10px] text-text-tertiary mt-6">
-            {tracker.points.length} points GPS · précision ~{Math.round(tracker.points.at(-1)?.accuracy ?? 0)}m
+          <p className="num text-[9px] text-text-tertiary text-center pb-2 px-4 leading-none">
+            {tracker.points.length} pts · ±{Math.round(tracker.points.at(-1)?.accuracy ?? 0)}m
           </p>
         )}
       </div>
+    </div>
+  );
+}
 
-      {/* Boutons de contrôle */}
-      <div className="p-4 sm:p-6 flex items-center justify-center gap-4">
-        {!isPaused ? (
-          <button
-            type="button"
-            onClick={tracker.pause}
-            disabled={isStarting}
-            className="w-16 h-16 rounded-full bg-bg-tertiary border border-border-default flex items-center justify-center text-text-primary hover:bg-bg-hover transition-colors tap-scale disabled:opacity-40"
-            aria-label="Pause"
-          >
-            <Pause className="w-6 h-6" />
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={tracker.resume}
-            className="w-16 h-16 rounded-full bg-running/20 border border-running/40 flex items-center justify-center text-running hover:bg-running/30 transition-colors tap-scale"
-            aria-label="Reprendre"
-          >
-            <Play className="w-6 h-6 ml-0.5" />
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={handleStop}
-          disabled={isStarting}
-          className="w-20 h-20 rounded-full bg-running text-ink flex items-center justify-center font-bold transition-all tap-scale disabled:opacity-40 hover:bg-running/90 shadow-lg shadow-running/20"
-          aria-label="Arrêter et enregistrer"
-        >
-          <Square className="w-7 h-7" fill="currentColor" />
-        </button>
-      </div>
-
-      {/* Footer hint */}
-      <p className="text-center text-[10px] text-text-tertiary pb-4 px-4">
-        Garde APEX ouvert pendant la séance. L&apos;écran reste allumé automatiquement.
+/**
+ * Stat compacte pour l'overlay glass de l'écran de tracking.
+ * Format vertical : label en haut, valeur en gros num en bas.
+ */
+function OverlayStat({ label, value, unit }: { label: string; value: string; unit?: string }) {
+  return (
+    <div className="text-center min-w-0">
+      <p className="text-[9px] uppercase tracking-wide text-text-tertiary font-semibold mb-0.5 truncate">
+        {label}
+      </p>
+      <p className="num text-base sm:text-lg font-semibold text-text-primary tabular-nums leading-none truncate">
+        {value}
+        {unit && <span className="text-[9px] text-text-tertiary ml-0.5">{unit}</span>}
       </p>
     </div>
   );
