@@ -431,7 +431,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
             <p className="text-sm font-medium text-text-primary">Séance running</p>
             {isPaused && (
               <span className="ml-1 text-[10px] text-warning uppercase tracking-wide font-semibold animate-pulse">
-                · En pause
+                · {tracker.autoPaused ? "Pause auto (arrêt détecté)" : "En pause"}
               </span>
             )}
           </div>

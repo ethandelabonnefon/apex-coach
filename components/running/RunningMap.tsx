@@ -36,6 +36,10 @@ interface RunningMapProps {
   /** Phase C — si fourni + assez de checkpoints, segmente la polyline en
    *  couleurs selon la glycémie (vert / orange / rouge). */
   glucoseCheckpoints?: SessionGlucoseCheckpoint[];
+  /** Phase D — index du point GPS à mettre en évidence (replay scrubbable).
+   *  Affiche un marker spécial sur le point sélectionné. Si -1 ou hors
+   *  bornes, pas de marker scrub. */
+  scrubIndex?: number;
 }
 
 /** Tone glycémie → couleur de trace. */
@@ -52,7 +56,13 @@ export default function RunningMap({
   height = "100%",
   strokeColor = "#7FC7FF",
   glucoseCheckpoints,
+  scrubIndex,
 }: RunningMapProps) {
+  // Point scrub mis en évidence (Phase D)
+  const scrubPoint =
+    scrubIndex !== undefined && scrubIndex >= 0 && scrubIndex < points.length
+      ? points[scrubIndex]
+      : null;
   // Points filtrés (accuracy <= 30m) — utilisés par la polyline et les markers
   const filteredPoints = useMemo(
     () => points.filter((p) => p.accuracy <= 30),
@@ -210,6 +220,22 @@ export default function RunningMap({
             radius={6}
             pathOptions={{ color: "#FFFFFF", fillColor: "#FF6B6B", fillOpacity: 1, weight: 2 }}
           />
+        )}
+
+        {/* Phase D — marker scrub (replay) */}
+        {scrubPoint && (
+          <>
+            <CircleMarker
+              center={[scrubPoint.lat, scrubPoint.lon]}
+              radius={14}
+              pathOptions={{ color: "#B4A7FF", fillColor: "#B4A7FF", fillOpacity: 0.25, weight: 0 }}
+            />
+            <CircleMarker
+              center={[scrubPoint.lat, scrubPoint.lon]}
+              radius={7}
+              pathOptions={{ color: "#FFFFFF", fillColor: "#B4A7FF", fillOpacity: 1, weight: 2.5 }}
+            />
+          </>
         )}
 
         {/* Comportements dynamiques (pan / fit-bounds) */}

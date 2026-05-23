@@ -46,6 +46,8 @@ export type TrackerStatus = "idle" | "tracking" | "paused" | "finished";
 
 export interface TrackerState {
   status: TrackerStatus;
+  /** True quand la pause a été déclenchée automatiquement (immobilité). */
+  autoPaused: boolean;
   /** Points GPS bruts capturés (incluant pauses). */
   points: GpsPoint[];
   /** Distance cumulée en mètres (recalculée à chaque tick). */
@@ -109,6 +111,15 @@ export function useRunningTracker(): UseRunningTrackerReturn {
   const [glucoseCheckpoints, setGlucoseCheckpoints] = useState<SessionGlucoseCheckpoint[]>([]);
   const [liveGlucose, setLiveGlucose] = useState<number | null>(null);
   const [liveGlucoseTrend, setLiveGlucoseTrend] = useState<number | undefined>(undefined);
+
+  // Phase D — auto-pause si l'utilisateur s'arrête (allure très basse)
+  const [autoPaused, setAutoPaused] = useState(false);
+  // Refs pour la détection : timestamp du début de l'immobilité actuelle
+  const stillSinceRef = useRef<number | null>(null);
+  const movingSinceRef = useRef<number | null>(null);
+  // Ref miroir de autoPaused pour usage dans les callbacks (évite stale state)
+  const autoPauseFlagRef = useRef(false);
+  useEffect(() => { autoPauseFlagRef.current = autoPaused; }, [autoPaused]);
 
   // refs pour les ressources qui ne déclenchent pas de re-render
   const watchIdRef = useRef<number | null>(null);
@@ -278,20 +289,85 @@ export function useRunningTracker(): UseRunningTrackerReturn {
     // Phase C — checkpoint glycémie T+0 (initial)
     fetchAndStoreGlucose("T+0");
 
-    // Tick chrono toutes les 1s + check km franchis
+    // Tick chrono toutes les 1s + check km franchis + auto-pause/resume
     if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
     tickIntervalRef.current = setInterval(() => {
-      if (statusRef.current !== "tracking") return;
+      if (statusRef.current === "idle" || statusRef.current === "finished") return;
       const start = startMsRef.current;
       if (start === null) return;
-      const elapsed = (Date.now() - start) / 1000 - pausedAccumSecRef.current;
-      setDurationSec(Math.max(0, Math.floor(elapsed)));
-      // Phase C — vérifie si un nouveau km a été franchi → checkpoint
-      const distM = totalDistance(pointsRef.current);
-      const kmFranchi = Math.floor(distM / 1000);
-      if (kmFranchi > lastKmCheckpointRef.current) {
-        lastKmCheckpointRef.current = kmFranchi;
-        fetchAndStoreGlucose(`Km ${kmFranchi}`);
+
+      // Pendant une pause auto, on traite quand même la reprise auto
+      // si le mouvement reprend → donc on n'early-return pas ici.
+      if (statusRef.current === "tracking") {
+        const elapsed = (Date.now() - start) / 1000 - pausedAccumSecRef.current;
+        setDurationSec(Math.max(0, Math.floor(elapsed)));
+
+        // Phase C — vérifie si un nouveau km a été franchi → checkpoint
+        const distM = totalDistance(pointsRef.current);
+        const kmFranchi = Math.floor(distM / 1000);
+        if (kmFranchi > lastKmCheckpointRef.current) {
+          lastKmCheckpointRef.current = kmFranchi;
+          fetchAndStoreGlucose(`Km ${kmFranchi}`);
+        }
+      }
+
+      // ─── Phase D — Auto-pause / auto-resume ──────────────
+      // Allure instantanée sur les 5 derniers points. Si < 0.5 m/s
+      // (~ 8min/km, donc à l'arrêt ou très lent) pendant 10s → pause auto.
+      // Si > 1 m/s (3.6 km/h) pendant 3s → reprise auto.
+      const recentPoints = pointsRef.current.slice(-5);
+      const now = Date.now();
+      // Calcul de la vitesse moyenne sur les 5 derniers pts
+      let speedMs: number | null = null;
+      if (recentPoints.length >= 2) {
+        const first = recentPoints[0];
+        const last = recentPoints[recentPoints.length - 1];
+        const dt = (last.t - first.t) / 1000;
+        if (dt > 0) {
+          let d = 0;
+          for (let i = 1; i < recentPoints.length; i++) {
+            const prev = recentPoints[i - 1];
+            const cur = recentPoints[i];
+            d += Math.sqrt(
+              Math.pow((cur.lat - prev.lat) * 111_000, 2) +
+              Math.pow((cur.lon - prev.lon) * 111_000 * Math.cos((cur.lat * Math.PI) / 180), 2),
+            );
+          }
+          speedMs = d / dt;
+        }
+      }
+
+      if (statusRef.current === "tracking" && speedMs !== null) {
+        if (speedMs < 0.5) {
+          // Démarre le timer d'immobilité
+          if (stillSinceRef.current === null) stillSinceRef.current = now;
+          // 10s d'immobilité → auto-pause
+          if (now - stillSinceRef.current >= 10_000) {
+            stillSinceRef.current = null;
+            movingSinceRef.current = null;
+            pauseStartMsRef.current = now;
+            setStatus("paused");
+            setAutoPaused(true);
+          }
+        } else {
+          stillSinceRef.current = null;
+        }
+      } else if (statusRef.current === "paused" && autoPauseFlagRef.current && speedMs !== null) {
+        // Auto-resume si le mouvement reprend (>1 m/s pendant 3s)
+        if (speedMs > 1) {
+          if (movingSinceRef.current === null) movingSinceRef.current = now;
+          if (now - movingSinceRef.current >= 3_000) {
+            movingSinceRef.current = null;
+            if (pauseStartMsRef.current !== null) {
+              pausedAccumSecRef.current += (now - pauseStartMsRef.current) / 1000;
+              pauseStartMsRef.current = null;
+            }
+            setStatus("tracking");
+            setAutoPaused(false);
+          }
+        } else {
+          movingSinceRef.current = null;
+        }
       }
     }, 1000);
 
@@ -312,7 +388,10 @@ export function useRunningTracker(): UseRunningTrackerReturn {
   const pause = useCallback(() => {
     if (statusRef.current !== "tracking") return;
     pauseStartMsRef.current = Date.now();
+    stillSinceRef.current = null;
+    movingSinceRef.current = null;
     setStatus("paused");
+    setAutoPaused(false); // pause manuelle override auto-paused
   }, []);
 
   const resume = useCallback(() => {
@@ -321,7 +400,10 @@ export function useRunningTracker(): UseRunningTrackerReturn {
       pausedAccumSecRef.current += (Date.now() - pauseStartMsRef.current) / 1000;
       pauseStartMsRef.current = null;
     }
+    stillSinceRef.current = null;
+    movingSinceRef.current = null;
     setStatus("tracking");
+    setAutoPaused(false);
   }, []);
 
   const stop = useCallback((): TrackerSummary => {
@@ -392,11 +474,14 @@ export function useRunningTracker(): UseRunningTrackerReturn {
     setGlucoseCheckpoints([]);
     setLiveGlucose(null);
     setLiveGlucoseTrend(undefined);
+    setAutoPaused(false);
     startMsRef.current = null;
     pausedAccumSecRef.current = 0;
     pauseStartMsRef.current = null;
     lastHypoAlertRef.current = 0;
     lastKmCheckpointRef.current = 0;
+    stillSinceRef.current = null;
+    movingSinceRef.current = null;
   }, [releaseWakeLock]);
 
   // Cleanup au unmount (sécurité si l'utilisateur quitte la page sans stop)
@@ -424,6 +509,7 @@ export function useRunningTracker(): UseRunningTrackerReturn {
 
   return {
     status,
+    autoPaused,
     points,
     distanceMeters,
     durationSec,

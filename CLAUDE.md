@@ -865,6 +865,42 @@ Killer feature T1D vs Strava : la séance running est **automatiquement enrichie
   - `enrichSession` : priorité aux checkpoints réels (tolérance ±5min) avant fallback archive (±18min). Convertit les checkpoints réels en `ArchivedPoint[]` pour réutiliser `findClosestPoint`.
   - Mapping `/diabete/historique` + `/diabete` met à jour le mapper pour passer `r.glucoseCheckpoints` à `SportSession`.
 - **Validé en preview** : 5 stats overlay rendues incluant "Glycémie", build TS clean, tracker s'ouvre correctement après hard reload.
+
+### Phase D — Page détail séance + replay scrubbable + auto-pause (mai 2026)
+Finalisation du module running tracker : navigation vers les séances passées, replay scrubbable sur la trace, détection auto d'arrêt pendant la séance.
+
+- **Page `/running/seance/[id]`** (`app/running/seance/[id]/page.tsx`) :
+  - Next.js 16 dynamic route avec `params: Promise<{ id: string }>` + `use(params)` côté client
+  - Lecture session depuis le store Zustand (`completedRunningSessions.find(r => r.id === id)`)
+  - Fallback gracieux "Séance introuvable" avec lien retour si l'ID n'existe pas
+  - Header : retour vers `/running` + bouton suppression (avec confirm)
+  - Titre : date complète FR + label "Séance libre" ou "Semaine X" + ressenti emoji
+  - 4-5 stats hero : Durée / Distance / Allure moy / Splits / (Dénivelé+ si dispo)
+  - **Carte plein écran** avec polyline colorée par glycémie + scrub marker
+  - **Replay scrubbable** : slider HTML5 `<input type="range">` + boutons Play/Pause + Reset
+  - Play auto : `useEffect` avec `setInterval` calibré pour replay complet ~15s peu importe la longueur (intervalMs = 15000/length, clamp 20-200ms)
+  - Stats live au point scrub : durée, distance, allure, altitude — calculées via `totalDistance(slice)` + delta temps
+  - 2 graphes (altitude + glycémie) Recharts comme dans le récap
+  - Splits par km détaillés
+  - Notes en bas
+- **`RunningMap` étendu** avec prop `scrubIndex?: number` (Phase D) :
+  - Si scrubIndex valide → affiche 2 CircleMarker lavender (halo r=14 fillOpacity 0.25 + dot r=7 fillOpacity 1) sur le point GPS sélectionné
+  - Compatible avec mode "replay" : le scrub marker apparaît en plus des markers début/fin classiques
+- **Auto-pause dans `useRunningTracker`** :
+  - Nouveau state `autoPaused: boolean` + ref miroir `autoPauseFlagRef` (évite stale state dans callbacks)
+  - Refs `stillSinceRef` / `movingSinceRef` pour timer immobilité/mouvement
+  - **Détection arrêt** : vitesse instantanée (Haversine simplifié sur les 5 derniers points) < 0.5 m/s pendant 10s consécutives → auto-pause
+  - **Auto-resume** : vitesse > 1 m/s pendant 3s consécutives → reprise
+  - Pause manuelle override l'auto-pause (flag remis à false)
+  - Reset cleanup des refs au start/reset
+  - UI : header overlay affiche "En pause" si manuelle, "Pause auto (arrêt détecté)" si auto
+- **Section "Séances libres GPS" sur `/running`** :
+  - Filtre `sessionIndex === -1` (marqueur séances libres GPS, distincts des séances du plan)
+  - Affiche les 8 plus récentes triées par date desc
+  - Card cliquable (Link) vers `/running/seance/[id]`
+  - Stats compactes : date · distance · durée · allure · dénivelé · badge "N glycémies" si checkpoints
+  - Icône ArrowRight qui se décale au hover
+- **Build TS** : passe. Validé en preview avec fake session injectée : page détail rend correctement avec carte polyline colorée vert→orange→rouge (5 checkpoints simulés 130→115→95→78→88), slider scrub fonctionnel, stats live au point sélectionné ("À 17:00 · 1,65 km · 10:19/km · alt 39m"), section "Séances libres GPS" affichée sur `/running`.
 - **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
   - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
   - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"

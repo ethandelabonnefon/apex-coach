@@ -870,6 +870,75 @@ export default function RunningPage() {
         </div>
       </section>
 
+      {/* ============ Séances libres GPS (Phase D) ============ */}
+      {(() => {
+        const freeSessions = completedRunningSessions
+          .filter((s) => s.sessionIndex === -1)
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          .slice(0, 8);
+        if (freeSessions.length === 0) return null;
+        return (
+          <section className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-running" />
+                Séances libres GPS
+              </h2>
+              <span className="num text-xs text-text-tertiary">
+                {freeSessions.length} récente{freeSessions.length > 1 ? "s" : ""}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {freeSessions.map((s) => (
+                <Link
+                  key={s.id}
+                  href={`/running/seance/${s.id}`}
+                  className="block surface-1 hover:bg-bg-hover rounded-2xl p-4 transition-colors tap-scale group"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="num text-[10px] text-text-tertiary uppercase tracking-wide mb-1">
+                        {new Date(s.date).toLocaleDateString("fr-FR", {
+                          weekday: "short",
+                          day: "2-digit",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                      <div className="flex items-baseline gap-3 flex-wrap">
+                        <span className="num text-lg font-semibold text-running">
+                          {s.actualDistance.toFixed(2).replace(".", ",")} km
+                        </span>
+                        <span className="num text-sm text-text-secondary">
+                          {Math.floor(s.actualDuration)}min
+                        </span>
+                        {s.avgPace > 0 && (
+                          <span className="num text-xs text-text-tertiary">
+                            {Math.floor(s.avgPace)}:{String(Math.round((s.avgPace - Math.floor(s.avgPace)) * 60)).padStart(2, "0")}/km
+                          </span>
+                        )}
+                        {(s.elevationGainM ?? 0) > 0 && (
+                          <span className="num text-xs text-text-tertiary">
+                            +{s.elevationGainM}m
+                          </span>
+                        )}
+                        {s.glucoseCheckpoints && s.glucoseCheckpoints.length > 0 && (
+                          <Badge variant="default" size="sm" dot>
+                            {s.glucoseCheckpoints.length} glycémies
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-text-tertiary group-hover:text-running group-hover:translate-x-0.5 transition-all shrink-0" />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        );
+      })()}
+
       {/* ============ Stats trio ============ */}
       <section className="mb-8 grid grid-cols-2 lg:grid-cols-3 gap-3">
         <div className="surface-1 p-4">
