@@ -770,6 +770,43 @@ const fpuBolusLater = useSplit ? fpuBolus : 0;
 | 🍕 Pizza 80g/30/25 (split) | 3.7 | 8U + 4U | **8U + 4U dans 2h** ✅ (inchangé) |
 
 Le bolus initial ne contient désormais que **glucides + correction + trend**. Le FPU n'apparaît que via la **2e injection différée** (split dose) ou simplement comme **information de surveillance** (reasoning) pour les repas border-line.
+
+### Phase A — Running tracker GPS live (mai 2026)
+Démarrage du module **"vrai Strava"** pour le running. Phase A = MVP tracking GPS sans carte (carte = Phase B prévue ensuite). Killer feature unique vs Strava : intégration native avec la glycémie live FreeStyle Libre + corrélation sport-glucose déjà existante.
+
+- **Pure functions** (`lib/running-tracker.ts`) :
+  - `haversineDistance(lat1, lon1, lat2, lon2)` : distance en mètres entre 2 points GPS (formule Haversine, précis ±0.5% < 100km)
+  - `totalDistance(points[])` : distance cumulée avec filtrage du bruit (accuracy > 30m ignoré, segments < 3m ignorés)
+  - `calculatePace(distMeters, durSec)` : retourne min/km, null si trop court
+  - `instantPace(points, windowSize=5)` : allure instantanée sur fenêtre glissante (plus stable que pure instant)
+  - `computeKmSplits(points)` : splits par km avec durée et allure
+  - Helpers de formatage : `formatPace("5:23")`, `formatDuration("1:23:45")`, `formatDistance("12,34 km")`
+- **Hook React** (`hooks/useRunningTracker.ts`) :
+  - State : `status: 'idle' | 'tracking' | 'paused' | 'finished'`, `points: GpsPoint[]`, `distanceMeters`, `durationSec`, `paceLive`, `paceAvg`, `splits`
+  - Actions : `start()`, `pause()`, `resume()`, `stop()`, `reset()`
+  - Tracking via `navigator.geolocation.watchPosition` avec `enableHighAccuracy: true`, `maximumAge: 0`, `timeout: 15s`
+  - **Wake Lock API** : `navigator.wakeLock.request('screen')` au start, release au stop. Re-acquire automatique au retour de visibilité (iOS peut release en background)
+  - Tick chrono 1s avec gestion pause (accumulateur `pausedAccumSec`)
+  - Gestion des erreurs GPS : permission refusée, timeout signal, etc. → message FR dans `gpsError`
+  - Cleanup au unmount (sécurité si l'user quitte la page sans stop)
+- **Composant UI** (`components/running/RunningTracker.tsx`) :
+  - Écran plein écran (z-50, `fixed inset-0`) au démarrage de la séance
+  - Hero "Durée" en `num-hero text-7xl` sky avec chrono live
+  - 3 stats secondaires : Distance, Allure live, Allure moyenne
+  - Boutons : Pause/Resume (toggle) + Stop (cercle sky avec icône Square)
+  - Banner erreur GPS si `gpsError` (rouge avec instructions)
+  - Footer hint "Garde APEX ouvert pendant la séance. L'écran reste allumé."
+  - **Écran de récap au stop** : 4 stats hero (durée/distance/allure/splits), liste détaillée des splits par km, sélecteur ressenti 5 niveaux (great/good/ok/hard/bad), notes optionnelles, boutons "Abandonner" / "Enregistrer la séance"
+- **Intégration `/running`** :
+  - Bouton CTA hero "Démarrer une séance GPS" en haut de page (avant le status banner)
+  - Surface-1 avec bordure running/25, glow-accent-2, icône MapPin sky
+  - Au clic → overlay tracker plein écran
+  - À l'enregistrement → ajout dans `completedRunningSessions` du store avec `sessionIndex: -1` (marqueur "séance libre GPS" filtrable)
+  - Notes auto-générées : "GPS X points" si pas de notes user
+- **iOS PWA constraints** : background tracking limité côté Safari quand l'écran est verrouillé. Mitigation = Wake Lock qui garde l'écran allumé pendant la séance. Brûle un peu plus de batterie (comme Strava) mais c'est le standard pour PWA tracker.
+- **Build TS** : passe. Validé en preview : bouton CTA rendu sur `/running`, overlay s'ouvre au clic, chrono démarre (0:08 affiché), boutons pause/stop visibles, fallback GPS error correct sur Chromium sans permission.
+
+**Phase B prévue** : intégration carte (MapKit JS ou Leaflet+OSM), trace live, marker position, replay.
 - **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
   - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
   - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"

@@ -17,6 +17,8 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Ring } from "@/components/ui/Ring";
 import { Sparkline } from "@/components/ui/Sparkline";
+import RunningTracker from "@/components/running/RunningTracker";
+import type { TrackerSummary } from "@/hooks/useRunningTracker";
 import {
   Footprints,
   ChevronLeft,
@@ -36,6 +38,7 @@ import {
   X,
   ArrowRight,
   FlaskConical,
+  MapPin,
 } from "lucide-react";
 
 const BASE_VOLUME = 20;
@@ -311,6 +314,40 @@ export default function RunningPage() {
 
   const [trackingSession, setTrackingSession] = useState<number | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
+  // Phase A — GPS tracker (séance libre, sans plan)
+  const [gpsTrackerOpen, setGpsTrackerOpen] = useState(false);
+
+  /**
+   * Sauvegarde une séance GPS libre dans completedRunningSessions.
+   * weekNumber/sessionIndex peuvent paraître "fake" (0/−1) mais on les
+   * utilise comme marqueur "séance hors plan" — facilement filtrable
+   * dans l'historique si besoin.
+   */
+  function handleSaveGpsSession(
+    summary: TrackerSummary,
+    feeling: 'great' | 'good' | 'ok' | 'hard' | 'bad',
+    notes: string,
+  ) {
+    const distanceKm = +(summary.distanceMeters / 1000).toFixed(2);
+    const durationMin = +(summary.durationSec / 60).toFixed(1);
+    addCompletedRunningSession({
+      id: crypto.randomUUID(),
+      weekNumber: currentRunningWeek,
+      sessionIndex: -1, // -1 = séance libre GPS
+      date: summary.startedAt,
+      plannedDistance: 0,
+      actualDistance: distanceKm,
+      actualDuration: durationMin,
+      avgPace: summary.paceAvg ?? 0,
+      glucoseBefore: null,
+      glucoseAfter: null,
+      feeling,
+      notes: notes
+        ? `${notes} · GPS ${summary.points.length} pts`
+        : `Séance libre GPS · ${summary.points.length} points`,
+    });
+    setGpsTrackerOpen(false);
+  }
 
   // ─── 1. VMA dynamique depuis le diagnostic ─────────────────────
   const vmaInfo = useMemo(
@@ -384,6 +421,36 @@ export default function RunningPage() {
 
   return (
     <div className="max-w-[960px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
+      {/* ============ TRACKER GPS OVERLAY ============ */}
+      {gpsTrackerOpen && (
+        <RunningTracker
+          onSave={handleSaveGpsSession}
+          onClose={() => setGpsTrackerOpen(false)}
+        />
+      )}
+
+      {/* ============ CTA "DÉMARRER UNE SÉANCE LIBRE" ============ */}
+      <section className="mb-5">
+        <button
+          type="button"
+          onClick={() => setGpsTrackerOpen(true)}
+          className="w-full surface-1 hover:bg-bg-hover rounded-2xl px-4 sm:px-5 py-4 sm:py-5 flex items-center gap-4 transition-colors tap-scale border border-running/25 hover:border-running/50 group glow-accent-2"
+        >
+          <div className="shrink-0 w-12 h-12 rounded-xl bg-running/15 flex items-center justify-center group-hover:bg-running/25 transition-colors">
+            <MapPin className="w-5 h-5 text-running" />
+          </div>
+          <div className="flex-1 min-w-0 text-left">
+            <p className="text-sm sm:text-base font-semibold text-text-primary">
+              Démarrer une séance GPS
+            </p>
+            <p className="text-[11px] sm:text-xs text-text-tertiary mt-0.5 leading-snug">
+              Tracking en direct : durée, distance, allure live. L&apos;écran reste allumé.
+            </p>
+          </div>
+          <Play className="w-4 h-4 text-running shrink-0 group-hover:translate-x-0.5 transition-transform" />
+        </button>
+      </section>
+
       {/* ============ STATUS BANNER ============ */}
       <section className="mb-5 animate-in">
         {hasAIPlan ? (
