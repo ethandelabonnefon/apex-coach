@@ -732,6 +732,44 @@ Discussion produit Ethan : "Quelle est la meilleure façon de procéder ? Je cli
   - ⚫ **Sans macros** (text-tertiary, ShieldAlert) : aucune macro renseignée → tooltip "OK pour repas léger / correction"
 - État `macrosConfidence: 'precise' | 'preset' | 'none'` calculé via `useMemo` à partir de `fatGrams`, `proteinGrams`, `macrosManuallyEdited`, `mealTag`.
 - **Workflow optimal documenté** (réponse Ethan) : Pâtes/Pizza/Viande+accomp. → toujours macros précises depuis Yazio. Salade/Snack/Petit-déj → presets OK (split dose ne se déclenche pas de toute façon). Repas standard répété → ajuster manuellement à partir du preset.
+
+### Phase 11 — FPU jamais intégré au bolus initial (mai 2026, fix critique)
+Retour terrain Ethan #2 : "74g glucides + 23g lip + 29g prot → l'app dit 11U au lieu de 7-8U attendus. Je sais pertinemment que ça va me faire faire une hypo."
+
+**Diagnostic** : la logique précédente intégrait `fpuBolus` (100% du FPU théorique) dans le bolus initial pour tous les repas non split-worthy. Pour le cas Ethan :
+- Bolus glucides = 7.4U
+- FPU = (23×9 + 29×4) / 100 = 3.23 FPU → fpuBolus = 3.23U
+- Pas de split (fat 23 < 30 ET prot 29 < 40 → seuils NHS non atteints)
+- Mais fpuBolus intégré au bolus initial → **7.4 + 3.23 = 10.6U → 11U** → **hypo systématique**
+
+**Logique correcte** (NHS conservative MDI) :
+- **useSplit = TRUE** → bolus initial = glucides+correction uniquement (pas de FPU), FPU 100% différé en 2e injection
+- **useSplit = FALSE** → bolus initial = glucides+correction uniquement, **PAS de FPU du tout** (le bolus glucides seul suffit pour les repas non split-worthy)
+
+**Fix** (`lib/insulin-calculator.ts`) :
+```typescript
+// AVANT (FPU intégré si pas split → hypo)
+const fpuBolusNow = useSplit ? 0 : fpuBolus;
+
+// APRÈS (FPU jamais dans bolus initial)
+const fpuBolusNow = 0;
+const fpuBolusLater = useSplit ? fpuBolus : 0;
+```
+
+**Reasoning enrichi** : 3 cas explicites désormais documentés pour transparence :
+- **Glucides rapides + FPU élevé** : "Pas de split dose : tu manges des glucides rapides. Le bolus initial couvre les glucides."
+- **FPU notable (1.5-2.5)** : "FPU notable mais en dessous des seuils high-fat/high-protein. Surveille la glycémie à T+3h."
+- **FPU élevé (≥2.5) mais en dessous des seuils absolus** (cas Ethan 74/23/29) : "FPU élevé (3,2) mais ni high-fat (23g < 30g) ni high-protein (29g < 40g). Le bolus couvre les glucides — surveille la glycémie à T+3h."
+
+**Cas validés** :
+| Repas | FPU | Avant | Après |
+|---|---|---|---|
+| 🍽️ **74g + 23 lip + 29 prot (cas Ethan)** | 3.23 | 11U → hypo | **8U** ✅ + message FPU élevé |
+| 🥞 Crêpes Nutella 60g/20/20 | 2.6 | 9U | **6U** ✅ |
+| 🍝 Pâtes Énorme 100g/24/40 (split) | 3.76 | 10U + 4U | **10U + 4U dans 2h** ✅ (inchangé) |
+| 🍕 Pizza 80g/30/25 (split) | 3.7 | 8U + 4U | **8U + 4U dans 2h** ✅ (inchangé) |
+
+Le bolus initial ne contient désormais que **glucides + correction + trend**. Le FPU n'apparaît que via la **2e injection différée** (split dose) ou simplement comme **information de surveillance** (reasoning) pour les repas border-line.
 - **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
   - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
   - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"

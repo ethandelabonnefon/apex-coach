@@ -246,16 +246,21 @@ export function calculateBolus(
   // Quand split actif → 100% des glucides+correction au repas, 100% du FPU
   // différé en 2e injection (modèle Pankowska classique).
   //
-  // ⚠️ FIX mai 2026 : on avait initialement implémenté un split 50/50
-  // (50% FPU initial, 50% différé) basé sur une mauvaise interprétation
-  // de NHS Cambridge. Retour terrain Ethan : pour 100g pâtes énorme +
-  // 24g lip + 40g prot, le 50/50 donnait 12U initial → hypo systématique
-  // à 12h-14h (1-2h post-repas). Le modèle Pankowska classique (100% FPU
-  // différé) donne 10U initial + 4U à T+2h, sans pic insuline excessif.
+  // ⚠️ FIX mai 2026 (itération 2) : le FPU n'est JAMAIS intégré au bolus
+  // initial. Précédemment, pour les repas non split-worthy avec FPU
+  // notable (cas Ethan : 74g + 23 lip + 29 prot = 3.23 FPU mais
+  // fat<30/prot<40), le FPU 100% était ajouté au bolus initial →
+  // 7.4U + 3.23U = 11U → hypo systématique.
   //
-  // Sans split → fpuBolus 100% dans le bolus initial (ou rien si FPU
-  // minime, ce qui est le cas par défaut pour les repas non split-worthy).
-  const fpuBolusNow = useSplit ? 0 : fpuBolus;
+  // Logique correcte (NHS conservative MDI) :
+  //  - useSplit = TRUE  → bolus initial = glucides+correction uniquement,
+  //                       FPU 100% différé en 2e injection
+  //  - useSplit = FALSE → bolus initial = glucides+correction uniquement,
+  //                       PAS de FPU (le bolus glucides seul suffit pour
+  //                       les repas non split-worthy). Si la glycémie
+  //                       monte tardivement, l'utilisateur peut ajuster
+  //                       son ratio ou activer manuellement un split.
+  const fpuBolusNow = 0; // jamais dans le bolus initial
   const fpuBolusLater = useSplit ? fpuBolus : 0;
 
   const rawTotal = Math.max(0, carbBolus + correctionBolus + trendBolus + fpuBolusNow);
@@ -301,7 +306,19 @@ export function calculateBolus(
     // Cas explicite : repas qui SERAIT split-worthy mais glucides rapides
     // → on l'explique pour pédagogie
     reasoning.push(
-      `Pas de split dose : tu manges des glucides rapides (${totalFPU.toFixed(1).replace(".", ",")} FPU mais digestion principale rapide). Le bolus initial couvre tout.`
+      `Pas de split dose : tu manges des glucides rapides (${totalFPU.toFixed(1).replace(".", ",")} FPU mais digestion principale rapide). Le bolus initial couvre les glucides.`
+    );
+  } else if (totalFPU >= 1.5 && totalFPU < 2.5 && carbsGrams >= 40) {
+    // FPU notable mais en dessous des seuils split-worthy → warning info
+    // pour que l'utilisateur surveille la montée tardive
+    reasoning.push(
+      `FPU notable (${totalFPU.toFixed(1).replace(".", ",")} FPU) mais en dessous des seuils high-fat (30g) / high-protein (40g). Le bolus couvre les glucides — surveille la glycémie à T+3h pour détecter une montée tardive éventuelle.`
+    );
+  } else if (totalFPU >= 2.5 && !meetsClinicalHigh && carbsGrams >= 50) {
+    // Cas border-line : FPU élevé en absolu mais ni high-fat ni high-protein
+    // (cas Ethan 74/23/29 = 3.23 FPU mais fat<30 ET prot<40)
+    reasoning.push(
+      `FPU élevé (${totalFPU.toFixed(1).replace(".", ",")} FPU) mais ni high-fat (${fatGrams}g < 30g) ni high-protein (${proteinGrams}g < 40g). Le bolus couvre les glucides — surveille la glycémie à T+3h.`
     );
   }
 
