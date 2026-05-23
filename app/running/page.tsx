@@ -330,6 +330,21 @@ export default function RunningPage() {
   ) {
     const distanceKm = +(summary.distanceMeters / 1000).toFixed(2);
     const durationMin = +(summary.durationSec / 60).toFixed(1);
+    // Phase C — extraire glycémie avant/après depuis checkpoints + élévation
+    const cps = summary.glucoseCheckpoints;
+    const firstCp = cps.find((c) => c.label.startsWith("T+0") && !c.label.includes("final"));
+    const lastCp = cps.find((c) => c.label.includes("final")) ?? cps[cps.length - 1];
+    // Calcul du dénivelé positif depuis les points GPS
+    const elevGain = summary.points.reduce<{ gain: number; lastAlt: number | null }>(
+      (acc, p) => {
+        if (p.altitude === null) return acc;
+        if (acc.lastAlt === null) return { gain: 0, lastAlt: p.altitude };
+        const delta = p.altitude - acc.lastAlt;
+        return { gain: acc.gain + (delta > 1 ? delta : 0), lastAlt: p.altitude };
+      },
+      { gain: 0, lastAlt: null },
+    );
+
     addCompletedRunningSession({
       id: crypto.randomUUID(),
       weekNumber: currentRunningWeek,
@@ -339,12 +354,22 @@ export default function RunningPage() {
       actualDistance: distanceKm,
       actualDuration: durationMin,
       avgPace: summary.paceAvg ?? 0,
-      glucoseBefore: null,
-      glucoseAfter: null,
+      glucoseBefore: firstCp?.value ?? null,
+      glucoseAfter: lastCp?.value ?? null,
       feeling,
       notes: notes
         ? `${notes} · GPS ${summary.points.length} pts`
         : `Séance libre GPS · ${summary.points.length} points`,
+      // Phase C — données enrichies
+      gpsPoints: summary.points.map((p) => ({
+        lat: p.lat,
+        lon: p.lon,
+        altitude: p.altitude,
+        accuracy: p.accuracy,
+        t: p.t,
+      })),
+      glucoseCheckpoints: cps,
+      elevationGainM: Math.round(elevGain.gain),
     });
     setGpsTrackerOpen(false);
   }

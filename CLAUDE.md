@@ -827,6 +827,44 @@ Intégration carte sur le tracker GPS. Choix techno : **Leaflet + OpenStreetMap 
 - **Next.js 16 SSR** : `RunningMap` chargé via `next/dynamic` avec `ssr: false` car Leaflet a besoin du DOM. Loader `Loader2` spin pendant le chargement initial.
 - **Import CSS Leaflet** : `import "leaflet/dist/leaflet.css"` dans `RunningMap.tsx` — Next.js gère l'injection automatique au bundle.
 - **Validé en preview** : carte montée (`mapPresent: true`, 16 tuiles chargées), overlays glass top+bottom détectés à z-10, layout `fixed inset-0 z-50 bg-bg-primary` correct.
+
+### Phase C — Running tracker : auto-tag glycémie + polyline colorée + altitude (mai 2026)
+Killer feature T1D vs Strava : la séance running est **automatiquement enrichie** avec la glycémie live à plusieurs checkpoints, et la polyline est colorée selon la glycémie pour visualiser les zones à risque sur le tracé. Détection hypo proactive avec push notif locale.
+
+- **Types étendus** (`types/index.ts`) :
+  - Nouveau type `SessionGlucoseCheckpoint` : `{ label, offsetSec, value, timestamp, distanceMeters, trend? }`
+  - `CompletedRunningSession` étendu avec optionnels : `gpsPoints?`, `glucoseCheckpoints?`, `elevationGainM?`
+- **Helpers GPS étendus** (`lib/running-tracker.ts`) : `totalElevationGain(points)` (cumul positif avec filtre bruit altimétrique < 1m), `buildElevationProfile(points)` (array `{ distM, alt }` pour graphique).
+- **Hook `useRunningTracker.ts` enrichi** :
+  - Nouveaux state : `glucoseCheckpoints[]`, `liveGlucose`, `liveGlucoseTrend`
+  - Helper `fetchAndStoreGlucose(label)` : fetch `/api/glucose/current`, stocke un checkpoint avec offset/distance/trend
+  - **Auto-tag aux checkpoints** :
+    - `T+0` au démarrage
+    - `Km N` à chaque km franchi (détection via `Math.floor(distM / 1000)` dans le tick chrono)
+    - `T+Nmin` toutes les 5 min (interval dédié)
+    - `T+0 final` au stop
+  - **Alerte hypo** : si `value < 80` et dernière alerte > 10min → push notif locale via service worker (`tag: "running-hypo"`)
+  - Cleanup interval glucose au stop + reset
+- **`RunningMap.tsx` : polyline colorée** :
+  - Si `glucoseCheckpoints` fournis ET >= 2 → segmente la polyline en N sous-polylines colorées selon la glycémie active à chaque point GPS
+  - `findGlucoseAt(ts)` : dernier checkpoint <= ts (interpolation step)
+  - Couleurs : vert (target 80-180), orange (low 70-80 / high 180-250), rouge (hypo <70 / hyper >250)
+  - Continuité visuelle : 1er point du nouveau segment dupliqué dans le précédent (pas de gap)
+  - Fallback : si pas assez de checkpoints → polyline unique sky par défaut
+- **UI tracker enrichie** :
+  - Overlay bottom : passe à **5 colonnes** quand glycémie live dispo, avec une stat dédiée "Glycémie" + flèche trend + couleur tone (success/warning/error selon zone)
+  - Helpers `glucoseTone(value)` et `trendArrowFromNum(num)` inline
+- **UI récap : 2 nouveaux graphes** :
+  - **Profil d'altitude** (Recharts AreaChart, 120px) : courbe sky avec gradient, axe X en km, tooltip "Altitude: Xm" à "Y.Y km". Affiché si ≥ 5 points d'altitude valides.
+  - **Glycémie pendant la séance** (Recharts LineChart, 120px) : courbe lavender avec dots, axe X en minutes, bandes ref 70/180 (target green + lignes rouges/orange en pointillés), tooltip "Glycémie: X mg/dL à Y min". Affiché si ≥ 2 checkpoints.
+  - Layout : grid 2 colonnes (sm:grid-cols-2) → côte à côte sur desktop, empilé sur mobile.
+  - Nouvelle stat "Dénivelé +" dans la grid stats au-dessus si elevGain > 0.
+- **Save enrichi** (`app/running/page.tsx`) : `handleSaveGpsSession` populate maintenant `gpsPoints`, `glucoseCheckpoints`, `elevationGainM`. Et déduit `glucoseBefore` du 1er checkpoint "T+0" non-final + `glucoseAfter` du checkpoint "final".
+- **SportGlucoseCorrelation enrichi** (`lib/sport-glucose-analytics.ts`) :
+  - `SportSession` étendu avec `glucoseCheckpoints?`
+  - `enrichSession` : priorité aux checkpoints réels (tolérance ±5min) avant fallback archive (±18min). Convertit les checkpoints réels en `ArchivedPoint[]` pour réutiliser `findClosestPoint`.
+  - Mapping `/diabete/historique` + `/diabete` met à jour le mapper pour passer `r.glucoseCheckpoints` à `SportSession`.
+- **Validé en preview** : 5 stats overlay rendues incluant "Glycémie", build TS clean, tracker s'ouvre correctement après hard reload.
 - **Phase 3 (dashboard) — Page d'accueil épurée (avril 2026)** : refonte du Dashboard selon la même philosophie que les 4 pages principales :
   - **Hero** : "Bonjour/Bel après-midi/Bonsoir, {Ethan}." (prénom en lime), date lisible en label
   - **1 action du jour** (pas plus) : priorité dynamique → séance muscu du jour si programmée (surface-1, icône muscu, flèche ArrowUpRight) > sinon alerte diabète si glycémie hors plage > sinon carte "Jour de repos"

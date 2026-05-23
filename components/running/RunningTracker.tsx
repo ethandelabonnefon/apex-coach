@@ -11,8 +11,21 @@
  * la séance" qui appelle `onSave` avec le summary complet.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ReferenceArea,
+  ReferenceLine,
+  CartesianGrid,
+} from "recharts";
 import {
   useRunningTracker,
   type TrackerSummary,
@@ -21,6 +34,8 @@ import {
   formatDistance,
   formatDuration,
   formatPace,
+  buildElevationProfile,
+  totalElevationGain,
 } from "@/lib/running-tracker";
 import {
   Footprints,
@@ -32,6 +47,8 @@ import {
   Check,
   Loader2,
   MapPin,
+  Droplet,
+  Mountain,
 } from "lucide-react";
 
 // Leaflet a besoin du DOM → import dynamique sans SSR
@@ -139,7 +156,11 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
                 </span>
               </div>
               <div style={{ height: 280 }}>
-                <RunningMap points={summary.points} mode="replay" />
+                <RunningMap
+                  points={summary.points}
+                  mode="replay"
+                  glucoseCheckpoints={summary.glucoseCheckpoints}
+                />
               </div>
               <div className="absolute bottom-3 right-3 z-[500] flex flex-col items-end gap-1 text-[9px] text-text-tertiary">
                 <div className="flex items-center gap-1 bg-bg-tertiary/80 backdrop-blur-md rounded-full px-2 py-0.5 border border-border-subtle">
@@ -155,12 +176,149 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
           )}
 
           {/* Stats grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-            <SummaryStat label="Durée"          value={formatDuration(summary.durationSec)} />
-            <SummaryStat label="Distance"       value={formatDistance(summary.distanceMeters)} />
-            <SummaryStat label="Allure moyenne" value={formatPace(summary.paceAvg)} unit="/km" />
-            <SummaryStat label="Splits 1km"     value={`${summary.splits.length}`} />
-          </div>
+          {(() => {
+            const elevGain = totalElevationGain(summary.points);
+            const hasElev = elevGain > 0;
+            return (
+              <div className={`grid grid-cols-2 ${hasElev ? "sm:grid-cols-5" : "sm:grid-cols-4"} gap-3 mb-6`}>
+                <SummaryStat label="Durée"          value={formatDuration(summary.durationSec)} />
+                <SummaryStat label="Distance"       value={formatDistance(summary.distanceMeters)} />
+                <SummaryStat label="Allure moyenne" value={formatPace(summary.paceAvg)} unit="/km" />
+                <SummaryStat label="Splits 1km"     value={`${summary.splits.length}`} />
+                {hasElev && <SummaryStat label="Dénivelé +" value={`${elevGain}`} unit="m" />}
+              </div>
+            );
+          })()}
+
+          {/* Graphes : altitude + glycémie pendant la séance */}
+          {(() => {
+            const elevProfile = buildElevationProfile(summary.points);
+            const hasElev = elevProfile.length >= 5;
+            const cps = summary.glucoseCheckpoints;
+            const hasGlucose = cps.length >= 2;
+            if (!hasElev && !hasGlucose) return null;
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                {hasElev && (
+                  <section className="surface-1 rounded-2xl p-4">
+                    <div className="flex items-center gap-1.5 mb-3">
+                      <Mountain className="w-3.5 h-3.5 text-running" />
+                      <p className="label">Profil d&apos;altitude</p>
+                    </div>
+                    <div style={{ width: "100%", height: 120 }}>
+                      <ResponsiveContainer>
+                        <AreaChart data={elevProfile} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="elevGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#7FC7FF" stopOpacity={0.4} />
+                              <stop offset="100%" stopColor="#7FC7FF" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
+                          <XAxis
+                            dataKey="distM"
+                            type="number"
+                            domain={["dataMin", "dataMax"]}
+                            tickFormatter={(v) => `${(Number(v) / 1000).toFixed(1)}`}
+                            tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 9 }}
+                            axisLine={false}
+                            tickLine={false}
+                          />
+                          <YAxis
+                            tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 9 }}
+                            axisLine={false}
+                            tickLine={false}
+                            width={30}
+                          />
+                          <Tooltip
+                            cursor={{ stroke: "rgba(255,255,255,0.2)" }}
+                            contentStyle={{
+                              background: "#1F1F23",
+                              border: "1px solid rgba(255,255,255,0.1)",
+                              borderRadius: "8px",
+                              fontSize: "11px",
+                            }}
+                            labelFormatter={(v) => `${(Number(v) / 1000).toFixed(2)} km`}
+                            formatter={(v) => [`${Math.round(Number(v))} m`, "Altitude"] as [string, string]}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="alt"
+                            stroke="#7FC7FF"
+                            strokeWidth={1.5}
+                            fill="url(#elevGrad)"
+                            isAnimationActive={false}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </section>
+                )}
+                {hasGlucose && (
+                  <section className="surface-1 rounded-2xl p-4">
+                    <div className="flex items-center gap-1.5 mb-3">
+                      <Droplet className="w-3.5 h-3.5 text-diabete" />
+                      <p className="label">Glycémie pendant la séance</p>
+                    </div>
+                    <div style={{ width: "100%", height: 120 }}>
+                      <ResponsiveContainer>
+                        <LineChart
+                          data={cps.map((c) => ({ x: c.offsetSec / 60, value: c.value, label: c.label }))}
+                          margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
+                        >
+                          <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
+                          <XAxis
+                            dataKey="x"
+                            type="number"
+                            domain={["dataMin", "dataMax"]}
+                            tickFormatter={(v) => `${Math.round(Number(v))}'`}
+                            tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 9 }}
+                            axisLine={false}
+                            tickLine={false}
+                          />
+                          <YAxis
+                            domain={[40, 280]}
+                            ticks={[70, 110, 180, 250]}
+                            tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 9 }}
+                            axisLine={false}
+                            tickLine={false}
+                            width={30}
+                          />
+                          <ReferenceArea y1={70} y2={180} fill="#7AE582" fillOpacity={0.06} />
+                          <ReferenceLine y={70} stroke="#FF6B6B" strokeDasharray="3 3" strokeWidth={1} />
+                          <ReferenceLine y={180} stroke="#FFAE5C" strokeDasharray="3 3" strokeWidth={1} />
+                          <Tooltip
+                            cursor={{ stroke: "rgba(255,255,255,0.2)" }}
+                            contentStyle={{
+                              background: "#1F1F23",
+                              border: "1px solid rgba(255,255,255,0.1)",
+                              borderRadius: "8px",
+                              fontSize: "11px",
+                            }}
+                            labelFormatter={(v) => `${Math.round(Number(v))} min`}
+                            formatter={(v) => [`${v} mg/dL`, "Glycémie"] as [string, string]}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="value"
+                            stroke="#B4A7FF"
+                            strokeWidth={2}
+                            dot={{ r: 3, fill: "#B4A7FF" }}
+                            isAnimationActive={false}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    {/* Legend mini */}
+                    <p className="num text-[9px] text-text-tertiary mt-2 text-center">
+                      {cps.length} checkpoint{cps.length > 1 ? "s" : ""} ·{" "}
+                      {Math.min(...cps.map((c) => c.value))}–{Math.max(...cps.map((c) => c.value))} mg/dL
+                    </p>
+                  </section>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Splits détaillés */}
           {summary.splits.length > 0 && (
@@ -250,7 +408,11 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
     <div className="fixed inset-0 z-50 bg-bg-primary">
       {/* Carte plein écran en background */}
       <div className="absolute inset-0">
-        <RunningMap points={tracker.points} mode="live" />
+        <RunningMap
+          points={tracker.points}
+          mode="live"
+          glucoseCheckpoints={tracker.glucoseCheckpoints}
+        />
       </div>
 
       {/* Overlay top : header glass.
@@ -305,12 +467,24 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
         className="absolute bottom-0 inset-x-0 z-[1000] glass border-t border-border-subtle"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        {/* Stats compactes — 4 colonnes */}
-        <div className="grid grid-cols-4 gap-2 px-3 py-3 sm:px-4">
+        {/* Stats compactes — 4 ou 5 colonnes selon glycémie dispo */}
+        <div
+          className={`grid gap-2 px-3 py-3 sm:px-4 ${
+            tracker.liveGlucose !== null ? "grid-cols-5" : "grid-cols-4"
+          }`}
+        >
           <OverlayStat label="Durée" value={formatDuration(tracker.durationSec)} />
           <OverlayStat label="Distance" value={formatDistance(tracker.distanceMeters)} />
           <OverlayStat label="Allure" value={formatPace(tracker.paceLive)} unit="/km" />
           <OverlayStat label="Moy." value={formatPace(tracker.paceAvg)} unit="/km" />
+          {tracker.liveGlucose !== null && (
+            <OverlayStat
+              label="Glycémie"
+              value={`${tracker.liveGlucose}${trendArrowFromNum(tracker.liveGlucoseTrend)}`}
+              unit="mg/dL"
+              tone={glucoseTone(tracker.liveGlucose)}
+            />
+          )}
         </div>
 
         {/* Boutons */}
@@ -359,16 +533,51 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
 }
 
 /**
+ * Tone glycémie pour colorer la stat overlay.
+ */
+type GlucoseTone = "ok" | "warn" | "danger";
+function glucoseTone(value: number): GlucoseTone {
+  if (value < 70 || value > 250) return "danger";
+  if (value < 80 || value > 180) return "warn";
+  return "ok";
+}
+function trendArrowFromNum(trend: number | undefined): string {
+  switch (trend) {
+    case 1: return " ↓↓";
+    case 2: return " ↘";
+    case 3: return " →";
+    case 4: return " ↗";
+    case 5: return " ↑↑";
+    default: return "";
+  }
+}
+
+/**
  * Stat compacte pour l'overlay glass de l'écran de tracking.
  * Format vertical : label en haut, valeur en gros num en bas.
  */
-function OverlayStat({ label, value, unit }: { label: string; value: string; unit?: string }) {
+function OverlayStat({
+  label,
+  value,
+  unit,
+  tone,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  tone?: GlucoseTone;
+}) {
+  const toneClass =
+    tone === "danger" ? "text-error" :
+    tone === "warn" ? "text-warning" :
+    tone === "ok" ? "text-success" :
+    "text-text-primary";
   return (
     <div className="text-center min-w-0">
       <p className="text-[9px] uppercase tracking-wide text-text-tertiary font-semibold mb-0.5 truncate">
         {label}
       </p>
-      <p className="num text-base sm:text-lg font-semibold text-text-primary tabular-nums leading-none truncate">
+      <p className={`num text-base sm:text-lg font-semibold tabular-nums leading-none truncate ${toneClass}`}>
         {value}
         {unit && <span className="text-[9px] text-text-tertiary ml-0.5">{unit}</span>}
       </p>

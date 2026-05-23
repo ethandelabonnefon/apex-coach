@@ -254,6 +254,28 @@ export interface WeekPlan {
   sessions: RunningSession[];
 }
 
+/**
+ * Checkpoint glycémie capturé pendant une séance GPS (Phase C).
+ * Stocké dans la session pour permettre :
+ *  - Replay coloré sur la carte (polyline segmentée)
+ *  - Graphique glycémie post-séance
+ *  - Enrichissement direct de SportGlucoseCorrelation (Bloc 6)
+ */
+export interface SessionGlucoseCheckpoint {
+  /** Label sémantique : "T+0", "T+5min", "Km 1", "Km 2", "Pause", "T+30min post"… */
+  label: string;
+  /** Offset en secondes depuis le début de la séance. */
+  offsetSec: number;
+  /** Glycémie en mg/dL. */
+  value: number;
+  /** Timestamp ms absolu. */
+  timestamp: number;
+  /** Distance cumulée en mètres au moment du checkpoint (0 si pré-séance). */
+  distanceMeters: number;
+  /** Trend Libre numérique (1=↓↓ ... 5=↑↑) si dispo. */
+  trend?: number;
+}
+
 export interface CompletedRunningSession {
   id: string;
   weekNumber: number;
@@ -267,6 +289,18 @@ export interface CompletedRunningSession {
   glucoseAfter: number | null;
   feeling: 'great' | 'good' | 'ok' | 'hard' | 'bad';
   notes: string;
+  /** Phase C — points GPS bruts pour replay (optionnel, peut être lourd). */
+  gpsPoints?: {
+    lat: number;
+    lon: number;
+    altitude: number | null;
+    accuracy: number;
+    t: number;
+  }[];
+  /** Phase C — checkpoints glycémie capturés pendant la séance. */
+  glucoseCheckpoints?: SessionGlucoseCheckpoint[];
+  /** Phase C — dénivelé positif cumulé en mètres (si altitude dispo). */
+  elevationGainM?: number;
 }
 
 export type MealTime = 'morning' | 'lunch' | 'snack' | 'dinner' | 'other';

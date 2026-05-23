@@ -28,6 +28,19 @@ import {
   instantPace,
   computeKmSplits,
 } from "@/lib/running-tracker";
+import type { SessionGlucoseCheckpoint } from "@/types";
+
+/** Map trend Libre string → numérique (1..5) pour stockage. */
+function libreTrendToNumber(trend: string | undefined | null): number | undefined {
+  switch (trend) {
+    case "SingleDown": return 1;
+    case "FortyFiveDown": return 2;
+    case "Flat": return 3;
+    case "FortyFiveUp": return 4;
+    case "SingleUp": return 5;
+    default: return undefined;
+  }
+}
 
 export type TrackerStatus = "idle" | "tracking" | "paused" | "finished";
 
@@ -51,6 +64,12 @@ export interface TrackerState {
   highAccuracy: boolean;
   /** Erreur GPS courante (permission refusée, signal perdu…). */
   gpsError: string | null;
+  /** Phase C — checkpoints glycémie capturés pendant la séance. */
+  glucoseCheckpoints: SessionGlucoseCheckpoint[];
+  /** Dernière glycémie connue (pour affichage overlay live). */
+  liveGlucose: number | null;
+  /** Trend de la dernière glycémie (numérique 1..5). */
+  liveGlucoseTrend: number | undefined;
 }
 
 export interface UseRunningTrackerReturn extends TrackerState {
@@ -69,6 +88,8 @@ export interface TrackerSummary {
   paceAvg: number | null;
   points: GpsPoint[];
   splits: ReturnType<typeof computeKmSplits>;
+  /** Phase C — checkpoints glycémie capturés pendant la séance. */
+  glucoseCheckpoints: SessionGlucoseCheckpoint[];
 }
 
 const GEO_OPTIONS: PositionOptions = {
@@ -84,14 +105,25 @@ export function useRunningTracker(): UseRunningTrackerReturn {
   const [startedAt, setStartedAt] = useState<string | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
 
+  // Phase C — checkpoints glycémie + alerte hypo
+  const [glucoseCheckpoints, setGlucoseCheckpoints] = useState<SessionGlucoseCheckpoint[]>([]);
+  const [liveGlucose, setLiveGlucose] = useState<number | null>(null);
+  const [liveGlucoseTrend, setLiveGlucoseTrend] = useState<number | undefined>(undefined);
+
   // refs pour les ressources qui ne déclenchent pas de re-render
   const watchIdRef = useRef<number | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const tickIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const glucoseIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statusRef = useRef<TrackerStatus>("idle");
   const startMsRef = useRef<number | null>(null);
   const pausedAccumSecRef = useRef<number>(0);
   const pauseStartMsRef = useRef<number | null>(null);
+  // Phase C — état pour anti-spam hypo + tracking km franchis
+  const lastHypoAlertRef = useRef<number>(0);
+  const lastKmCheckpointRef = useRef<number>(0); // dernier km franchi qui a déclenché un checkpoint
+  const pointsRef = useRef<GpsPoint[]>([]);
+  useEffect(() => { pointsRef.current = points; }, [points]);
 
   // Synchronise le ref de status pour pouvoir le lire dans les callbacks
   useEffect(() => {
@@ -136,6 +168,57 @@ export function useRunningTracker(): UseRunningTrackerReturn {
     return () => document.removeEventListener("visibilitychange", onVisChange);
   }, [requestWakeLock]);
 
+  // ─── Phase C — Auto-tag glycémie + alerte hypo ─────────
+  /**
+   * Fetch /api/glucose/current et stocke un checkpoint si on a une lecture.
+   * `label` peut être "T+0", "Km 1", "T+5min", "T+0 final"…
+   * `forceLowAlert = true` pour court-circuiter le backoff (utilisé au stop).
+   */
+  const fetchAndStoreGlucose = useCallback(async (label: string) => {
+    try {
+      const res = await fetch("/api/glucose/current", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (typeof data?.value !== "number") return;
+      const value: number = data.value;
+      const trend = libreTrendToNumber(data?.trend);
+      const now = Date.now();
+      const offsetSec = startMsRef.current
+        ? Math.max(0, Math.floor((now - startMsRef.current) / 1000 - pausedAccumSecRef.current))
+        : 0;
+      const distanceM = totalDistance(pointsRef.current);
+      setLiveGlucose(value);
+      setLiveGlucoseTrend(trend);
+      setGlucoseCheckpoints((prev) => [
+        ...prev,
+        { label, offsetSec, value, timestamp: now, distanceMeters: distanceM, trend },
+      ]);
+
+      // ─── Alerte hypo pendant la séance ────────────
+      // Backoff 10min anti-spam. Notif locale via service worker si dispo.
+      if (value < 80 && now - lastHypoAlertRef.current > 10 * 60_000) {
+        lastHypoAlertRef.current = now;
+        if (typeof window !== "undefined" && "serviceWorker" in navigator && "Notification" in window) {
+          if (Notification.permission === "granted") {
+            navigator.serviceWorker.ready
+              .then((reg) => {
+                reg.showNotification("⚠️ Hypo en course !", {
+                  body: `Glycémie ${value} mg/dL — mange 15g de glucides rapides`,
+                  icon: "/icons/icon-192.png",
+                  badge: "/icons/icon-192.png",
+                  tag: "running-hypo",
+                  data: { url: "/running", type: "running-hypo" },
+                });
+              })
+              .catch(() => {});
+          }
+        }
+      }
+    } catch {
+      // silencieux : pas de glycémie dispo ne doit pas casser le tracker
+    }
+  }, []);
+
   // ─── GPS watch ─────────────────────────────────
   const handleGeoSuccess = useCallback((pos: GeolocationPosition) => {
     // Si on est en pause, on ignore les points pour ne pas polluer le tracé
@@ -171,8 +254,13 @@ export function useRunningTracker(): UseRunningTrackerReturn {
     setPoints([]);
     setDurationSec(0);
     setGpsError(null);
+    setGlucoseCheckpoints([]);
+    setLiveGlucose(null);
+    setLiveGlucoseTrend(undefined);
     pausedAccumSecRef.current = 0;
     pauseStartMsRef.current = null;
+    lastHypoAlertRef.current = 0;
+    lastKmCheckpointRef.current = 0;
     startMsRef.current = Date.now();
     setStartedAt(new Date(startMsRef.current).toISOString());
 
@@ -187,7 +275,10 @@ export function useRunningTracker(): UseRunningTrackerReturn {
     );
     watchIdRef.current = id;
 
-    // Tick chrono toutes les 1s
+    // Phase C — checkpoint glycémie T+0 (initial)
+    fetchAndStoreGlucose("T+0");
+
+    // Tick chrono toutes les 1s + check km franchis
     if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
     tickIntervalRef.current = setInterval(() => {
       if (statusRef.current !== "tracking") return;
@@ -195,10 +286,28 @@ export function useRunningTracker(): UseRunningTrackerReturn {
       if (start === null) return;
       const elapsed = (Date.now() - start) / 1000 - pausedAccumSecRef.current;
       setDurationSec(Math.max(0, Math.floor(elapsed)));
+      // Phase C — vérifie si un nouveau km a été franchi → checkpoint
+      const distM = totalDistance(pointsRef.current);
+      const kmFranchi = Math.floor(distM / 1000);
+      if (kmFranchi > lastKmCheckpointRef.current) {
+        lastKmCheckpointRef.current = kmFranchi;
+        fetchAndStoreGlucose(`Km ${kmFranchi}`);
+      }
     }, 1000);
 
+    // Phase C — checkpoint glycémie périodique toutes les 5 min
+    if (glucoseIntervalRef.current) clearInterval(glucoseIntervalRef.current);
+    glucoseIntervalRef.current = setInterval(() => {
+      if (statusRef.current !== "tracking") return;
+      const elapsed = startMsRef.current
+        ? (Date.now() - startMsRef.current) / 1000 - pausedAccumSecRef.current
+        : 0;
+      const minutes = Math.round(elapsed / 60);
+      fetchAndStoreGlucose(`T+${minutes}min`);
+    }, 5 * 60_000);
+
     setStatus("tracking");
-  }, [handleGeoSuccess, handleGeoError, requestWakeLock]);
+  }, [handleGeoSuccess, handleGeoError, requestWakeLock, fetchAndStoreGlucose]);
 
   const pause = useCallback(() => {
     if (statusRef.current !== "tracking") return;
@@ -216,15 +325,23 @@ export function useRunningTracker(): UseRunningTrackerReturn {
   }, []);
 
   const stop = useCallback((): TrackerSummary => {
+    // Phase C — checkpoint glycémie final (fire-and-forget, le summary
+    // sera retourné avant la réponse fetch mais le state se mettra à jour)
+    fetchAndStoreGlucose("T+0 final");
+
     // Arrête le watch GPS
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
-    // Arrête le tick
+    // Arrête le tick + l'interval glucose
     if (tickIntervalRef.current) {
       clearInterval(tickIntervalRef.current);
       tickIntervalRef.current = null;
+    }
+    if (glucoseIntervalRef.current) {
+      clearInterval(glucoseIntervalRef.current);
+      glucoseIntervalRef.current = null;
     }
     // Release wake lock
     releaseWakeLock();
@@ -247,10 +364,11 @@ export function useRunningTracker(): UseRunningTrackerReturn {
       paceAvg: finalPace,
       points,
       splits: finalSplits,
+      glucoseCheckpoints,
     };
     setStatus("finished");
     return summary;
-  }, [points, durationSec, startedAt, releaseWakeLock]);
+  }, [points, durationSec, startedAt, glucoseCheckpoints, releaseWakeLock, fetchAndStoreGlucose]);
 
   const reset = useCallback(() => {
     if (watchIdRef.current !== null) {
@@ -261,15 +379,24 @@ export function useRunningTracker(): UseRunningTrackerReturn {
       clearInterval(tickIntervalRef.current);
       tickIntervalRef.current = null;
     }
+    if (glucoseIntervalRef.current) {
+      clearInterval(glucoseIntervalRef.current);
+      glucoseIntervalRef.current = null;
+    }
     releaseWakeLock();
     setStatus("idle");
     setPoints([]);
     setDurationSec(0);
     setStartedAt(null);
     setGpsError(null);
+    setGlucoseCheckpoints([]);
+    setLiveGlucose(null);
+    setLiveGlucoseTrend(undefined);
     startMsRef.current = null;
     pausedAccumSecRef.current = 0;
     pauseStartMsRef.current = null;
+    lastHypoAlertRef.current = 0;
+    lastKmCheckpointRef.current = 0;
   }, [releaseWakeLock]);
 
   // Cleanup au unmount (sécurité si l'utilisateur quitte la page sans stop)
@@ -280,6 +407,9 @@ export function useRunningTracker(): UseRunningTrackerReturn {
       }
       if (tickIntervalRef.current) {
         clearInterval(tickIntervalRef.current);
+      }
+      if (glucoseIntervalRef.current) {
+        clearInterval(glucoseIntervalRef.current);
       }
       releaseWakeLock();
     };
@@ -303,6 +433,9 @@ export function useRunningTracker(): UseRunningTrackerReturn {
     startedAt,
     highAccuracy: GEO_OPTIONS.enableHighAccuracy === true,
     gpsError,
+    glucoseCheckpoints,
+    liveGlucose,
+    liveGlucoseTrend,
     start,
     pause,
     resume,

@@ -515,6 +515,8 @@ export default function DiabetePage() {
         date: r.date,
         type: "running" as const,
         durationMin: Math.round(r.actualDuration ?? 45),
+        // Phase C — checkpoints réels prioritaires sur archive
+        glucoseCheckpoints: r.glucoseCheckpoints,
       })),
     ];
     // archivePoints du Bloc 2 (meal-analytics) sont compatibles avec ArchivedPoint

@@ -130,6 +130,50 @@ export function formatDistance(meters: number): string {
 }
 
 /**
+ * Calcule le dénivelé positif cumulé (en mètres).
+ * Filtre les variations < 1m (bruit altimétrique GPS).
+ */
+export function totalElevationGain(points: GpsPoint[]): number {
+  if (points.length < 2) return 0;
+  let gain = 0;
+  let lastAlt: number | null = null;
+  for (const p of points) {
+    if (p.altitude === null) continue;
+    if (lastAlt === null) {
+      lastAlt = p.altitude;
+      continue;
+    }
+    const delta = p.altitude - lastAlt;
+    if (delta > 1) gain += delta; // filtre bruit altimétrique
+    lastAlt = p.altitude;
+  }
+  return Math.round(gain);
+}
+
+/**
+ * Profil d'altitude : pour chaque point, distance cumulée + altitude.
+ * Utile pour le graphique d'altitude post-séance.
+ */
+export function buildElevationProfile(points: GpsPoint[]): { distM: number; alt: number }[] {
+  if (points.length < 2) return [];
+  const profile: { distM: number; alt: number }[] = [];
+  let cumDist = 0;
+  let lastLat = points[0].lat;
+  let lastLon = points[0].lon;
+  for (const p of points) {
+    if (p.accuracy > 30 || p.altitude === null) continue;
+    const d = haversineDistance(lastLat, lastLon, p.lat, p.lon);
+    if (d >= 3) {
+      cumDist += d;
+      lastLat = p.lat;
+      lastLon = p.lon;
+    }
+    profile.push({ distM: cumDist, alt: p.altitude });
+  }
+  return profile;
+}
+
+/**
  * Calcule les splits par kilomètre (ou par unité).
  * Renvoie un tableau de splits avec leur durée + allure.
  */

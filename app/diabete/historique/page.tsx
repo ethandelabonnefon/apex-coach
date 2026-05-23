@@ -259,6 +259,8 @@ export default function DiabeteHistoriquePage() {
         date: r.date,
         type: "running" as const,
         durationMin: Math.round(r.actualDuration ?? 45),
+        // Phase C — passe les checkpoints réels pour enrichissement prioritaire
+        glucoseCheckpoints: r.glucoseCheckpoints,
       }));
   }, [completedRunningSessions, days]);
 

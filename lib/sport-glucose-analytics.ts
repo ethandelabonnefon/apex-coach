@@ -13,6 +13,7 @@
  */
 
 import type { ArchivedPoint } from "@/lib/glucose-archive/store";
+import type { SessionGlucoseCheckpoint } from "@/types";
 
 export interface SportSession {
   /** Date ISO de début de séance (ou date du jour si seul le jour est connu). */
@@ -20,6 +21,8 @@ export interface SportSession {
   /** Durée en minutes. */
   durationMin: number;
   type: "muscu" | "running";
+  /** Phase C — checkpoints glycémie capturés pendant la séance (running GPS). */
+  glucoseCheckpoints?: SessionGlucoseCheckpoint[];
 }
 
 export interface GlucoseCheckpoint {
@@ -69,6 +72,12 @@ function findClosestPoint(
 /**
  * Pour une séance, calcule les checkpoints en cherchant les points
  * archive les plus proches de chaque offset (±18min de tolérance).
+ *
+ * Phase C — si la session a des `glucoseCheckpoints` réels capturés
+ * pendant la séance (running GPS tracker), on les utilise en priorité.
+ * Pour chaque offset standard (-30, 0, +30, +60, +120), on cherche
+ * d'abord dans les checkpoints réels (tolérance ±5min), puis fallback
+ * sur l'archive (±18min) si rien.
  */
 export function enrichSession(
   session: SportSession,
@@ -76,9 +85,25 @@ export function enrichSession(
 ): EnrichedSportSession {
   const startMs = new Date(session.date).getTime();
 
+  // Phase C — checkpoints réels (timestamps absolus). On les convertit en
+  // pseudo "ArchivedPoint" pour réutiliser la même logique findClosest.
+  const realCheckpoints: ArchivedPoint[] = (session.glucoseCheckpoints ?? []).map((cp) => ({
+    t: cp.timestamp,
+    value: cp.value,
+    trend: "Flat",
+    isHigh: cp.value > 180,
+    isLow: cp.value < 70,
+  }));
+  const REAL_TOLERANCE_MS = 5 * 60 * 1000; // ±5min — checkpoints réels sont précis
+
   const checkpoints: GlucoseCheckpoint[] = CHECKPOINT_OFFSETS.map((offset) => {
     const targetMs = startMs + offset * 60_000;
-    const closest = findClosestPoint(archivePoints, targetMs);
+    // 1. Priorité : checkpoints réels capturés pendant la séance
+    const fromReal = realCheckpoints.length > 0
+      ? findClosestPoint(realCheckpoints, targetMs, REAL_TOLERANCE_MS)
+      : null;
+    // 2. Fallback : archive KV
+    const closest = fromReal ?? findClosestPoint(archivePoints, targetMs);
     return {
       label: offset === 0 ? "T+0" : `T${offset > 0 ? "+" : ""}${offset}`,
       offsetMin: offset,

@@ -22,6 +22,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { MapContainer, TileLayer, Polyline, CircleMarker, useMap } from "react-leaflet";
 import type { LatLngExpression, LatLngBoundsExpression } from "leaflet";
 import type { GpsPoint } from "@/lib/running-tracker";
+import type { SessionGlucoseCheckpoint } from "@/types";
 import "leaflet/dist/leaflet.css";
 
 interface RunningMapProps {
@@ -32,6 +33,17 @@ interface RunningMapProps {
   height?: string;
   /** Couleur de la trace (default sky #7FC7FF = running color). */
   strokeColor?: string;
+  /** Phase C — si fourni + assez de checkpoints, segmente la polyline en
+   *  couleurs selon la glycémie (vert / orange / rouge). */
+  glucoseCheckpoints?: SessionGlucoseCheckpoint[];
+}
+
+/** Tone glycémie → couleur de trace. */
+function glucoseToColor(value: number | null): string {
+  if (value === null) return "#7FC7FF"; // sky default
+  if (value < 70 || value > 250) return "#FF6B6B"; // hypo / hyper → rouge
+  if (value < 80 || value > 180) return "#FFAE5C"; // low / high → orange
+  return "#7AE582"; // target → vert
 }
 
 export default function RunningMap({
@@ -39,11 +51,71 @@ export default function RunningMap({
   mode,
   height = "100%",
   strokeColor = "#7FC7FF",
+  glucoseCheckpoints,
 }: RunningMapProps) {
-  const positions: LatLngExpression[] = useMemo(
-    () => points.filter((p) => p.accuracy <= 30).map((p) => [p.lat, p.lon] as [number, number]),
+  // Points filtrés (accuracy <= 30m) — utilisés par la polyline et les markers
+  const filteredPoints = useMemo(
+    () => points.filter((p) => p.accuracy <= 30),
     [points],
   );
+  const positions: LatLngExpression[] = useMemo(
+    () => filteredPoints.map((p) => [p.lat, p.lon] as [number, number]),
+    [filteredPoints],
+  );
+
+  /**
+   * Segmente la polyline en sous-polylines colorées selon la glycémie
+   * la plus proche au moment du point. Renvoie un array de segments
+   * { color, positions[] } à rendre comme N polylines.
+   * Si pas assez de checkpoints (< 2) → null (fallback polyline unique).
+   */
+  const coloredSegments = useMemo(() => {
+    if (!glucoseCheckpoints || glucoseCheckpoints.length < 2) return null;
+    if (filteredPoints.length < 2) return null;
+
+    // Trie les checkpoints par timestamp
+    const sortedCps = [...glucoseCheckpoints].sort((a, b) => a.timestamp - b.timestamp);
+
+    // Fonction qui trouve la glycémie active pour un timestamp donné
+    // (dernier checkpoint <= ts ou le 1er si plus rien avant)
+    const findGlucoseAt = (ts: number): number | null => {
+      let value: number | null = null;
+      for (const cp of sortedCps) {
+        if (cp.timestamp <= ts) value = cp.value;
+        else break;
+      }
+      // Si pas de checkpoint avant ts, prend le 1er (cas démarrage)
+      if (value === null && sortedCps.length > 0) value = sortedCps[0].value;
+      return value;
+    };
+
+    // Construit les segments en groupant les points par couleur consécutive
+    const segments: { color: string; positions: [number, number][] }[] = [];
+    let currentColor = "";
+    let currentPositions: [number, number][] = [];
+
+    for (const p of filteredPoints) {
+      const value = findGlucoseAt(p.t);
+      const color = glucoseToColor(value);
+      if (color !== currentColor) {
+        // Termine le segment précédent (en ajoutant le 1er point du nouveau
+        // pour avoir une continuité visuelle)
+        if (currentPositions.length > 0) {
+          currentPositions.push([p.lat, p.lon]);
+          segments.push({ color: currentColor, positions: currentPositions });
+        }
+        currentColor = color;
+        currentPositions = [[p.lat, p.lon]];
+      } else {
+        currentPositions.push([p.lat, p.lon]);
+      }
+    }
+    // Finalise le dernier segment
+    if (currentPositions.length > 0) {
+      segments.push({ color: currentColor, positions: currentPositions });
+    }
+    return segments;
+  }, [glucoseCheckpoints, filteredPoints]);
 
   const lastPoint = positions[positions.length - 1];
   const firstPoint = positions[0];
@@ -80,19 +152,33 @@ export default function RunningMap({
           maxZoom={19}
         />
 
-        {/* Trace GPS */}
-        {positions.length >= 2 && (
-          <Polyline
-            positions={positions}
-            pathOptions={{
-              color: strokeColor,
-              weight: 4,
-              opacity: 0.9,
-              lineCap: "round",
-              lineJoin: "round",
-            }}
-          />
-        )}
+        {/* Trace GPS — segmentée colorée si glucoseCheckpoints fournis */}
+        {coloredSegments
+          ? coloredSegments.map((seg, i) => (
+              <Polyline
+                key={i}
+                positions={seg.positions}
+                pathOptions={{
+                  color: seg.color,
+                  weight: 4,
+                  opacity: 0.9,
+                  lineCap: "round",
+                  lineJoin: "round",
+                }}
+              />
+            ))
+          : positions.length >= 2 && (
+              <Polyline
+                positions={positions}
+                pathOptions={{
+                  color: strokeColor,
+                  weight: 4,
+                  opacity: 0.9,
+                  lineCap: "round",
+                  lineJoin: "round",
+                }}
+              />
+            )}
 
         {/* Markers */}
         {mode === "live" && lastPoint && (
