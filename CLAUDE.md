@@ -771,6 +771,49 @@ const fpuBolusLater = useSplit ? fpuBolus : 0;
 
 Le bolus initial ne contient désormais que **glucides + correction + trend**. Le FPU n'apparaît que via la **2e injection différée** (split dose) ou simplement comme **information de surveillance** (reasoning) pour les repas border-line.
 
+### Phase 11 — Calibrage scientifique FPU avec 3 garde-fous (mai 2026, retour terrain critique)
+Retour terrain Ethan : "152g glucides + 82g lipides + 94g protéines → l'app me demande 12U dans 2h30 alors que j'étais à 160 mg/dL sans rien faire, j'aurais fait une hypo sévère. 7-8U max."
+
+**Diagnostic scientifique** : le facteur "1 FPU = 10g glucides équivalents" est l'**extrapolation théorique maximale de Pankowska 2009**, mais en pratique MDI les études cliniques ultérieures (Bell et al. 2015, NHS Cambridge, Smart et al. 2018) montrent que :
+- Seulement ~50% des protéines deviennent du glucose (gluconéogenèse partielle)
+- Les lipides ralentissent l'absorption mais ne créent pas du glucose proportionnellement
+- Le risque d'hypo sévère en MDI justifie un facteur empirique plus conservatif
+- Aucun protocole sérieux ne recommande une 2e dose >40% du bolus initial sans titration progressive
+
+**3 garde-fous cumulatifs** (`lib/insulin-calculator.ts`, constantes en haut du fichier) :
+
+| Garde-fou | Constante | Valeur | Effet |
+|---|---|---|---|
+| Facteur conversion FPU | `FPU_CARB_EQUIVALENT_FACTOR` | **6** (au lieu de 10) | 1 FPU ≈ 6g glucides équivalents (empirique MDI) |
+| Cap relatif | `LATER_DOSE_RELATIVE_CAP` | **0.4** | Max 40% du bolus glucides initial |
+| Cap absolu | `LATER_DOSE_ABSOLUTE_CAP` | **8** | Plafond absolu MDI 8U max en 2e injection |
+
+**Formule** :
+```typescript
+const theoretical = Math.ceil(fpuBolusLater);
+const relativeMax = Math.floor(carbBolus * 0.4);
+const laterUnits = Math.min(theoretical, relativeMax, 8);
+```
+
+**Reasoning enrichi** : quand un cap est appliqué, message explicite "Sécurité MDI : XU théoriques plafonnés à YU (max 40% du bolus initial ou 8U absolus) pour éviter une hypo précoce."
+
+**Cas validés en preview** :
+
+| Repas | Avant (10× factor, no cap) | Après (6× factor + caps) | Validation |
+|---|---|---|---|
+| 🔥 **Ton midi 152/82/94 (Pâtes)** | 16U + **12U** → hypo sévère ❌ | 16U + **6U dans 2h30** | ✅ cohérent avec ton intuition (7-8U max) et glycémie observée 160 mg/dL sans rien faire |
+| Pâtes énorme 100/24/40 | 10U + 4U | 10U + **3U dans 2h** | ✅ (FPU théorique 2.6U → ceil 3U, pas de cap déclenché) |
+| Pizza 80/30/25 | 8U + 4U | 8U + **3U dans 2h** | ✅ |
+| Viande 60/25/45 | 6U + 5U | 6U + **2U dans 2h30** | ✅ avec cap "3U → 2U" (40% × 6U = 2.4 → floor 2) |
+
+Le cas Ethan midi est passé de **28U total** (16+12, hypo garantie) à **22U total** (16+6) avec un mécanisme transparent qui explique pourquoi le cap a été appliqué.
+
+**Sources scientifiques** :
+- [Pankowska Method (original 2009)](https://pubmed.ncbi.nlm.nih.gov/19614757/)
+- [Bell et al. 2015, Diabetes Care — Optimized Mealtime Insulin Dosing for Fat and Protein](https://diabetesjournals.org/care/article/38/6/1008/37384)
+- [NHS Cambridge MDI guidance — start at 20% add-on, titrate up](https://www.cuh.nhs.uk/patient-information/managing-high-fat-and-high-protein-meals-with-multiple-daily-insulin-injections-mdi/)
+- [Smart et al. 2018 — Insulin dosing for fat and protein: is it time?](https://diabetesjournals.org/care/article/41/9/1818/36458)
+
 ### Phase A — Running tracker GPS live (mai 2026)
 Démarrage du module **"vrai Strava"** pour le running. Phase A = MVP tracking GPS sans carte (carte = Phase B prévue ensuite). Killer feature unique vs Strava : intégration native avec la glycémie live FreeStyle Libre + corrélation sport-glucose déjà existante.
 

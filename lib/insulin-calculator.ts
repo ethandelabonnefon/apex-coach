@@ -1,6 +1,31 @@
 import { DIABETES_CONFIG } from './constants';
 import type { DiabetesConfig, MealTime } from '@/types';
 
+// ───────────────────────────────────────────────────────────────────────
+// Phase 11 — Calibrage FPU (mai 2026, retour terrain Ethan)
+// ───────────────────────────────────────────────────────────────────────
+//
+// Le facteur "1 FPU = 10g équivalent glucides" est l'EXTRAPOLATION
+// THÉORIQUE MAXIMALE de Pankowska 2009. En pratique MDI (stylos),
+// les études cliniques ultérieures (Bell et al. 2015, NHS Cambridge,
+// Smart et al. 2018) recommandent un facteur empirique plus prudent :
+//   - Seulement ~50% des protéines se convertissent en glucose (gluconéogenèse)
+//   - Les lipides ralentissent l'absorption mais ne créent pas de glucose
+//   - Le risque d'hypo sévère en MDI justifie un seuil conservatif
+//
+// Calibrage Ethan retour terrain : 152g carbs + 82g lip + 94g prot
+// → FPU = 11.14 → fpuBolus théorique = 11.1U (avec factor 10)
+// → Glycémie observée à T+2h sans 2e dose : 160 mg/dL (proche cible)
+// → 12U auraient causé hypo sévère ; 6-7U max acceptable
+//
+// Trois garde-fous cumulatifs :
+//   - FPU_CARB_EQUIVALENT_FACTOR = 6 (au lieu de 10 théorique)
+//   - LATER_DOSE_RELATIVE_CAP = 0.4 (max 40% du bolus glucides initial)
+//   - LATER_DOSE_ABSOLUTE_CAP = 8 (plafond absolu MDI)
+const FPU_CARB_EQUIVALENT_FACTOR = 6;
+const LATER_DOSE_RELATIVE_CAP = 0.4;
+const LATER_DOSE_ABSOLUTE_CAP = 8;
+
 function getRatioForMeal(config: DiabetesConfig, mealTime: MealTime): number {
   // "other" = saisie libre (correction seule, pas de repas) → on retombe
   // sur le ratio midi par défaut au cas où l'utilisateur entre quand même
@@ -157,8 +182,10 @@ export function calculateBolus(
     const fatCalories = fatGrams * 9;
     const proteinCalories = proteinGrams * 4;
     totalFPU = (fatCalories + proteinCalories) / 100;
-    // 1 FPU ≈ 10g de glucides équivalents → on applique le même ratio
-    const fpuCarbEquivalent = totalFPU * 10;
+    // Empirique MDI : 1 FPU ≈ 6g équivalent glucides (au lieu du 10g
+    // théorique de Pankowska). Cf constante FPU_CARB_EQUIVALENT_FACTOR
+    // en haut du fichier pour la justification scientifique.
+    const fpuCarbEquivalent = totalFPU * FPU_CARB_EQUIVALENT_FACTOR;
     fpuBolus = fpuCarbEquivalent / ratio;
 
     if (totalFPU >= 3) digestiveComplexity = 'complex';
@@ -274,8 +301,14 @@ export function calculateBolus(
   // ─── Split dose 50/50 — Phase 11 (calibrage mai 2026) ─────────────────
   let splitDose: BolusResult['splitDose'];
   if (useSplit && fpuBolusLater > 0) {
-    // Stylo MDI sans demi-unités : laterUnits arrondi au-dessus
-    const laterUnits = Math.max(1, Math.ceil(fpuBolusLater));
+    // ─── 3 garde-fous sécurité MDI (calibrage retour terrain Ethan) ────
+    // 1. Calcul théorique arrondi au-dessus (stylo sans demi-unités)
+    const theoretical = Math.max(1, Math.ceil(fpuBolusLater));
+    // 2. Cap relatif : max 40% du bolus glucides initial
+    const relativeMax = Math.max(1, Math.floor(carbBolus * LATER_DOSE_RELATIVE_CAP));
+    // 3. Cap absolu : 8U max en 2e injection
+    const laterUnits = Math.min(theoretical, relativeMax, LATER_DOSE_ABSOLUTE_CAP);
+    const wasCapped = theoretical > laterUnits;
     // Délais Pankowska adaptés MDI : pic de digestion vs durée d'action
     // du Novorapid (~3h15). Cap à 150min car au-delà la 1ère injection
     // commence à finir et le risque d'hypo précoce baisse mais l'utilité
@@ -301,6 +334,11 @@ export function calculateBolus(
     reasoning.push(
       `${complexityLabel} (${totalFPU.toFixed(1).replace(".", ",")} FPU) : la digestion va durer ${digestionHours}. Split classique : ${totalBolus}U maintenant (juste les glucides), puis ${laterUnits}U dans ${delayLabel} pour couvrir les graisses/protéines.`
     );
+    if (wasCapped) {
+      reasoning.push(
+        `Sécurité MDI : ${theoretical}U théoriques plafonnés à ${laterUnits}U (max 40% du bolus initial ou 8U absolus) pour éviter une hypo précoce.`
+      );
+    }
     adjustments.push(`Split dose : +${laterUnits}U dans ${delayLabel}`);
   } else if (fastCarbs && totalFPU >= 2.5 && carbsGrams >= 50) {
     // Cas explicite : repas qui SERAIT split-worthy mais glucides rapides
