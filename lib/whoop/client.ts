@@ -40,12 +40,25 @@ export function whoopClientSecret(): string | undefined {
 }
 
 export function whoopRedirectUri(): string {
-  return (
-    process.env.WHOOP_REDIRECT_URI ||
-    (process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}/api/whoop/callback`
-      : "http://localhost:3000/api/whoop/callback")
-  );
+  // Priorité 1 : env var explicite (override complet)
+  if (process.env.WHOOP_REDIRECT_URI) return process.env.WHOOP_REDIRECT_URI;
+
+  // Priorité 2 : prod Vercel → URL alias stable
+  // (VERCEL_URL retourne l'URL DU DÉPLOIEMENT SPÉCIFIQUE, ex:
+  // apex-coach-hytajk7g8-...vercel.app, qui change à chaque deploy
+  // → ne match jamais le redirect URI enregistré chez Whoop.
+  // On hardcode donc l'alias stable de production.)
+  if (process.env.VERCEL_ENV === "production") {
+    return "https://apex-coach-dusky.vercel.app/api/whoop/callback";
+  }
+
+  // Priorité 3 : preview Vercel (URL dynamique acceptable car preview)
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}/api/whoop/callback`;
+  }
+
+  // Local dev
+  return "http://localhost:3000/api/whoop/callback";
 }
 
 export function isWhoopConfigured(): boolean {
