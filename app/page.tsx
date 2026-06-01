@@ -7,6 +7,7 @@ import { useGlucose } from "@/hooks/useGlucose";
 import { Ring } from "@/components/ui/Ring";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { glucoseToneColor, glucoseToneLabel } from "@/lib/libre-link/utils";
+import WhoopCard from "@/components/whoop/WhoopCard";
 import {
   ArrowUpRight,
   Dumbbell,
@@ -234,6 +235,9 @@ export default function Dashboard() {
           </div>
         )}
       </section>
+
+      {/* ============ WHOOP QUICK-VIEW (si connecté) ============ */}
+      <WhoopCard variant="compact" />
 
       {/* ============ GLUCOSE TREND HERO (live + sparkline 8h) ============ */}
       <section className="mb-6 animate-in">

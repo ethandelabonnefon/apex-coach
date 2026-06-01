@@ -883,6 +883,31 @@ Tant que les env vars ne sont pas configurées, la section Whoop affiche un mess
 - [UCLA Health — T1D Exercise Guidelines](https://www.uclahealth.org/medical-services/endocrinology/diabetes/type-1-diabetes/exercise-guidelines)
 - [Whoop Developer API](https://developer.whoop.com/api/)
 
+### Phase F2 UI — Exposer les données Whoop dans l'app (mai 2026)
+Après l'infra OAuth, expose les données Whoop visibles dans 3 endroits :
+
+- **Composant `WhoopCard.tsx`** réutilisable avec 2 variants :
+  - **`compact`** (3 stats clés : Recovery / Strain / Sommeil) — pour Dashboard et page Running. Silencieux si non connecté.
+  - **`full`** (jauges + HRV/RHR + sommeil détaillé + dernier workout). Affiche CTA "Connecter Whoop" si non connecté.
+- **Couleurs Whoop officielles** :
+  - Recovery : 67-100 vert / 34-66 jaune / 0-33 rouge
+  - Strain : 0-9 bleu (léger) / 10-13 vert (modéré) / 14-17 jaune (dur) / 18-21 rouge (très dur)
+- **Intégration Dashboard `/`** : `<WhoopCard variant="compact" />` après hero + action du jour, avant glucose trend. Lien "Vue détaillée →" vers `/whoop`.
+- **Intégration `/running`** : compact card en haut de page (après CTA séance GPS) pour voir Recovery avant de décider d'aller s'entraîner.
+- **Nouvelle page `/whoop`** : vue détaillée plein écran avec :
+  - Header retour Dashboard + lien Paramètres Whoop
+  - 2 jauges (Recovery 100% / Strain /21) avec barres de progression colorées + label zone
+  - HRV (ms) + RHR (bpm) mini-stats
+  - Section Sommeil : durée totale + performance %
+  - Dernière séance Whoop : strain + heures début/fin + sport
+  - Bouton refresh manuel (icône RefreshCw + spin loader)
+  - Timestamp "MAJ il y a Xmin" pour transparence sur la fraîcheur des données
+- **Helpers de formatage** : `formatSleepDuration(min)` → "7h12", `timeAgo(iso)` → "il y a 1h30", `recoveryColor()` + `strainColor()` retournent `{ color, bg, label }` pour cohérence.
+
+L'app expose donc maintenant **toutes les données Whoop** récupérées par F2 :
+- Recovery, Strain, HRV, RHR, Sleep duration, Sleep performance, Last workout (avec sport, strain, durée).
+- Utilisées **2 fois** : pour calculer la réduction insuline post-exercice (logique métier) ET pour informer l'utilisateur (UI).
+
 ### Phase A — Running tracker GPS live (mai 2026)
 Démarrage du module **"vrai Strava"** pour le running. Phase A = MVP tracking GPS sans carte (carte = Phase B prévue ensuite). Killer feature unique vs Strava : intégration native avec la glycémie live FreeStyle Libre + corrélation sport-glucose déjà existante.
 

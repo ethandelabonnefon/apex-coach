@@ -19,6 +19,7 @@ import { Ring } from "@/components/ui/Ring";
 import { Sparkline } from "@/components/ui/Sparkline";
 import RunningTracker from "@/components/running/RunningTracker";
 import type { TrackerSummary } from "@/hooks/useRunningTracker";
+import WhoopCard from "@/components/whoop/WhoopCard";
 import {
   Footprints,
   ChevronLeft,
@@ -453,6 +454,9 @@ export default function RunningPage() {
           onClose={() => setGpsTrackerOpen(false)}
         />
       )}
+
+      {/* ============ WHOOP QUICK-VIEW (si connecté) ============ */}
+      <WhoopCard variant="compact" />
 
       {/* ============ CTA "DÉMARRER UNE SÉANCE LIBRE" ============ */}
       <section className="mb-5">
