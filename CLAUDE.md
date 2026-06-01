@@ -814,6 +814,75 @@ Le cas Ethan midi est passé de **28U total** (16+12, hypo garantie) à **22U to
 - [NHS Cambridge MDI guidance — start at 20% add-on, titrate up](https://www.cuh.nhs.uk/patient-information/managing-high-fat-and-high-protein-meals-with-multiple-daily-insulin-injections-mdi/)
 - [Smart et al. 2018 — Insulin dosing for fat and protein: is it time?](https://diabetesjournals.org/care/article/41/9/1818/36458)
 
+### Phase F — Sensibilité insuline post-exercice + intégration Whoop (mai 2026)
+Retour terrain Ethan : "Quand je cours à 18h et que je mange à 19h avec ma dose normale, je fais quasi systématiquement une hypo. L'app doit baisser le bolus après le sport."
+
+Effet "insulin sensitivity ↑" post-exercice (Riddell & Zaharieva 2017, UCLA, Frontiers Endocrinology 2022) :
+- Aérobie (running) → sensibilité augmentée pendant 12-24h
+- Réduction du bolus recommandée : -25% à -75% selon intensité
+- Pic à 1-2h post-séance, dégradation linéaire
+
+**F1 — Détection séance + ajustement bolus (sans Whoop, fonctionne tout de suite)**
+
+- **`lib/exercise-insulin-adjustment.ts`** : pure functions
+  - `estimateStrain(source, durationMin, glucoseDelta?)` : estimation 0-21 depuis durée + type + delta glycémique pendant la séance (chute glycémie = effort intense)
+  - `findMostRecentExercise(workouts, runningSessions, whoopStrainBySessionId?)` : trouve la séance la plus récente dans les 24h
+  - `computeExerciseAdjustment(exercise, nowMs)` : applique le mapping strain → réduction + décroissance temporelle
+- **Mapping strain → réduction max** (5 brackets, scientifiquement calibrés) :
+
+| Strain | Type effort | Réduction max | Window |
+|---|---|---|---|
+| <6 | Récup | 0% | — |
+| 6-9 | Cardio léger | 15% | 6h |
+| 10-13 | Cardio modéré (45-60min) | 25% | 12h |
+| 14-17 | Tempo/intervals/longue | 40% | 18h |
+| 18+ | Très intense | 50% | 24h |
+
+- **Décroissance dans la fenêtre** : 100% (0-2h) → 75% (2-6h) → 50% (6-12h) → 25% (12-24h) → 0% (>window)
+- **Intégration `calculateBolus`** : nouveau paramètre `exerciseAdjustmentPct`. Applique sur `carbBolus + correctionBolus` (PAS sur fpuBolus différé qui reste critique pour FPU). Reasoning explicite "Sensibilité insuline ↑ : tu as fait du sport récemment → réduction de X% sur le bolus".
+- **UI encadré "Sensibilité ↑"** dans `/diabete` (au-dessus des inputs du calculateur) : tone success, icône Footprints, info "Running il y a 1h20 · strain estimé 14/21 · fenêtre 18h (75% de l'effet actif)". Badge "Whoop" si données Whoop, sinon mention "estimé".
+
+**F2 — Intégration Whoop OAuth (strain réel)**
+
+- **Module serveur `lib/whoop/`** :
+  - `store.ts` (server-only) : tokens dans Vercel KV (`whoop:tokens`), snapshot caché 5min (`whoop:snapshot`)
+  - `client.ts` (server-only) : `buildAuthUrl`, `exchangeCodeForTokens`, `refreshAccessToken`, `getValidAccessToken` (auto-refresh), fetchers typés pour `/v2/cycle`, `/v2/recovery`, `/v2/activity/sleep`, `/v2/activity/workout`
+  - Scopes : `read:profile read:cycles read:recovery read:sleep read:workout offline`
+- **API routes Next.js** :
+  - `GET /api/whoop/auth` → redirige vers OAuth Whoop avec cookie `state` httpOnly anti-CSRF
+  - `GET /api/whoop/callback` → exchange code/state, save tokens KV, redirige `/diabete/parametres?whoop=connected|error`
+  - `GET /api/whoop/sync` → fetch parallèle cycle/recovery/sleep/workout, snapshot caché 5min
+  - `POST /api/whoop/disconnect` → cleanup tokens KV
+  - `GET /api/whoop/status` → état (configured/connected/connectedAt/scope)
+- **Component `WhoopConnection.tsx`** dans `/diabete/parametres` :
+  - Wrappé `<Suspense>` car utilise `useSearchParams` (requis Next.js 16 strict)
+  - États : not_configured (instructions setup app Whoop) / kv_not_configured / not_connected (bouton Connecter) / connected (info + bouton Déconnecter)
+  - Toast après callback OAuth (connected ✅ / error)
+- **Hook `useWhoop`** : appelle `/api/whoop/sync` auto-refresh 5min + visibilitychange. Expose `{ connected, snapshot: { cycleStrain, recoveryScore, hrvMs, rhrBpm, sleepDurationMin, sleepPerformance, lastWorkout }, loading, error, refetch }`.
+- **Intégration `/diabete`** : si `whoop.connected && lastWorkout < 24h` → priorité au strain Whoop réel (`strainSource: 'whoop'`). Sinon → fallback estimation depuis nos données. Badge "Whoop" affiché dans l'encadré quand strain Whoop utilisé.
+
+### 🔧 Setup Whoop pour Ethan (à faire 1 fois)
+
+Pour activer F2 en prod :
+1. **Créer une app sur [developer.whoop.com](https://developer.whoop.com)** (compte gratuit)
+   - Redirect URI : `https://apex-coach-dusky.vercel.app/api/whoop/callback`
+   - Scopes : `read:profile read:cycles read:recovery read:sleep read:workout offline`
+2. **Récupérer Client ID + Client Secret** dans le dashboard
+3. **Ajouter sur Vercel** (env vars, non-Sensitive pour pouvoir les copier) :
+   - `WHOOP_CLIENT_ID` = ton client id
+   - `WHOOP_CLIENT_SECRET` = ton client secret
+   - `WHOOP_REDIRECT_URI` = `https://apex-coach-dusky.vercel.app/api/whoop/callback` (optionnel, auto-déduit en prod)
+4. **Re-deploy** (`npx vercel deploy --prod --yes`)
+5. **Aller sur `/diabete/parametres`** → bouton "Connecter Whoop" → OAuth flow → c'est branché
+
+Tant que les env vars ne sont pas configurées, la section Whoop affiche un message d'instructions claires. F1 (détection sans Whoop) fonctionne en parallèle.
+
+**Sources scientifiques** :
+- [Riddell & Zaharieva 2017 — Insulin Management Strategies for Exercise in Diabetes](https://mriddell.lab.yorku.ca/files/2017/09/Zaharieva-Riddell-Insulin-management-strategies.pdf)
+- [Frontiers in Endocrinology 2022 — Exercise timing implications T1D](https://www.frontiersin.org/journals/endocrinology/articles/10.3389/fendo.2022.1021800/full)
+- [UCLA Health — T1D Exercise Guidelines](https://www.uclahealth.org/medical-services/endocrinology/diabetes/type-1-diabetes/exercise-guidelines)
+- [Whoop Developer API](https://developer.whoop.com/api/)
+
 ### Phase A — Running tracker GPS live (mai 2026)
 Démarrage du module **"vrai Strava"** pour le running. Phase A = MVP tracking GPS sans carte (carte = Phase B prévue ensuite). Killer feature unique vs Strava : intégration native avec la glycémie live FreeStyle Libre + corrélation sport-glucose déjà existante.
 

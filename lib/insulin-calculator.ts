@@ -113,6 +113,11 @@ export function calculateBolus(
   /** Phase 11 (calibrage mai 2026) — profil glycémique du tag repas pour
    *  désactiver le split sur glucides rapides (crêpes, snack sucré, etc.). */
   glycemicProfile?: 'fast' | 'medium' | 'slow',
+  /** Phase F (mai 2026) — réduction insuline post-exercice (0-50%).
+   *  Calculée par computeExerciseAdjustment() depuis strain + heures écoulées.
+   *  Appliquée sur carbBolus + correctionBolus (PAS sur fpuBolus différé,
+   *  qui reste critique pour la couverture FPU 2-3h plus tard). */
+  exerciseAdjustmentPct?: number,
 ): BolusResult {
   const config = configOverride || DIABETES_CONFIG;
   const ratio = getRatioForMeal(config, mealTime);
@@ -235,6 +240,26 @@ export function calculateBolus(
     } else if (workoutType === 'muscu') {
       reasoning.push(`Muscu prévue: pas de réduction car la muscu fait MONTER la glycémie (+45 mg/dL en moyenne). Prévoir correction post-séance si >180.`);
     }
+  }
+
+  // ─── Phase F — Réduction post-exercice (insulin sensitivity ↑) ──────
+  // Appliquée sur carbBolus + correctionBolus (pas sur fpuBolus différé
+  // ni trendBolus). L'effet "insulin sensitivity post-exercise" dure
+  // 12-24h selon l'intensité (Riddell & Zaharieva 2017).
+  //
+  // ⚠️ Cumulé avec la réduction pre-workout : si l'utilisateur a couru
+  // il y a 1h ET prévoit un running dans 30min, les 2 réductions
+  // s'appliquent (effet protecteur anti-hypo).
+  if (exerciseAdjustmentPct !== undefined && exerciseAdjustmentPct > 0) {
+    const factor = 1 - Math.min(50, exerciseAdjustmentPct) / 100;
+    const carbBefore = carbBolus;
+    const corrBefore = correctionBolus;
+    carbBolus *= factor;
+    correctionBolus *= factor;
+    adjustments.push(`Sensibilité ↑ post-sport : -${exerciseAdjustmentPct}%`);
+    reasoning.push(
+      `Sensibilité insuline ↑ : tu as fait du sport récemment → réduction de ${exerciseAdjustmentPct}% sur le bolus (${carbBefore.toFixed(1).replace(".", ",")}U → ${carbBolus.toFixed(1).replace(".", ",")}U glucides${corrBefore > 0 ? `, ${corrBefore.toFixed(1).replace(".", ",")}U → ${correctionBolus.toFixed(1).replace(".", ",")}U correction` : ""}).`
+    );
   }
 
   // Stylo Novorapid d'Ethan = pas de demi-unités. On arrondit au-dessus

@@ -29,6 +29,12 @@ import {
 } from "@/lib/meal-tags";
 import { getMealTypeHistory, getAvgMacrosForTag, type ArchivePoint } from "@/lib/meal-analytics";
 import { openYazio } from "@/lib/external-apps";
+import {
+  findMostRecentExercise,
+  computeExerciseAdjustment,
+  type RecentExercise,
+} from "@/lib/exercise-insulin-adjustment";
+import { useWhoop } from "@/hooks/useWhoop";
 import { usePatternDetection } from "@/hooks/usePatternDetection";
 import type { DetectedPattern, PatternSeverity } from "@/lib/glucose-archive/pattern-engine";
 import {
@@ -278,6 +284,49 @@ export default function DiabetePage() {
     return candidates[0] ?? null;
   }, [insulinLogs, nowTick]);
 
+  // Phase F2 — Hook Whoop (strain Whoop prime sur l'estimation interne)
+  const whoop = useWhoop();
+
+  // Phase F — Détection séance récente + ajustement post-exercice
+  // Si Whoop est connecté ET a un workout dans les 24h, on utilise le
+  // strain Whoop directement. Sinon, on estime depuis nos données.
+  const exerciseAdjustment = useMemo(() => {
+    // Cas 1 : strain Whoop dispo (last workout < 24h)
+    if (whoop.connected && whoop.snapshot?.lastWorkout) {
+      const lw = whoop.snapshot.lastWorkout;
+      const endedAtMs = new Date(lw.endedAt).getTime();
+      if (!Number.isNaN(endedAtMs) && nowTick - endedAtMs < 24 * 3_600_000) {
+        const durationMin = Math.round(
+          (endedAtMs - new Date(lw.startedAt).getTime()) / 60_000,
+        );
+        const source: "running" | "muscu" =
+          lw.sport?.toLowerCase().includes("run") ? "running" : "muscu";
+        const whoopExercise: RecentExercise = {
+          source,
+          endedAtMs,
+          durationMin,
+          strain: lw.strain,
+          strainSource: "whoop",
+        };
+        return computeExerciseAdjustment(whoopExercise, nowTick);
+      }
+    }
+    // Cas 2 : fallback estimation depuis nos données
+    const recent = findMostRecentExercise(
+      completedWorkouts.map((w) => ({ id: w.id, date: w.date, duration: w.duration ?? 60 })),
+      completedRunningSessions.map((r) => ({
+        id: r.id,
+        date: r.date,
+        actualDuration: r.actualDuration ?? 45,
+        glucoseCheckpoints: r.glucoseCheckpoints,
+        gpsPoints: r.gpsPoints?.map((p) => ({ ...p, speed: null })),
+      })),
+      undefined,
+      nowTick,
+    );
+    return computeExerciseAdjustment(recent, nowTick);
+  }, [completedWorkouts, completedRunningSessions, nowTick, whoop.connected, whoop.snapshot]);
+
   const bolusResult = useMemo(
     () =>
       calculateBolus(
@@ -293,6 +342,7 @@ export default function DiabetePage() {
         proteinGrams,
         trendArrow,
         getGlycemicProfile(mealTag),
+        exerciseAdjustment?.reductionPct,
       ),
     [
       carbsGrams,
@@ -307,6 +357,7 @@ export default function DiabetePage() {
       proteinGrams,
       trendArrow,
       mealTag,
+      exerciseAdjustment,
     ]
   );
 
@@ -1086,6 +1137,30 @@ export default function DiabetePage() {
           <Calculator className="w-5 h-5 text-diabete" />
           <h2 className="text-lg font-semibold text-text-primary">Calculateur de bolus</h2>
         </div>
+
+        {/* Phase F — Encadré ajustement post-exercice (insulin sensitivity ↑) */}
+        {exerciseAdjustment && (
+          <div className="rounded-2xl bg-success/10 border border-success/30 p-3 mb-5 flex items-start gap-2">
+            <Footprints className="w-4 h-4 text-success shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-success leading-snug">
+                Sensibilité insuline ↑ — bolus réduit de {exerciseAdjustment.reductionPct}%
+              </p>
+              <p className="text-[10px] text-text-secondary mt-1 leading-snug">
+                {exerciseAdjustment.source === "running" ? "Running" : "Muscu"} il y a{" "}
+                <span className="num">{exerciseAdjustment.hoursAgo.toFixed(1).replace(".", ",")}h</span>
+                {" · "}
+                strain {exerciseAdjustment.strainSource === "whoop" ? "" : "estimé "}
+                <span className="num font-semibold">{exerciseAdjustment.strain.toFixed(0)}</span>/21
+                {exerciseAdjustment.strainSource === "whoop" && (
+                  <span className="ml-1 text-[9px] uppercase tracking-wide text-success/80 font-semibold">Whoop</span>
+                )}
+                {" · "}
+                fenêtre {exerciseAdjustment.windowHours}h ({exerciseAdjustment.decayPct}% de l&apos;effet actif)
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Inputs */}
         <div className="grid grid-cols-2 gap-3 mb-3">

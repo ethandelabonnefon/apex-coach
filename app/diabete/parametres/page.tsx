@@ -6,6 +6,7 @@ import { useStore } from "@/lib/store";
 import { DIABETES_CONFIG } from "@/lib/constants";
 import type { InsulinRatio } from "@/types";
 import { Badge } from "@/components/ui/Badge";
+import WhoopConnection from "@/components/whoop/WhoopConnection";
 import {
   ArrowLeft,
   Check,
@@ -744,6 +745,9 @@ export default function DiabeteParametresPage() {
           </button>
         </div>
       </section>
+
+      {/* ── Connexion Whoop (Phase F2) ── */}
+      <WhoopConnection />
 
       {/* ── Patterns connus ── */}
       <section className="surface-1 rounded-3xl p-5 sm:p-6">
