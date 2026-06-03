@@ -36,6 +36,7 @@ import {
   type RecentExercise,
 } from "@/lib/exercise-insulin-adjustment";
 import { useWhoop } from "@/hooks/useWhoop";
+import BedtimeAdvisor from "@/components/diabete/BedtimeAdvisor";
 import { usePatternDetection } from "@/hooks/usePatternDetection";
 import type { DetectedPattern, PatternSeverity } from "@/lib/glucose-archive/pattern-engine";
 import {
@@ -716,6 +717,85 @@ export default function DiabetePage() {
     enrichedSportSessions,
   ]);
 
+  // ─── Phase G — Bedtime Advisor inputs ────────────────
+  // Compile tous les paramètres pour le conseiller du soir.
+  // Visible uniquement entre 20h et 2h du matin (heure d'utilisation
+  // typique avant coucher).
+  const isEveningHours = useMemo(() => {
+    const h = new Date(nowTick).getHours();
+    return h >= 20 || h < 2;
+  }, [nowTick]);
+
+  const bedtimeInput = useMemo(() => {
+    const refGlucose = liveGlucose?.value ?? currentGlucose;
+    const refTrend = liveGlucose ? trendStringToNumber(liveGlucose.trend) : trendArrow;
+    // Dernier repas significatif depuis les insulinLogs (carbs > 0)
+    const lastMeal = insulinLogs
+      .filter((log) => log.carbsGrams > 0 && log.mealType !== "correction")
+      .map((log) => {
+        const injectedAt = new Date(log.injectedAt).getTime();
+        return { ...log, injectedAt, hoursAgo: (nowTick - injectedAt) / 3_600_000 };
+      })
+      .sort((a, b) => b.injectedAt - a.injectedAt)[0];
+    const lastMealFpu = lastMeal?.fatGrams && lastMeal?.proteinGrams
+      ? (lastMeal.fatGrams * 9 + lastMeal.proteinGrams * 4) / 100
+      : 0;
+    // Split en attente
+    const upcomingSplit = splitDoseReminders
+      .filter((r) => r.status === "pending")
+      .map((r) => ({ ...r, minutesUntil: Math.round((new Date(r.triggerAt).getTime() - nowTick) / 60000) }))
+      .filter((r) => r.minutesUntil >= 0)
+      .sort((a, b) => a.minutesUntil - b.minutesUntil)[0];
+    return {
+      currentGlucose: refGlucose,
+      trendArrow: refTrend,
+      iobUnits: iob.totalIOB,
+      isfMgPerU: diabetesConfig.insulinSensitivityFactor,
+      insulinActiveMinutes: diabetesConfig.insulinActiveDuration,
+      targetGlucose: diabetesConfig.targetGlucose,
+      hoursUntilWakeup: 7,
+      lastMealHoursAgo: lastMeal?.hoursAgo,
+      lastMealFpu,
+      lastMealCarbs: lastMeal?.carbsGrams,
+      exerciseAdjustmentPct: exerciseAdjustment?.reductionPct,
+      exerciseSource: exerciseAdjustment?.source as 'running' | 'muscu' | 'cardio-other' | undefined,
+      exerciseHoursAgo: exerciseAdjustment?.hoursAgo,
+      pendingSplitUnits: upcomingSplit?.units,
+      pendingSplitMinutesUntil: upcomingSplit?.minutesUntil,
+      nowMs: nowTick,
+    };
+  }, [
+    liveGlucose,
+    currentGlucose,
+    trendArrow,
+    insulinLogs,
+    iob.totalIOB,
+    diabetesConfig,
+    exerciseAdjustment,
+    splitDoseReminders,
+    nowTick,
+  ]);
+
+  function handleBedtimeCorrection(units: number, notes: string) {
+    if (units <= 0) return;
+    addInsulinLog({
+      id: crypto.randomUUID(),
+      units,
+      insulinType: profile.insulinRapid,
+      mealType: "correction",
+      carbsGrams: 0,
+      glucoseBefore: liveGlucose?.value ?? currentGlucose,
+      notes,
+      injectedAt: new Date(),
+    });
+  }
+
+  function handleBedtimeSnack(_carbs: number) {
+    // Pour l'instant on ne logge pas les collations dans insulinLogs
+    // (pas de structure dédiée). On pourrait étendre si besoin.
+    // L'utilisateur sait juste quoi manger via la reco.
+  }
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto stagger">
       {/* ── HERO : Glycémie + IOB ── */}
@@ -856,6 +936,15 @@ export default function DiabetePage() {
             })}
           </div>
         </section>
+      )}
+
+      {/* ── BEDTIME ADVISOR (Phase G — visible en soirée 20h-2h) ── */}
+      {isEveningHours && (
+        <BedtimeAdvisor
+          input={bedtimeInput}
+          onLogCorrection={handleBedtimeCorrection}
+          onLogSnack={handleBedtimeSnack}
+        />
       )}
 
       {/* ── BRIEFING PRÉ-SPORT (advisor indépendant) ── */}

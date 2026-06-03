@@ -960,6 +960,54 @@ Retour terrain Ethan : "Hier muscu courte, l'app m'a réduit le bolus de 15% et 
 - [Yardley et al. Diabetes Care 2012 — Performing Resistance Exercise Before Versus After Aerobic Exercise on Glycemia](https://pmc.ncbi.nlm.nih.gov/articles/PMC3308306/)
 - [Resistance Exercise in Type 1 Diabetes (Canadian Journal of Diabetes)](https://www.canadianjournalofdiabetes.com/article/S1499-2671(13)00851-4/abstract)
 
+### Phase G — Bedtime Advisor : conseiller du coucher T1D (juin 2026)
+Demande Ethan : "Il est 23h, tu es encore un chouia haut, il reste tant d'unités actives, il sait combien tu as mangé, il sait ce que tu as fait comme sport ou tu n'as pas fait et il va dire : là je te conseille de refaire 1-2U comme ça tu seras à 110 toute la nuit."
+
+L'idée originale est devenue une killer feature unique : un advisor du soir qui combine **TOUT le contexte** pour prédire la glycémie nocturne et recommander une action.
+
+- **Pure function `computeBedtimeAdvice()`** (`lib/bedtime-advisor.ts`) :
+  - Inputs : glycémie actuelle + trend Libre, IOB total, ISF, durée action insuline, cible glycémie, dernier repas (heures, FPU, carbs), sport (% ajustement, source, heures), split en attente, heure actuelle
+  - Outputs : prédictions à **T+2h / T+4h / Réveil** (~7h), niveau de risque (safe/caution-low/caution-high/risk-low/risk-high/iob-warning), recommandation conditionnelle
+
+- **Modèle de prédiction** (6 effets cumulés) :
+  1. **Trend Libre court terme** : velocity slide rule (cap 30min)
+  2. **IOB drop** : linéaire sur 195min, cap 60% potentiel (cohérent avec briefing pré-sport)
+  3. **Split dose en attente** : drop futur quand le split sera déclenché
+  4. **FPU restant du repas** : si FPU ≥ 1 et < 5h post-repas → montée +3 mg/dL/h × FPU
+  5. **Sport (sensibilité ↑)** : amplifie l'effet IOB de `reductionPct × 0.4`
+  6. **Dawn phenomenon** : +15 à +40 mg/dL entre 4h et 8h selon l'heure exacte
+
+- **6 types de recommandations** :
+  - `eat-carbs` : "Mange Xg de glucides avant de te coucher" (avec bouton "Logger Xg")
+  - `correction-bolus` : "Fais XU de correction maintenant" — plafonné à **2U max la nuit** (garde-fou anti-hypo brutale)
+  - `wait-iob` : "Attends, X U sont encore actives" (anti-stacking si IOB > 0.5)
+  - `monitor` : "Vérifie dans 2h" (cas border-line)
+  - `all-good` : "Va te coucher, rien à ajuster"
+  - `reduce-split` : "Réduis la 2e dose" (si split avant nuit risque hypo)
+
+- **Composant `BedtimeAdvisor.tsx`** (`components/diabete/`) :
+  - Section dédiée sur `/diabete` qui **n'apparaît qu'entre 20h et 2h** (`isEveningHours`)
+  - Header "Briefing nuit" avec icône Moon + chevron de collapse
+  - Recommandation hero coloré selon tone (success/warning/error/info) avec bouton d'action direct ("Logger 2U", "Logger 10g")
+  - 3 mini-tuiles prédictions (Moon icon T+2h/T+4h, Sunrise icon Réveil) avec valeur + heure absolue, colorées par zone glycémique
+  - Détail collapsable avec breakdown des effets (IOB / FPU / Split / Sport / Trend / Dawn) pour transparence
+  - Bouton "Logger XU" relie directement à `addInsulinLog` (mealType: "correction")
+
+- **Cas typiques validés mentalement** :
+  - 23h, 145 mg/dL, IOB 0.5U, dîner pâtes il y a 2h (FPU 3) → prédiction réveil ~115 mg/dL → "Va te coucher" ✅
+  - 23h, 95 ↘, IOB 1.5U, running il y a 4h → réveil prédit ~70 mg/dL → "Mange 15g de glucides" ✅
+  - 23h, 195 →, IOB 0U, repas Pizza il y a 3h → réveil ~165 → "Fais 1U correction" (plafonné 2U) ✅
+  - 23h, 175 →, IOB 2.5U → "Attends, 2.5U IOB en cours, surveille dans 2h" (anti-stacking)
+
+- **Garde-fous T1D** :
+  - Correction nocturne max **2U** (jamais plus pour éviter hypo brutale)
+  - Cible nocturne plus large : 90-160 (vs 80-180 diurne)
+  - Si IOB > 0.5U → on bloque les recommandations de correction (anti-stacking)
+  - Floor glycémie prédite à 40 mg/dL (réalisme physiologique)
+  - Décroissance IOB plafonnée à 60% du potentiel théorique
+
+**Le killer use case** : la nuit n'est plus une boîte noire. Tu sais avant de dormir si tu vas hyper, hypo ou rester en cible — et l'app te dit quoi faire pour atterrir à la bonne valeur au réveil. Plus de stress du coucher.
+
 ### Phase A — Running tracker GPS live (mai 2026)
 Démarrage du module **"vrai Strava"** pour le running. Phase A = MVP tracking GPS sans carte (carte = Phase B prévue ensuite). Killer feature unique vs Strava : intégration native avec la glycémie live FreeStyle Libre + corrélation sport-glucose déjà existante.
 
