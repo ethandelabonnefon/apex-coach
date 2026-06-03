@@ -908,6 +908,58 @@ L'app expose donc maintenant **toutes les données Whoop** récupérées par F2 
 - Recovery, Strain, HRV, RHR, Sleep duration, Sleep performance, Last workout (avec sport, strain, durée).
 - Utilisées **2 fois** : pour calculer la réduction insuline post-exercice (logique métier) ET pour informer l'utilisateur (UI).
 
+### Phase F2 fix critique — Différenciation muscu vs cardio (juin 2026)
+Retour terrain Ethan : "Hier muscu courte, l'app m'a réduit le bolus de 15% et j'ai été en hyper. La muscu n'a pas le même effet que le running sur la glycémie."
+
+**Validation scientifique** (Yardley et al., Diabetes Care 2013) :
+- Sensibilité insuline mesurée par clamp euglycémique : **inchangée à 12h ET 36h après résistance**
+- Vs marquée augmentée après cardio aérobie
+- Catécholamines (adrénaline) + glycogénolyse hépatique pendant la muscu → glycémie souvent stable voire en hausse
+- "Resistance exercise is associated with a lower risk of hypoglycemia"
+
+**Fix** (`lib/exercise-insulin-adjustment.ts`) :
+
+1. **Nouveau type `ExerciseSource`** étendu : `"running" | "muscu" | "cardio-other"` (vélo, swim, etc. = cardio-other)
+
+2. **Helper `classifySport(sportName)`** : mapping intelligent depuis le `sport_name` Whoop
+   - "Running", "Trail Running", "Jogging" → `running`
+   - "Weightlifting", "Strength", "Powerlifting", "CrossFit", "Functional Fitness", "Hyrox" → `muscu`
+   - "Cycling", "Swimming", "Rowing", "Elliptical", "HIIT", "Cardio" → `cardio-other`
+   - "Yoga", "Pilates", "Stretching" → `muscu` (effet glycémique minimal)
+   - Fallback : `cardio-other` (plus prudent anti-hypo)
+
+3. **Helper `getSportFactor(source, durationMin, strain)`** — multiplicateur appliqué au calcul de réduction :
+   - **`running` / `cardio-other`** : 1.0 (effet plein, mapping strain → réduction direct)
+   - **`muscu` < 45min** : **0.1** (quasi nul, anti-hypo négligeable)
+   - **`muscu` 45-75min standard** : **0.25** (effet limité)
+   - **`muscu` > 75min OU strain ≥ 16** : **0.5** (effet modéré, séances type CrossFit/HIIT muscu où il y a composante cardio)
+
+4. **`ExerciseAdjustment` étendu** : expose désormais `source`, `durationMin`, `sportFactor` pour transparence UI
+
+5. **Formule finale** : `reductionPct = bracket.maxReductionPct × decay × sportFactor`
+
+**UI enrichie** (`/diabete`) :
+- Encadré tone **warning** (orange) au lieu de **success** (vert) si `source === "muscu"` → l'utilisateur voit visuellement que c'est un cas différent
+- Icône `Dumbbell` pour muscu, `Footprints` pour running/cardio
+- Mention durée : "Muscu (45min) il y a 1,2h · strain 12/21 [Whoop]"
+- Note explicative italique : "Muscu = effet glycémique moindre que cardio (Yardley 2013). Réduction limitée à X% de l'effet cardio."
+
+**Cas validés** :
+
+| Scénario | Avant (sans factor) | Après (avec factor) |
+|---|---|---|
+| Running 45min strain 12 à 1h | -25% | -25% ✅ (inchangé) |
+| **Muscu 45min strain 12 à 1h** | -25% ❌ → hyper Ethan | **-6%** ✅ |
+| Muscu 30min strain 9 à 30min | -15% ❌ | **-2%** (quasi 0) ✅ |
+| Muscu 90min strain 17 à 1h | -40% | -20% ✅ (effet modéré) |
+| Vélo 60min strain 12 à 2h | -25% | -25% ✅ (cardio-other = running) |
+| Yoga 60min strain 8 | -15% | -1% ✅ (muscu < 45min effectif) |
+
+**Sources scientifiques** :
+- [Yardley et al. Diabetes Care 2013 — Resistance Versus Aerobic Exercise: Acute effects on glycemia in type 1 diabetes](https://diabetesjournals.org/care/article/36/3/537/38023/Resistance-Versus-Aerobic-ExerciseAcute-effects-on)
+- [Yardley et al. Diabetes Care 2012 — Performing Resistance Exercise Before Versus After Aerobic Exercise on Glycemia](https://pmc.ncbi.nlm.nih.gov/articles/PMC3308306/)
+- [Resistance Exercise in Type 1 Diabetes (Canadian Journal of Diabetes)](https://www.canadianjournalofdiabetes.com/article/S1499-2671(13)00851-4/abstract)
+
 ### Phase A — Running tracker GPS live (mai 2026)
 Démarrage du module **"vrai Strava"** pour le running. Phase A = MVP tracking GPS sans carte (carte = Phase B prévue ensuite). Killer feature unique vs Strava : intégration native avec la glycémie live FreeStyle Libre + corrélation sport-glucose déjà existante.
 

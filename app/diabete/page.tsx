@@ -32,6 +32,7 @@ import { openYazio } from "@/lib/external-apps";
 import {
   findMostRecentExercise,
   computeExerciseAdjustment,
+  classifySport,
   type RecentExercise,
 } from "@/lib/exercise-insulin-adjustment";
 import { useWhoop } from "@/hooks/useWhoop";
@@ -299,10 +300,9 @@ export default function DiabetePage() {
         const durationMin = Math.round(
           (endedAtMs - new Date(lw.startedAt).getTime()) / 60_000,
         );
-        const source: "running" | "muscu" =
-          lw.sport?.toLowerCase().includes("run") ? "running" : "muscu";
+        // Classification fine du sport (Yardley 2013 : muscu ≠ cardio)
         const whoopExercise: RecentExercise = {
-          source,
+          source: classifySport(lw.sport),
           endedAtMs,
           durationMin,
           strain: lw.strain,
@@ -1139,28 +1139,44 @@ export default function DiabetePage() {
         </div>
 
         {/* Phase F — Encadré ajustement post-exercice (insulin sensitivity ↑) */}
-        {exerciseAdjustment && (
-          <div className="rounded-2xl bg-success/10 border border-success/30 p-3 mb-5 flex items-start gap-2">
-            <Footprints className="w-4 h-4 text-success shrink-0 mt-0.5" />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-success leading-snug">
-                Sensibilité insuline ↑ — bolus réduit de {exerciseAdjustment.reductionPct}%
-              </p>
-              <p className="text-[10px] text-text-secondary mt-1 leading-snug">
-                {exerciseAdjustment.source === "running" ? "Running" : "Muscu"} il y a{" "}
-                <span className="num">{exerciseAdjustment.hoursAgo.toFixed(1).replace(".", ",")}h</span>
-                {" · "}
-                strain {exerciseAdjustment.strainSource === "whoop" ? "" : "estimé "}
-                <span className="num font-semibold">{exerciseAdjustment.strain.toFixed(0)}</span>/21
-                {exerciseAdjustment.strainSource === "whoop" && (
-                  <span className="ml-1 text-[9px] uppercase tracking-wide text-success/80 font-semibold">Whoop</span>
+        {exerciseAdjustment && (() => {
+          const sportLabel =
+            exerciseAdjustment.source === "running" ? "Running"
+            : exerciseAdjustment.source === "cardio-other" ? "Cardio"
+            : "Muscu";
+          const isMuscu = exerciseAdjustment.source === "muscu";
+          // Pour la muscu, l'effet est moindre → tone "warning" plus discret
+          const toneBg = isMuscu ? "bg-warning/10" : "bg-success/10";
+          const toneBorder = isMuscu ? "border-warning/30" : "border-success/30";
+          const toneText = isMuscu ? "text-warning" : "text-success";
+          const Icon = exerciseAdjustment.source === "muscu" ? Dumbbell : Footprints;
+          return (
+            <div className={`rounded-2xl ${toneBg} border ${toneBorder} p-3 mb-5 flex items-start gap-2`}>
+              <Icon className={`w-4 h-4 ${toneText} shrink-0 mt-0.5`} />
+              <div className="min-w-0 flex-1">
+                <p className={`text-xs font-semibold ${toneText} leading-snug`}>
+                  Sensibilité insuline ↑ — bolus réduit de {exerciseAdjustment.reductionPct}%
+                </p>
+                <p className="text-[10px] text-text-secondary mt-1 leading-snug">
+                  {sportLabel} ({exerciseAdjustment.durationMin}min) il y a{" "}
+                  <span className="num">{exerciseAdjustment.hoursAgo.toFixed(1).replace(".", ",")}h</span>
+                  {" · "}
+                  strain {exerciseAdjustment.strainSource === "whoop" ? "" : "estimé "}
+                  <span className="num font-semibold">{exerciseAdjustment.strain.toFixed(0)}</span>/21
+                  {exerciseAdjustment.strainSource === "whoop" && (
+                    <span className={`ml-1 text-[9px] uppercase tracking-wide ${toneText} opacity-80 font-semibold`}>Whoop</span>
+                  )}
+                </p>
+                {isMuscu && (
+                  <p className="text-[10px] text-warning/80 mt-1 leading-snug italic">
+                    Muscu = effet glycémique moindre que cardio (Yardley 2013).
+                    Réduction limitée à {Math.round(exerciseAdjustment.sportFactor * 100)}% de l&apos;effet cardio.
+                  </p>
                 )}
-                {" · "}
-                fenêtre {exerciseAdjustment.windowHours}h ({exerciseAdjustment.decayPct}% de l&apos;effet actif)
-              </p>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Inputs */}
         <div className="grid grid-cols-2 gap-3 mb-3">
