@@ -796,6 +796,25 @@ export default function DiabetePage() {
     // L'utilisateur sait juste quoi manger via la reco.
   }
 
+  // Phase G fix juin 2026 — Ajuste ou supprime le split en attente le plus
+  // proche selon la recommandation du bedtime advisor.
+  function handleAdjustBedtimeSplit(newUnits: number) {
+    const now = Date.now();
+    const upcomingSplit = splitDoseReminders
+      .filter((r) => r.status === "pending")
+      .map((r) => ({ ...r, ms: new Date(r.triggerAt).getTime() }))
+      .filter((r) => r.ms >= now)
+      .sort((a, b) => a.ms - b.ms)[0];
+    if (!upcomingSplit) return;
+    if (newUnits <= 0) {
+      // Skip → on supprime le rappel
+      removeSplitDoseReminder(upcomingSplit.id);
+    } else {
+      // Réduire → on met à jour les units
+      updateSplitDoseReminder(upcomingSplit.id, { units: newUnits });
+    }
+  }
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto stagger">
       {/* ── HERO : Glycémie + IOB ── */}
@@ -944,6 +963,7 @@ export default function DiabetePage() {
           input={bedtimeInput}
           onLogCorrection={handleBedtimeCorrection}
           onLogSnack={handleBedtimeSnack}
+          onAdjustSplit={handleAdjustBedtimeSplit}
         />
       )}
 

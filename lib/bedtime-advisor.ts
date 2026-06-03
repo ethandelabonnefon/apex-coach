@@ -99,6 +99,20 @@ export interface BedtimeRecommendation {
     quantity: number;
     unit: 'g' | 'U';
   };
+  /**
+   * Phase G fix juin 2026 — Suggestion explicite sur le split dose en
+   * attente, si applicable. Donne à l'utilisateur la consigne combinée :
+   * glucides + ajustement split.
+   */
+  splitAdjustment?: {
+    type: 'skip' | 'reduce' | 'keep' | 'delay';
+    /** Units actuelles du split en attente (pour affichage). */
+    originalUnits: number;
+    /** Units suggérées après ajustement (0 = skip, sinon < original = reduce). */
+    suggestedUnits: number;
+    /** Texte explicatif court. */
+    detail: string;
+  };
 }
 
 export interface BedtimeAdvice {
@@ -368,6 +382,63 @@ export function computeBedtimeAdvice(input: BedtimeAdvisorInput): BedtimeAdvice 
   };
 }
 
+/**
+ * Calcule la suggestion d'ajustement du split dose en attente.
+ * Logique :
+ *   - Prédiction min < 70 ET split contribue significativement → SKIP
+ *   - Prédiction min 70-85 → RÉDUIRE de 50%
+ *   - Prédiction min 85-100 → KEEP mais avec warning
+ *   - Prédiction min > 100 OU pas d'effet significatif → KEEP normal
+ */
+function buildSplitAdjustment(
+  predictions: BedtimePrediction[],
+  input: BedtimeAdvisorInput,
+): BedtimeRecommendation['splitAdjustment'] | undefined {
+  if (!input.pendingSplitUnits || input.pendingSplitUnits <= 0) return undefined;
+  if (input.pendingSplitMinutesUntil === undefined) return undefined;
+  const minPred = Math.min(...predictions.map((p) => p.glucose));
+  const original = input.pendingSplitUnits;
+
+  // SKIP : prédiction min critique (< 70) → on annule le split
+  if (minPred < 70) {
+    return {
+      type: 'skip',
+      originalUnits: original,
+      suggestedUnits: 0,
+      detail: `Skip les ${original}U du split (sinon hypo aggravée). La couverture FPU sera incomplète mais c'est mieux qu'une hypo nocturne.`,
+    };
+  }
+
+  // REDUCE : prédiction limite (70-85)
+  if (minPred < 85) {
+    const reduced = Math.max(1, Math.floor(original / 2));
+    return {
+      type: 'reduce',
+      originalUnits: original,
+      suggestedUnits: reduced,
+      detail: `Réduis le split à ${reduced}U (au lieu de ${original}U). Couverture FPU partielle mais plus sûr.`,
+    };
+  }
+
+  // KEEP avec warning (85-100)
+  if (minPred < 100) {
+    return {
+      type: 'keep',
+      originalUnits: original,
+      suggestedUnits: original,
+      detail: `Fais quand même les ${original}U (couverture FPU nécessaire) mais surveille à 2h post-split.`,
+    };
+  }
+
+  // KEEP normal (>100)
+  return {
+    type: 'keep',
+    originalUnits: original,
+    suggestedUnits: original,
+    detail: `Fais les ${original}U normalement à l'heure prévue.`,
+  };
+}
+
 function buildRecommendation(
   predictions: BedtimePrediction[],
   input: BedtimeAdvisorInput,
@@ -376,6 +447,7 @@ function buildRecommendation(
   const minPred = Math.min(...predictions.map((p) => p.glucose));
   const maxPred = Math.max(...predictions.map((p) => p.glucose));
   const wakeupPred = predictions[predictions.length - 1].glucose;
+  const splitAdjustment = buildSplitAdjustment(predictions, input);
 
   // ─── Hypo prédite (< 70) ─────────────────────────────
   if (minPred < 70) {
@@ -385,6 +457,7 @@ function buildRecommendation(
       headline: `Mange ${carbsNeeded}g de glucides avant de te coucher`,
       detail: `Sans rien, ta glycémie tomberait à ~${minPred} mg/dL dans la nuit. ${carbsNeeded}g de glucides (1 jus de fruit + 1 biscotte / 3 sucres) te maintiendront en cible.`,
       action: { label: `${carbsNeeded}g`, quantity: carbsNeeded, unit: 'g' },
+      splitAdjustment,
     };
   }
 
@@ -395,6 +468,7 @@ function buildRecommendation(
       headline: `Mini-collation conseillée (~10g)`,
       detail: `Glycémie minimale prédite : ~${minPred} mg/dL. Une petite collation (1 sucre + verre d'eau ou 1 biscotte) sécurise la nuit sans risquer l'hyper.`,
       action: { label: '10g', quantity: 10, unit: 'g' },
+      splitAdjustment,
     };
   }
 
@@ -406,6 +480,7 @@ function buildRecommendation(
         type: 'wait-iob',
         headline: `Attends, ${input.iobUnits.toFixed(1).replace('.', ',')}U sont encore actives`,
         detail: `Pic prédit à ~${maxPred} mg/dL mais tu as déjà ${input.iobUnits.toFixed(1).replace('.', ',')}U d'IOB qui travaillent. Ne corrige pas maintenant. Surveille dans 2h, re-corrige si besoin.`,
+        splitAdjustment,
       };
     }
     // Sinon correction modérée (max 2U la nuit pour safety)
@@ -416,6 +491,7 @@ function buildRecommendation(
       headline: `Fais ${units}U de correction maintenant`,
       detail: `Sans rien, ta glycémie monterait à ~${maxPred} mg/dL. ${units}U te ramènera vers ${input.targetGlucose} d'ici quelques heures. (Plafonné à 2U max la nuit pour éviter une hypo brutale).`,
       action: { label: `${units}U`, quantity: units, unit: 'U' },
+      splitAdjustment,
     };
   }
 
@@ -426,6 +502,7 @@ function buildRecommendation(
         type: 'wait-iob',
         headline: `${input.iobUnits.toFixed(1).replace('.', ',')}U IOB en cours — surveille`,
         detail: `Pic prédit ~${maxPred} mg/dL mais ton IOB travaille encore. Ne corrige pas, vérifie la glycémie dans 2h.`,
+        splitAdjustment,
       };
     }
     return {
@@ -433,6 +510,7 @@ function buildRecommendation(
       headline: `1U de correction te placera dans la cible`,
       detail: `Sans correction, réveil à ~${wakeupPred} mg/dL. 1U te ramène autour de ${input.targetGlucose} pour un réveil propre.`,
       action: { label: '1U', quantity: 1, unit: 'U' },
+      splitAdjustment,
     };
   }
 
@@ -442,6 +520,7 @@ function buildRecommendation(
       type: 'monitor',
       headline: `Tout va bien — mais ${input.iobUnits.toFixed(1).replace('.', ',')}U IOB en cours`,
       detail: `Prédictions OK (${predictions.map((p) => `${p.label} ${p.glucose}`).join(' · ')}). Vérifie à 2h pour t'assurer que tu ne descends pas trop bas.`,
+      splitAdjustment,
     };
   }
 
@@ -450,5 +529,6 @@ function buildRecommendation(
     type: 'all-good',
     headline: 'Va te coucher, rien à ajuster',
     detail: `Prédictions : ${predictions.map((p) => `${p.label} ${p.glucose}`).join(' · ')} mg/dL. Cible nocturne (90-160) respectée toute la nuit.`,
+    splitAdjustment,
   };
 }

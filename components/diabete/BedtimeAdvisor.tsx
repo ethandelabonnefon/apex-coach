@@ -31,6 +31,9 @@ import {
   AlertTriangle,
   ChevronDown,
   Activity,
+  Clock,
+  X,
+  Minus,
 } from "lucide-react";
 
 interface BedtimeAdvisorProps {
@@ -39,6 +42,8 @@ interface BedtimeAdvisorProps {
   onLogCorrection?: (units: number, notes: string) => void;
   /** Callback pour logger une collation. */
   onLogSnack?: (carbs: number) => void;
+  /** Callback pour modifier les units d'un split en attente (0 = skip). */
+  onAdjustSplit?: (newUnits: number) => void;
 }
 
 function predictionColor(glucose: number): string {
@@ -59,6 +64,7 @@ export default function BedtimeAdvisor({
   input,
   onLogCorrection,
   onLogSnack,
+  onAdjustSplit,
 }: BedtimeAdvisorProps) {
   const [open, setOpen] = useState(true);
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -188,6 +194,43 @@ export default function BedtimeAdvisor({
               )}
             </div>
           </div>
+
+          {/* Suggestion explicite sur le split dose en attente */}
+          {advice.recommendation.splitAdjustment && (() => {
+            const sa = advice.recommendation.splitAdjustment;
+            const tone =
+              sa.type === "skip" ? "bg-error/10 border-error/30 text-error"
+              : sa.type === "reduce" ? "bg-warning/10 border-warning/30 text-warning"
+              : "bg-info/10 border-info/30 text-info";
+            const Icon = sa.type === "skip" ? X : sa.type === "reduce" ? Minus : Clock;
+            const label =
+              sa.type === "skip" ? `Skip le split (au lieu de ${sa.originalUnits}U)`
+              : sa.type === "reduce" ? `Réduire à ${sa.suggestedUnits}U (au lieu de ${sa.originalUnits}U)`
+              : `Garder ${sa.originalUnits}U comme prévu`;
+            return (
+              <div className={`rounded-xl border p-3 mb-3 flex items-start gap-2 ${tone}`}>
+                <Icon className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold leading-snug">
+                    Split dose en attente : {label}
+                  </p>
+                  <p className="text-[10px] text-text-secondary mt-1 leading-snug">
+                    {sa.detail}
+                  </p>
+                  {(sa.type === "skip" || sa.type === "reduce") && onAdjustSplit && (
+                    <button
+                      type="button"
+                      onClick={() => onAdjustSplit(sa.suggestedUnits)}
+                      className="mt-2 text-[10px] font-semibold bg-bg-tertiary border border-border-default hover:bg-bg-hover transition-colors px-3 py-1.5 rounded-md tap-scale inline-flex items-center gap-1"
+                    >
+                      <Icon className="w-3 h-3" />
+                      {sa.type === "skip" ? "Annuler le split" : `Réduire à ${sa.suggestedUnits}U`}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Prédictions */}
           <p className="label mb-2">Prédictions de la nuit</p>
