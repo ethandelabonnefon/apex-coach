@@ -108,12 +108,16 @@ export interface BedtimeAdvice {
   /** Breakdown des effets pour transparence UI. */
   breakdown: {
     iobDrop: number;
+    /** Effet montant des glucides résiduels du dernier repas (mg/dL). */
+    carbsRise: number;
     fpuRise: number;
     splitDrop: number;
     sportBoostDrop: number;
     trendShift: number;
     dawnBump: number;
   };
+  /** Flag : true si le repas est trop récent pour prédire fiablement. */
+  unreliableTooFresh: boolean;
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -137,6 +141,7 @@ function trendVelocity(arrow?: number): number {
 interface PredictionBreakdown {
   trendShift: number;
   iobDrop: number;
+  carbsRise: number;
   splitDrop: number;
   fpuRise: number;
   sportBoostDrop: number;
@@ -159,15 +164,55 @@ function predictGlucoseAt(
   // ─── 2. Effet IOB ────────────────────────────────────
   // L'IOB va continuer à baisser la glycémie sur les prochaines heures.
   // Modèle linéaire : à T0 on a iobUnits actives, à T+activeMinutes 0.
-  // Drop max théorique = iobUnits × ISF, mais on plafonne à 60% pour
-  // refléter les facteurs compensateurs (cf briefing pré-sport).
-  const PRACTICAL_IOB_CAP = 0.6;
+  // Drop max théorique = iobUnits × ISF, mais on plafonne (anti-irréalisme).
+  //
+  // ⚠️ FIX juin 2026 : le cap dépend du contexte. Si on vient de manger
+  // (< 2h), l'IOB est principalement là pour COUVRIR les glucides du
+  // repas, pas pour baisser la glycémie nette. On utilise donc un cap
+  // plus serré dans cette fenêtre.
+  const justAteRecently =
+    input.lastMealHoursAgo !== undefined && input.lastMealHoursAgo < 2;
+  const PRACTICAL_IOB_CAP = justAteRecently ? 0.3 : 0.5;
   const fractionConsumed = Math.min(
     PRACTICAL_IOB_CAP,
     (hoursFromNow * 60) / input.insulinActiveMinutes,
   );
   const iobDrop = input.iobUnits * input.isfMgPerU * fractionConsumed;
   glucose -= iobDrop;
+
+  // ─── 2bis. Glucides résiduels du dernier repas (effet montant) ─
+  // FIX juin 2026 : les glucides du dernier repas continuent d'être
+  // absorbés sur ~3h. Ils font MONTER la glycémie en parallèle de l'IOB
+  // qui descend. Sans ce contre-effet, on sur-estime massivement le drop
+  // net dans la fenêtre 0-3h post-repas.
+  //
+  // En théorie : si le bolus a été bien dosé, carbsRise ≈ iobDrop sur
+  // les premières heures → effet net = 0. Si sous-dosé : monte. Si
+  // sur-dosé : descend. La modélisation EXPLICITE des deux nous donne
+  // la prédiction nette correcte.
+  //
+  // Modèle simple : absorption linéaire sur 3h. Effet ~3.5 mg/dL/g de
+  // glucides absorbé, étalé sur la fenêtre restante d'absorption.
+  let carbsRise = 0;
+  if (
+    input.lastMealCarbs &&
+    input.lastMealCarbs > 0 &&
+    input.lastMealHoursAgo !== undefined &&
+    input.lastMealHoursAgo < 3
+  ) {
+    const absorptionWindow = 3;
+    const ratioAlreadyAbsorbed = Math.min(1, input.lastMealHoursAgo / absorptionWindow);
+    const residualCarbs = input.lastMealCarbs * (1 - ratioAlreadyAbsorbed);
+    const hoursAheadOfAbsorption = Math.max(
+      0,
+      Math.min(hoursFromNow, absorptionWindow - input.lastMealHoursAgo),
+    );
+    const remainingAbsorptionHours = Math.max(0.1, absorptionWindow - input.lastMealHoursAgo);
+    // 3.5 mg/dL par gramme étalé linéairement sur le reste d'absorption
+    const carbsRatePerHour = (residualCarbs * 3.5) / remainingAbsorptionHours;
+    carbsRise = carbsRatePerHour * hoursAheadOfAbsorption;
+    glucose += carbsRise;
+  }
 
   // ─── 3. Split dose en attente : effet futur ──────────
   let splitDrop = 0;
@@ -234,6 +279,7 @@ function predictGlucoseAt(
   return {
     trendShift: Math.round(trendShift),
     iobDrop: Math.round(iobDrop),
+    carbsRise: Math.round(carbsRise),
     splitDrop: Math.round(splitDrop),
     fpuRise: Math.round(fpuRise),
     sportBoostDrop: Math.round(sportBoostDrop),
@@ -271,6 +317,7 @@ export function computeBedtimeAdvice(input: BedtimeAdvisorInput): BedtimeAdvice 
   const breakdown2h = predictGlucoseAt(2, input);
   const globalBreakdown = {
     iobDrop: breakdown2h.iobDrop,
+    carbsRise: breakdown2h.carbsRise,
     fpuRise: breakdown2h.fpuRise,
     splitDrop: breakdown2h.splitDrop,
     sportBoostDrop: breakdown2h.sportBoostDrop,
@@ -282,6 +329,14 @@ export function computeBedtimeAdvice(input: BedtimeAdvisorInput): BedtimeAdvice 
 
   const minPred = Math.min(...predictions.map((p) => p.glucose));
   const maxPred = Math.max(...predictions.map((p) => p.glucose));
+
+  // ─── Détection prédiction peu fiable ─────────────────
+  // Si on vient juste de manger (< 1h) ET qu'on a un IOB élevé, la
+  // dynamique glucides/insuline est encore très instable. La prédiction
+  // peut être fausse. On préfère le dire honnêtement.
+  const unreliableTooFresh =
+    (input.lastMealHoursAgo !== undefined && input.lastMealHoursAgo < 1 && input.iobUnits > 2) ||
+    (input.iobUnits > 4 && input.lastMealHoursAgo !== undefined && input.lastMealHoursAgo < 1.5);
 
   // ─── Évaluation risque ───────────────────────────────
   let risk: BedtimeRisk = 'safe';
@@ -296,13 +351,20 @@ export function computeBedtimeAdvice(input: BedtimeAdvisorInput): BedtimeAdvice 
   }
 
   // ─── Recommandation ──────────────────────────────────
-  const reco = buildRecommendation(predictions, input, risk);
+  const reco = unreliableTooFresh
+    ? {
+        type: 'monitor' as const,
+        headline: 'Repas trop récent pour prédire fiablement',
+        detail: `Tu viens de manger (il y a ${input.lastMealHoursAgo?.toFixed(1).replace('.', ',')}h) avec ${input.iobUnits.toFixed(1).replace('.', ',')}U d'IOB en cours. La dynamique glucides/insuline est encore instable. Reviens dans 1-2h pour une prédiction fiable.`,
+      }
+    : buildRecommendation(predictions, input, risk);
 
   return {
     predictions,
     risk,
     recommendation: reco,
     breakdown: globalBreakdown,
+    unreliableTooFresh,
   };
 }
 

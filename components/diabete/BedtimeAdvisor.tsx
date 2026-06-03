@@ -213,6 +213,13 @@ export default function BedtimeAdvisor({
                 value={`-${advice.breakdown.iobDrop} mg/dL`}
                 tone="info"
               />
+              {advice.breakdown.carbsRise > 0 && (
+                <BreakdownRow
+                  label="Glucides repas"
+                  value={`+${advice.breakdown.carbsRise} mg/dL`}
+                  tone="warning"
+                />
+              )}
               {advice.breakdown.fpuRise > 0 && (
                 <BreakdownRow
                   label="FPU restant"
