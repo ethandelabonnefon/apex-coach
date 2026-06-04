@@ -11,11 +11,12 @@
 import { useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { buildHypoFeedback, findPeak, estimatePersonalGRG } from "@/lib/hypo-resucrage";
-import { TrendingUp, Award, Sparkle, Trash2 } from "lucide-react";
+import { TrendingUp, Award, Sparkle, Trash2, ShieldAlert, GraduationCap } from "lucide-react";
 
 export default function HypoFeedback() {
   const hypoEvents = useStore((s) => s.hypoEvents);
   const removeHypoEvent = useStore((s) => s.removeHypoEvent);
+  const updateHypoEvent = useStore((s) => s.updateHypoEvent);
 
   const recentEvents = useMemo(() => {
     const cutoff = Date.now() - 24 * 3_600_000;
@@ -65,19 +66,30 @@ export default function HypoFeedback() {
               ? "bg-error/10 border-error/30 text-error"
               : "bg-info/10 border-info/30 text-info";
           const peak = event.peakGlucose ?? findPeak(event);
+          const isOverBolus = event.context === "over-bolus";
+          const isExcluded = event.excludeFromLearning === true;
           return (
             <div
               key={event.id}
               className={`rounded-xl border p-3 ${tone}`}
             >
               <div className="flex items-start justify-between gap-2 mb-1">
-                <div className="flex items-center gap-2 min-w-0 flex-1">
+                <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
                   <span className="text-base shrink-0" aria-hidden>
                     {feedback.emoji}
                   </span>
-                  <p className="text-xs font-semibold leading-snug truncate">
+                  <p className="text-xs font-semibold leading-snug">
                     {feedback.headline}
                   </p>
+                  {isOverBolus && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full bg-warning/15 border border-warning/30 px-1.5 py-0.5 text-[9px] font-semibold text-warning"
+                      title="Hypo due à un over-bolus probable. Exclue du calcul du GRG."
+                    >
+                      <ShieldAlert className="w-2.5 h-2.5" />
+                      Over-bolus
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <span className="num text-[10px] text-text-tertiary">
@@ -131,6 +143,31 @@ export default function HypoFeedback() {
                   </span>
                 )}
               </div>
+
+              {/* Toggle apprentissage GRG (override manuel) */}
+              {event.assessment !== "pending" && (
+                <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-current/10">
+                  <div className="flex items-center gap-1.5 text-[9px] min-w-0 flex-1">
+                    <GraduationCap className="w-3 h-3 shrink-0" />
+                    <span className="text-text-tertiary leading-snug">
+                      {isExcluded
+                        ? "Exclue du GRG perso"
+                        : "Apprend ton GRG perso"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateHypoEvent(event.id, {
+                        excludeFromLearning: !isExcluded,
+                      })
+                    }
+                    className="text-[9px] font-semibold underline opacity-80 hover:opacity-100 tap-scale shrink-0"
+                  >
+                    {isExcluded ? "Inclure" : "Exclure"}
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}

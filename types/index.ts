@@ -194,6 +194,22 @@ export interface HypoEvent {
    */
   assessment: 'pending' | 'just-right' | 'too-much' | 'too-little' | 'unknown';
   notes?: string;
+  // ── Contexte au moment de la détection (anti-pollution GRG) ──────────
+  /** IOB en U au moment du re-sucrage. Optional pour compat anciennes hypos. */
+  iobAtDetection?: number;
+  /** Minutes depuis le dernier bolus repas (null si > 6h ou aucun). */
+  lastBolusMinutesAgo?: number | null;
+  /** Units du dernier bolus repas (pour contexte). */
+  lastBolusUnits?: number | null;
+  /** Contexte auto-classé :
+   *  - 'normal'       : hypo "vraie" (IOB faible, pas de bolus récent), utilisée pour le GRG
+   *  - 'over-bolus'   : IOB ou bolus récent suspect → exclue par défaut du GRG
+   *  - 'post-exercise': hypo post-sport (sensibilité accrue) → exclue par défaut
+   *  - 'unknown'      : pas d'info, inclus par défaut
+   */
+  context?: 'normal' | 'over-bolus' | 'post-exercise' | 'unknown';
+  /** Si true → exclu du calcul du GRG perso (auto ou choix utilisateur). */
+  excludeFromLearning?: boolean;
 }
 
 export interface Meal {

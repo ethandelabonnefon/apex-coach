@@ -903,6 +903,9 @@ export default function DiabetePage() {
         <HypoLogger
           currentGlucose={liveGlucose?.value ?? currentGlucose}
           trendArrow={trendStringToNumber(liveGlucose?.trend) ?? trendArrow}
+          iobUnits={iob.totalIOB}
+          lastBolusMinutesAgo={lastActiveInjection?.minutesAgo ?? null}
+          lastBolusUnits={lastActiveInjection?.log.units ?? null}
         />
       )}
 

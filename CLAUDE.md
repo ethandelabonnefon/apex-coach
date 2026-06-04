@@ -1065,6 +1065,21 @@ Module complet de gestion des hypoglycémies avec apprentissage automatique du G
 
 **Apprentissage continu** : à chaque hypo évaluée, le GRG perso se précise. Au bout de 3-7 hypos, la suggestion de carbs devient personnalisée et bien calibrée.
 
+**Anti-pollution GRG (over-bolus protection)** :
+Quand Ethan se re-sucre suite à un **over-bolus** (dose d'insuline trop élevée), les glucides consommés ne servent pas qu'à remonter la glycémie — ils luttent aussi contre l'IOB résiduel. Le ratio `(peak - initial) / carbs` est artificiellement faible et **fausse le GRG perso** vers le bas (ex: 45g pour +60 mg/dL → ratio 1.3 alors qu'en réalité le bolus mangeait 100 mg/dL en parallèle).
+
+- **HypoEvent étendu** : `iobAtDetection`, `lastBolusMinutesAgo`, `lastBolusUnits`, `context`, `excludeFromLearning`
+- **`classifyHypoContext({ iobUnits, lastBolusMinutesAgo })`** retourne `'over-bolus' | 'normal' | 'unknown'` :
+  - `IOB ≥ 1.5U` → over-bolus (insuline active > capacité standard d'une correction)
+  - `IOB ≥ 0.5U` ET `lastBolus < 90 min` → over-bolus (insuline qui tombe sur peu d'absorption)
+  - `IOB ≥ 0.8U` ET `lastBolus < 180 min` → over-bolus (repas non absorbé)
+  - Sinon → `normal`
+- **Filtre auto dans `estimatePersonalGRG`** : exclut tous les events avec `excludeFromLearning === true` OU `context === 'over-bolus'/'post-exercise'`
+- **UI HypoLogger** : si over-bolus détecté → banner orange avec explication ("Bolus repas il y a X min + Y.YU active → l'insuline tire, pas un cas classique") + checkbox "Inclure quand même dans l'apprentissage" (off par défaut)
+- **UI HypoFeedback** : badge orange "Over-bolus" sur les events tagués + toggle "Inclure / Exclure" manuel sur chaque hypo passée (override possible)
+
+Résultat : l'over-bolus n'empoisonne plus le GRG, mais reste loggé pour le suivi.
+
 **Sources scientifiques** :
 - ADA T1D Self-Management Education — règle classique "15-15"
 - GRG typique adulte T1D : 3-6 mg/dL/g, variable selon vitesse absorption, glycémie de départ, IOB en cours

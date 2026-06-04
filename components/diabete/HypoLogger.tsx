@@ -26,14 +26,16 @@ import { useStore } from "@/lib/store";
 import {
   estimatePersonalGRG,
   suggestCarbsForHypo,
+  classifyHypoContext,
+  explainHypoContext,
 } from "@/lib/hypo-resucrage";
 import {
   AlertTriangle,
   Apple,
   Plus,
   Minus,
-  TrendingUp,
   Sparkle,
+  ShieldAlert,
 } from "lucide-react";
 
 interface HypoLoggerProps {
@@ -41,20 +43,46 @@ interface HypoLoggerProps {
   currentGlucose: number;
   /** Trend numérique pour info contextuelle. */
   trendArrow?: number;
+  /** IOB en U au moment de l'hypo (pour anti-pollution GRG). */
+  iobUnits?: number;
+  /** Minutes depuis le dernier bolus actif (null si aucun). */
+  lastBolusMinutesAgo?: number | null;
+  /** Units du dernier bolus (pour contexte affichage). */
+  lastBolusUnits?: number | null;
 }
 
 const QUICK_CARBS = [8, 10, 15, 20, 30];
 
-export default function HypoLogger({ currentGlucose, trendArrow }: HypoLoggerProps) {
+export default function HypoLogger({
+  currentGlucose,
+  trendArrow,
+  iobUnits = 0,
+  lastBolusMinutesAgo = null,
+  lastBolusUnits = null,
+}: HypoLoggerProps) {
   const hypoEvents = useStore((s) => s.hypoEvents);
   const addHypoEvent = useStore((s) => s.addHypoEvent);
 
-  // GRG perso basé sur les hypos passées
+  // GRG perso basé sur les hypos passées (over-bolus exclus auto)
   const grg = useMemo(() => estimatePersonalGRG(hypoEvents), [hypoEvents]);
   const suggestion = useMemo(
     () => suggestCarbsForHypo(currentGlucose, grg),
     [currentGlucose, grg],
   );
+
+  // Classification du contexte courant (over-bolus ?)
+  const context = useMemo(
+    () =>
+      classifyHypoContext({
+        iobUnits,
+        lastBolusMinutesAgo,
+      }),
+    [iobUnits, lastBolusMinutesAgo],
+  );
+  const isOverBolus = context === "over-bolus";
+
+  // L'utilisateur peut forcer l'inclusion (override par défaut auto)
+  const [includeInLearning, setIncludeInLearning] = useState<boolean>(!isOverBolus);
 
   const [selectedCarbs, setSelectedCarbs] = useState<number>(suggestion.grams);
   const [logged, setLogged] = useState(false);
@@ -80,6 +108,12 @@ export default function HypoLogger({ currentGlucose, trendArrow }: HypoLoggerPro
       glucoseAt60min: null,
       peakGlucose: null,
       assessment: "pending",
+      // Contexte au moment de la détection
+      iobAtDetection: iobUnits,
+      lastBolusMinutesAgo,
+      lastBolusUnits,
+      context,
+      excludeFromLearning: !includeInLearning,
     });
     setLogged(true);
   }
@@ -137,7 +171,7 @@ export default function HypoLogger({ currentGlucose, trendArrow }: HypoLoggerPro
       </div>
 
       {/* Suggestion GRG */}
-      <div className="rounded-xl bg-bg-tertiary border border-border-subtle p-3 mb-4 flex items-start gap-2">
+      <div className="rounded-xl bg-bg-tertiary border border-border-subtle p-3 mb-3 flex items-start gap-2">
         <Sparkle className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-text-primary leading-snug">
@@ -155,6 +189,42 @@ export default function HypoLogger({ currentGlucose, trendArrow }: HypoLoggerPro
           )}
         </div>
       </div>
+
+      {/* Banner contexte over-bolus (anti-pollution GRG) */}
+      {isOverBolus && (
+        <div className="rounded-xl border border-warning/40 bg-warning/5 p-3 mb-3">
+          <div className="flex items-start gap-2">
+            <ShieldAlert className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-warning leading-snug">
+                Contexte détecté : correction d&apos;over-bolus
+              </p>
+              <p className="text-[10px] text-text-secondary mt-1 leading-snug">
+                {explainHypoContext(
+                  "over-bolus",
+                  iobUnits,
+                  lastBolusMinutesAgo,
+                )}
+              </p>
+              <p className="text-[10px] text-text-tertiary mt-1 leading-snug">
+                Par défaut on n&apos;apprend pas ton GRG sur cette hypo (elle
+                te donnerait un ratio faussé).
+              </p>
+            </div>
+          </div>
+          <label className="flex items-center gap-2 mt-2 pt-2 border-t border-warning/20 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeInLearning}
+              onChange={(e) => setIncludeInLearning(e.target.checked)}
+              className="w-3.5 h-3.5 accent-warning"
+            />
+            <span className="text-[10px] text-text-secondary leading-snug">
+              Inclure quand même dans l&apos;apprentissage du GRG
+            </span>
+          </label>
+        </div>
+      )}
 
       {/* Quick-chips */}
       <p className="label mb-2">Combien comptes-tu manger ?</p>

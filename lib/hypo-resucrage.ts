@@ -31,6 +31,102 @@ const MIN_CARBS = 8;
 const MAX_CARBS = 30;
 
 // ───────────────────────────────────────────────────────────────────────
+// Classification contexte d'une hypo (anti-pollution GRG)
+// ───────────────────────────────────────────────────────────────────────
+
+/**
+ * Seuils de détection "over-bolus" :
+ *  - Si IOB > 1.5U au moment de l'hypo → suspicion forte (insuline active >
+ *    capacité standard d'une correction)
+ *  - Si IOB > 0.8U ET bolus repas < 180 min → suspicion (le repas n'a pas
+ *    encore eu le temps d'être absorbé mais l'insuline est déjà active)
+ *  - Si IOB > 0.5U ET bolus < 90 min → suspicion forte (insuline en train
+ *    de "tomber" sur peu d'absorption)
+ *
+ * Quand un over-bolus est suspecté, les glucides consommés ne servent
+ * pas QUE à remonter — ils luttent aussi contre l'IOB. Le ratio
+ * (peak - initial) / carbs est artificiellement faible.
+ */
+const IOB_HEAVY_THRESHOLD = 1.5;
+const IOB_MODERATE_THRESHOLD = 0.8;
+const IOB_LIGHT_THRESHOLD = 0.5;
+const BOLUS_RECENT_MINUTES = 90;
+const BOLUS_ACTIVE_MINUTES = 180;
+
+export interface HypoContextInput {
+  /** IOB total en U au moment du re-sucrage. */
+  iobUnits: number;
+  /** Minutes depuis le dernier bolus repas (null si aucun en activité). */
+  lastBolusMinutesAgo: number | null;
+}
+
+/**
+ * Détermine le contexte d'une hypo pour décider si elle pollue le GRG perso.
+ *
+ * Retourne :
+ *  - 'over-bolus'    : ne PAS apprendre (les carbs luttent contre IOB)
+ *  - 'normal'        : apprendre (carbs purs remontent la glycémie)
+ *  - 'unknown'       : pas d'info dispo (inclus par défaut)
+ *
+ * (post-exercise est tagué depuis l'UI, pas auto ici car nécessite Whoop)
+ */
+export function classifyHypoContext(
+  input: HypoContextInput,
+): 'normal' | 'over-bolus' | 'unknown' {
+  const { iobUnits, lastBolusMinutesAgo } = input;
+
+  // Pas de data → inconnu
+  if (iobUnits === undefined || iobUnits === null) return 'unknown';
+
+  // IOB lourde : presque certainement un over-bolus
+  if (iobUnits >= IOB_HEAVY_THRESHOLD) return 'over-bolus';
+
+  // Bolus très récent + IOB modérée → over-bolus probable
+  if (
+    lastBolusMinutesAgo !== null &&
+    lastBolusMinutesAgo < BOLUS_RECENT_MINUTES &&
+    iobUnits >= IOB_LIGHT_THRESHOLD
+  ) {
+    return 'over-bolus';
+  }
+
+  // Bolus moyennement récent + IOB modérée → over-bolus probable
+  if (
+    lastBolusMinutesAgo !== null &&
+    lastBolusMinutesAgo < BOLUS_ACTIVE_MINUTES &&
+    iobUnits >= IOB_MODERATE_THRESHOLD
+  ) {
+    return 'over-bolus';
+  }
+
+  return 'normal';
+}
+
+/**
+ * Helper UI : reason humain-friendly du tagging contexte.
+ */
+export function explainHypoContext(
+  context: 'normal' | 'over-bolus' | 'post-exercise' | 'unknown' | undefined,
+  iobUnits?: number,
+  lastBolusMinutesAgo?: number | null,
+): string {
+  if (context === 'over-bolus') {
+    const iobStr = iobUnits ? `${iobUnits.toFixed(1).replace('.', ',')}U` : 'IOB élevée';
+    if (lastBolusMinutesAgo !== null && lastBolusMinutesAgo !== undefined && lastBolusMinutesAgo < 180) {
+      return `Bolus repas il y a ${Math.round(lastBolusMinutesAgo)} min + ${iobStr} active → l'insuline tire la glycémie, pas un cas classique de re-sucrage.`;
+    }
+    return `${iobStr} active → l'insuline tire encore, ces carbs ne reflètent pas ton GRG réel.`;
+  }
+  if (context === 'post-exercise') {
+    return 'Hypo détectée en sensibilité post-sport (Whoop). Pas représentatif du GRG de base.';
+  }
+  if (context === 'normal') {
+    return 'Hypo "vraie" — peu d\'IOB, pas de bolus récent. Cette hypo affine ton GRG perso.';
+  }
+  return 'Contexte inconnu — incluse par défaut dans l\'apprentissage.';
+}
+
+// ───────────────────────────────────────────────────────────────────────
 // GRG perso
 // ───────────────────────────────────────────────────────────────────────
 
@@ -55,6 +151,8 @@ export interface PersonalGRG {
  *  - peakGlucose disponible
  *  - carbsConsumed > 0
  *  - cohérence : delta entre 5 et 150 mg/dL (sinon outlier)
+ *  - excludeFromLearning !== true (anti-pollution over-bolus / manuel)
+ *  - context !== 'over-bolus' / 'post-exercise' (auto-exclusion)
  */
 export function estimatePersonalGRG(events: HypoEvent[]): PersonalGRG {
   const usable = events
@@ -65,7 +163,10 @@ export function estimatePersonalGRG(events: HypoEvent[]): PersonalGRG {
         e.carbsConsumed > 0 &&
         e.initialGlucose > 0 &&
         e.assessment !== 'pending' &&
-        e.assessment !== 'unknown',
+        e.assessment !== 'unknown' &&
+        e.excludeFromLearning !== true &&
+        e.context !== 'over-bolus' &&
+        e.context !== 'post-exercise',
     )
     .map((e) => ({
       ratio: (e.peakGlucose! - e.initialGlucose) / e.carbsConsumed,
