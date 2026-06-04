@@ -160,6 +160,42 @@ export interface SplitDoseReminder {
   status: 'pending' | 'fired' | 'dismissed';
 }
 
+/**
+ * Hypoglycemia event — Phase H (juin 2026).
+ *
+ * Trace une hypo et son re-sucrage pour permettre :
+ *  - L'apprentissage du GRG perso (Glucose Response per Gram)
+ *  - Le feedback "tu as bien fait" / "trop" / "pas assez"
+ *  - L'amélioration des recommandations futures
+ */
+export interface HypoEvent {
+  id: string;
+  /** ISO du moment où l'hypo a été détectée (ou loggée). */
+  detectedAt: string;
+  /** Glycémie initiale (au moment du re-sucrage). */
+  initialGlucose: number;
+  /** Grammes de glucides consommés au re-sucrage. */
+  carbsConsumed: number;
+  /** ISO du moment du re-sucrage. */
+  consumedAt: string;
+  /** Checkpoints glycémie auto-trackés (en mg/dL) ou null si pas encore. */
+  glucoseAt15min: number | null;
+  glucoseAt30min: number | null;
+  glucoseAt45min: number | null;
+  glucoseAt60min: number | null;
+  /** Pic glycémique atteint entre T+15 et T+90 (auto). */
+  peakGlucose: number | null;
+  /** Évaluation auto à T+60 :
+   *  - 'pending'     : pas encore évalué (avant T+60)
+   *  - 'just-right'  : glycémie remontée en cible 90-160 sans over-correction
+   *  - 'too-much'    : pic > 180 → tu as mangé trop
+   *  - 'too-little'  : encore < 80 à T+30 → pas assez
+   *  - 'unknown'     : pas assez de data (capteur down, etc.)
+   */
+  assessment: 'pending' | 'just-right' | 'too-much' | 'too-little' | 'unknown';
+  notes?: string;
+}
+
 export interface Meal {
   id: string;
   mealType: string;

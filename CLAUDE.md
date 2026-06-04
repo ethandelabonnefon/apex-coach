@@ -1008,6 +1008,67 @@ L'idée originale est devenue une killer feature unique : un advisor du soir qui
 
 **Le killer use case** : la nuit n'est plus une boîte noire. Tu sais avant de dormir si tu vas hyper, hypo ou rester en cible — et l'app te dit quoi faire pour atterrir à la bonne valeur au réveil. Plus de stress du coucher.
 
+### Phase H — Hypo Management & GRG personnel (juin 2026)
+Retour terrain Ethan : "Aucun module de re-sucrage. Je veux pouvoir taper combien j'ai mangé, et que l'app me dise si c'était bon ou trop. Le GRG perso doit s'apprendre au fil du temps."
+
+Module complet de gestion des hypoglycémies avec apprentissage automatique du GRG (Glucose Response per Gram) personnel.
+
+- **Type `HypoEvent`** (`types/index.ts`) :
+  - `id`, `detectedAt`, `initialGlucose`, `carbsConsumed`, `consumedAt`
+  - Auto-tracked checkpoints : `glucoseAt15min`, `glucoseAt30min`, `glucoseAt45min`, `glucoseAt60min`
+  - `peakGlucose` (pic auto-calculé)
+  - `assessment: 'pending' | 'just-right' | 'too-much' | 'too-little' | 'unknown'`
+  - Store : `hypoEvents[]` + `addHypoEvent`/`updateHypoEvent`/`removeHypoEvent`
+
+- **Helpers `lib/hypo-resucrage.ts`** (pure functions) :
+  - `estimatePersonalGRG(events)` : moyenne pondérée par carbs des ratios (peak-initial)/carbs sur les hypos évaluées et non-outliers (ratio 1-12). Retourne `{ value, sampleSize, confidence: 'low'|'medium'|'high', isDefault }`. Confidence haute à partir de 7 hypos analysées.
+  - `suggestCarbsForHypo(glucose, grg, target=110)` : grams = `ceil(gap / grg)`, clampé [8, 30] (anti-sous-sucrage / anti-sur-sucrage). Message explicatif FR adapté à la confiance.
+  - `analyzeHypoEvent(event)` : règles : peak > 180 → too-much, glucoseAt30 < 80 → too-little, sinon just-right si revenu en cible.
+  - `findPeak(event)` : max des checkpoints disponibles.
+  - `buildHypoFeedback(event)` : message + emoji + tone + suggestion "next time".
+
+- **Composant `HypoLogger.tsx`** :
+  - Apparaît UNIQUEMENT sur `/diabete` quand `liveGlucose < 80`
+  - Hero : glycémie en rouge, animate-pulse sur l'icône AlertTriangle, mention trend si descendante
+  - Suggestion GRG : "Suggestion : 12g (basé sur tes 4 dernières hypos, 1g → +4.5 mg/dL)"
+  - Si GRG default : exemples de glucides (1 jus 15g, 1 sucre 5g, 1 gel 15-20g)
+  - Quick-chips 8 / 10 / 15 / 20 / 30 g + stepper +/-
+  - Bouton "J'ai mangé Xg" → crée HypoEvent (pending) dans le store
+  - Anti-double-log : si une hypo a été loggée dans les 30min → message "Re-sucrage enregistré" au lieu du formulaire
+
+- **Hook `useHypoTracker.ts`** :
+  - Tick toutes les 60s
+  - Pour chaque `hypoEvent` < 90min avec `assessment: pending`, lit la `liveGlucose` actuelle et remplit le checkpoint correspondant si timing atteint (15min/30min/45min/60min)
+  - Recalcule `peakGlucose` à chaque mise à jour
+  - Appelle `analyzeHypoEvent` à T+30 → met à jour l'assessment final
+  - Aucune notification — le feedback apparaît silencieusement dans le composant `HypoFeedback`
+
+- **Composant `HypoFeedback.tsx`** :
+  - Liste les 3 hypos des dernières 24h
+  - Pour chaque : icône emoji (✅/⚠️/🔻/⏳), headline + détail + suggestion "next time"
+  - Mini-courbe en chiffres : Init → +15m → +30m → +60m → Pic
+  - Badge GRG perso global en haut : "GRG perso : +4,5 mg/dL/g (medium)" si data dispo
+  - Bouton supprimer par hypo
+
+- **Intégration `/diabete`** :
+  - `useHypoTracker()` activé en haut du composant (tick auto)
+  - `<HypoLogger>` rendu si `liveGlucose < 80` (juste sous le hero)
+  - `<HypoFeedback>` toujours visible (affiche rien si pas d'hypo récente)
+
+- **Cas typiques** :
+  - Glycémie chute à 65 → HypoLogger apparaît avec "Suggestion : 12g"
+  - Tu tapes "10g" → HypoEvent créé
+  - 15min plus tard : glycémie à 95 → checkpoint enregistré
+  - 30min plus tard : 130 → assessment = `just-right` → feedback "✅ Re-sucrage parfait"
+  - Si pic à 200 → assessment = `too-much` → "⚠️ Trop sucré, prochaine fois essaie ~7g"
+  - Si encore < 80 à T+30 → `too-little` → "🔻 Pas assez, prochaine fois +10g"
+
+**Apprentissage continu** : à chaque hypo évaluée, le GRG perso se précise. Au bout de 3-7 hypos, la suggestion de carbs devient personnalisée et bien calibrée.
+
+**Sources scientifiques** :
+- ADA T1D Self-Management Education — règle classique "15-15"
+- GRG typique adulte T1D : 3-6 mg/dL/g, variable selon vitesse absorption, glycémie de départ, IOB en cours
+
 ### Phase A — Running tracker GPS live (mai 2026)
 Démarrage du module **"vrai Strava"** pour le running. Phase A = MVP tracking GPS sans carte (carte = Phase B prévue ensuite). Killer feature unique vs Strava : intégration native avec la glycémie live FreeStyle Libre + corrélation sport-glucose déjà existante.
 

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { USER_PROFILE, DIABETES_CONFIG, DIABETES_PROFILES_DEFAULT, MUSCU_PROGRAM } from './constants';
-import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile, SplitDoseReminder } from '@/types';
+import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile, SplitDoseReminder, HypoEvent } from '@/types';
 
 interface CompletedWorkout {
   id: string;
@@ -88,6 +88,12 @@ interface AppState {
   addSplitDoseReminder: (reminder: SplitDoseReminder) => void;
   updateSplitDoseReminder: (id: string, updates: Partial<SplitDoseReminder>) => void;
   removeSplitDoseReminder: (id: string) => void;
+
+  // Phase H — Hypo events (juin 2026)
+  hypoEvents: HypoEvent[];
+  addHypoEvent: (event: HypoEvent) => void;
+  updateHypoEvent: (id: string, updates: Partial<HypoEvent>) => void;
+  removeHypoEvent: (id: string) => void;
 
   // Nutrition
   meals: Meal[];
@@ -285,6 +291,20 @@ export const useStore = create<AppState>()(
       })),
       removeSplitDoseReminder: (id) => set((s) => ({
         splitDoseReminders: s.splitDoseReminders.filter((r) => r.id !== id),
+      })),
+
+      // Phase H — Hypo events
+      hypoEvents: [],
+      addHypoEvent: (event) => set((s) => ({
+        hypoEvents: [event, ...s.hypoEvents].slice(0, 200),
+      })),
+      updateHypoEvent: (id, updates) => set((s) => ({
+        hypoEvents: s.hypoEvents.map((e) =>
+          e.id === id ? { ...e, ...updates } : e,
+        ),
+      })),
+      removeHypoEvent: (id) => set((s) => ({
+        hypoEvents: s.hypoEvents.filter((e) => e.id !== id),
       })),
 
       meals: [],

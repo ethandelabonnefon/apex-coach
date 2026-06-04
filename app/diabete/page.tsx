@@ -37,6 +37,9 @@ import {
 } from "@/lib/exercise-insulin-adjustment";
 import { useWhoop } from "@/hooks/useWhoop";
 import BedtimeAdvisor from "@/components/diabete/BedtimeAdvisor";
+import HypoLogger from "@/components/diabete/HypoLogger";
+import HypoFeedback from "@/components/diabete/HypoFeedback";
+import { useHypoTracker } from "@/hooks/useHypoTracker";
 import { usePatternDetection } from "@/hooks/usePatternDetection";
 import type { DetectedPattern, PatternSeverity } from "@/lib/glucose-archive/pattern-engine";
 import {
@@ -177,6 +180,10 @@ export default function DiabetePage() {
   // Phase 11 Bloc 6.3 — séances historiques pour personnaliser l'advisor
   const completedWorkouts = useStore((s) => s.completedWorkouts);
   const completedRunningSessions = useStore((s) => s.completedRunningSessions);
+
+  // Phase H — Auto-enrichissement des checkpoints des hypos en cours.
+  // Le hook tick toutes les 60s et update les hypoEvents non-évalués.
+  useHypoTracker();
 
   // ─── Bolus calculator ─────────────────────────
   const [carbsGrams, setCarbsGrams] = useState(60);
@@ -890,6 +897,17 @@ export default function DiabetePage() {
           ))}
         </section>
       )}
+
+      {/* ── HYPO LOGGER (Phase H — apparait si glycémie < 80) ── */}
+      {(liveGlucose?.value ?? currentGlucose) < 80 && (
+        <HypoLogger
+          currentGlucose={liveGlucose?.value ?? currentGlucose}
+          trendArrow={trendStringToNumber(liveGlucose?.trend) ?? trendArrow}
+        />
+      )}
+
+      {/* ── HYPO FEEDBACK (hypos récentes 24h) ── */}
+      <HypoFeedback />
 
       {/* ── CORRECTION SUGGÉRÉE (hyper) ── */}
       <div className="mb-4">
