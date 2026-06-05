@@ -147,22 +147,41 @@ export default function CoachButton({ onClick, hasUnread }: CoachButtonProps) {
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      className="fixed w-14 h-14 bg-gradient-to-r from-[#a855f7] to-[#ec4899] rounded-full shadow-lg shadow-purple-500/25 flex items-center justify-center hover:scale-110 active:scale-95 transition-transform z-40 touch-none"
-      style={{ left: pos.x, top: pos.y }}
+      className="fixed w-12 h-12 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-40 touch-none border"
+      style={{
+        left: pos.x,
+        top: pos.y,
+        background: "var(--bg-elevated)",
+        borderColor: "var(--border-strong)",
+        boxShadow: "0 8px 24px -8px rgba(0,0,0,0.6), 0 0 0 1px rgba(212,255,0,0.10)",
+      }}
+      aria-label="Coach assistant"
     >
-      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         <path d="M8 10h.01" />
         <path d="M12 10h.01" />
         <path d="M16 10h.01" />
       </svg>
 
-      {/* Pulse animation */}
-      <span className="absolute inset-0 rounded-full bg-[#a855f7] animate-ping opacity-20 pointer-events-none" />
-
-      {/* Unread badge */}
+      {/* Unread badge — utilise --error de la palette */}
       {hasUnread && (
-        <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-[#0a0a0f]" />
+        <span
+          className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2"
+          style={{
+            background: "var(--error)",
+            borderColor: "var(--bg-primary)",
+          }}
+        />
       )}
     </button>
   );

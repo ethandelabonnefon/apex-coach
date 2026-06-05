@@ -11,6 +11,7 @@ import {
   UserRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import Logo from "@/components/Logo";
 
 type NavItem = {
   href: string;
@@ -104,18 +105,7 @@ export function Navigation() {
       <aside className="hidden lg:flex fixed top-0 left-0 h-full w-60 flex-col bg-bg-primary border-r border-border-subtle z-50">
         {/* Logo block */}
         <div className="px-5 pt-6 pb-4">
-          <div className="flex items-center gap-2.5">
-            <div
-              className="h-8 w-8 rounded-lg flex items-center justify-center"
-              style={{ background: "var(--accent)", color: "var(--accent-ink)" }}
-            >
-              <span className="text-sm font-black tracking-tight">A</span>
-            </div>
-            <div>
-              <p className="text-sm font-semibold tracking-tight">APEX</p>
-              <p className="label mt-0">Precision Coach</p>
-            </div>
-          </div>
+          <Logo size={28} withWordmark tagline="Precision Coach" />
         </div>
 
         {/* Nav */}
@@ -148,13 +138,7 @@ export function Navigation() {
       <header className="lg:hidden sticky top-0 z-40 glass px-4 py-3 pt-safe">
         <div className="flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div
-              className="h-7 w-7 rounded-md flex items-center justify-center"
-              style={{ background: "var(--accent)", color: "var(--accent-ink)" }}
-            >
-              <span className="text-xs font-black tracking-tight">A</span>
-            </div>
-            <span className="text-sm font-semibold tracking-tight">APEX</span>
+            <Logo size={24} withWordmark />
           </Link>
           <Link
             href="/profil"
