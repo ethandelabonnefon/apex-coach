@@ -72,8 +72,20 @@ function timeAgo(iso: string): string {
 export default function WhoopCard({ variant = "compact" }: WhoopCardProps) {
   const { connected, snapshot, loading, error, refetch } = useWhoop();
 
-  // ─── Mode compact : silencieux si non connecté ─────────────────
+  // ─── Mode compact ───────────────────────────────────────────────
   if (variant === "compact") {
+    // Token Whoop expiré/révoqué → bannière de reconnexion (visible)
+    if (
+      !connected &&
+      (error === "token_expired" || error?.includes("token_expired"))
+    ) {
+      return <ReconnectCard reason="token_expired" />;
+    }
+    // Connecté mais fetch impossible (API Whoop down, etc.) → carte d'erreur
+    if (connected && !snapshot && !loading) {
+      return <ErrorCard error={error} onRetry={refetch} />;
+    }
+    // Loading initial : on n'affiche rien (évite un flash)
     if (!connected || !snapshot) return null;
     return <CompactCard snapshot={snapshot} loading={loading} />;
   }
@@ -128,6 +140,79 @@ export default function WhoopCard({ variant = "compact" }: WhoopCardProps) {
   }
 
   return <FullCard snapshot={snapshot} loading={loading} onRefresh={refetch} />;
+}
+
+// ─── États d'erreur compacts (visibles, pas null) ───────────────
+function ReconnectCard({ reason }: { reason: string }) {
+  return (
+    <section className="surface-1 rounded-3xl p-4 mb-4 border border-warning/30 bg-warning/5">
+      <div className="flex items-start gap-3">
+        <div className="shrink-0 w-9 h-9 rounded-xl bg-warning/15 flex items-center justify-center">
+          <AlertTriangle className="w-4 h-4 text-warning" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-warning leading-snug">
+            Connexion Whoop expirée
+          </p>
+          <p className="text-[11px] text-text-secondary mt-0.5 leading-snug">
+            {reason === "token_expired"
+              ? "Ton refresh token Whoop a été révoqué (inactivité prolongée ou révocation depuis l'app Whoop). Reconnecte-toi pour réactiver le suivi."
+              : "Reconnecte ton Whoop pour réactiver le suivi."}
+          </p>
+          <Link
+            href="/diabete/parametres"
+            className="inline-flex items-center gap-1.5 mt-2 bg-running text-ink font-semibold px-3 py-1.5 rounded-lg text-xs tap-scale hover:bg-running/90 transition-colors"
+          >
+            Reconnecter Whoop
+            <ArrowRight className="w-3 h-3" />
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ErrorCard({
+  error,
+  onRetry,
+}: {
+  error: string | null;
+  onRetry: () => void;
+}) {
+  return (
+    <section className="surface-1 rounded-3xl p-4 mb-4 border border-error/20 bg-error/5">
+      <div className="flex items-start gap-3">
+        <div className="shrink-0 w-9 h-9 rounded-xl bg-error/15 flex items-center justify-center">
+          <AlertTriangle className="w-4 h-4 text-error" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-error leading-snug">
+            Whoop indisponible
+          </p>
+          <p className="text-[11px] text-text-secondary mt-0.5 leading-snug">
+            Impossible de récupérer tes données pour le moment.
+            {error ? ` (${error})` : ""}
+          </p>
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              type="button"
+              onClick={onRetry}
+              className="inline-flex items-center gap-1.5 bg-bg-tertiary border border-border-default text-text-primary font-semibold px-3 py-1.5 rounded-lg text-xs tap-scale hover:bg-bg-hover transition-colors"
+            >
+              <RefreshCw className="w-3 h-3" />
+              Réessayer
+            </button>
+            <Link
+              href="/diabete/parametres"
+              className="text-[10px] text-text-tertiary hover:text-text-primary transition-colors underline"
+            >
+              Reconnecter
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 // ─── Variant compact ─────────────────────────────

@@ -15,6 +15,7 @@ import {
   isWhoopConfigured,
 } from "@/lib/whoop/client";
 import {
+  clearTokens,
   getSnapshot,
   getTokens,
   isKvConfigured,
@@ -80,9 +81,37 @@ export async function GET() {
     await saveSnapshot(snapshot);
     return NextResponse.json({ connected: true, snapshot, cached: false });
   } catch (e) {
-    console.error("[whoop/sync] fetch error", e);
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("[whoop/sync] fetch error", message);
+
+    // Si le refresh token a été révoqué/invalidé, on purge les tokens
+    // pour permettre à l'utilisateur de se reconnecter proprement (sinon
+    // on garde un état zombie "connected mais cassé").
+    const isRefreshFailure =
+      message.includes("refresh failed") ||
+      message.includes("invalid_grant") ||
+      message.includes("invalid_token");
+
+    if (isRefreshFailure) {
+      console.warn("[whoop/sync] refresh token invalid → clearing tokens");
+      try {
+        await clearTokens();
+      } catch (clearErr) {
+        console.error("[whoop/sync] clearTokens failed", clearErr);
+      }
+      return NextResponse.json(
+        {
+          connected: false,
+          error: "token_expired",
+          message:
+            "Ton refresh token Whoop a expiré ou a été révoqué. Reconnecte-toi.",
+        },
+        { status: 200 },
+      );
+    }
+
     return NextResponse.json(
-      { connected: true, error: "fetch_failed", message: String(e) },
+      { connected: true, error: "fetch_failed", message },
       { status: 200 },
     );
   }
