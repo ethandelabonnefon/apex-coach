@@ -41,11 +41,13 @@ function initVapid() {
 }
 
 export type GlucoseAlertPayload = {
-  type: "hypo" | "hyper" | "test";
+  type: "hypo" | "hyper" | "split" | "test";
   title: string;
   body: string;
   value?: number;
   url?: string;
+  /** Tag pour deduplication côté SW (ex: "split-<id>"). */
+  tag?: string;
 };
 
 /**

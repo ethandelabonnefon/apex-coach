@@ -30,6 +30,10 @@ import {
 import { getMealTypeHistory, getAvgMacrosForTag, type ArchivePoint } from "@/lib/meal-analytics";
 import { openYazio } from "@/lib/external-apps";
 import {
+  scheduleSplitOnServer,
+  cancelSplitOnServer,
+} from "@/lib/split-reminders/client";
+import {
   findMostRecentExercise,
   computeExerciseAdjustment,
   classifySport,
@@ -458,6 +462,9 @@ export default function DiabetePage() {
         status: 'pending',
       };
       addSplitDoseReminder(reminder);
+      // Sync serveur (fire-and-forget) : permet au cron de tirer la
+      // notif push même si l'app est fermée à l'heure du rappel.
+      scheduleSplitOnServer(reminder);
       const hours = Math.floor(bolusResult.splitDose.delayMinutes / 60);
       const mins = bolusResult.splitDose.delayMinutes % 60;
       const delayLabel = mins === 0 ? `${hours}h` : `${hours}h${mins.toString().padStart(2, '0')}`;
@@ -500,11 +507,30 @@ export default function DiabetePage() {
     }
   }, [briefingActive, refetchGlucose]);
 
-  // ─── Phase 11 : check des split-dose reminders dûs ─────────────
+  // ─── Migration douce — push KV pour les reminders locaux ──────────
+  // Au mount de /diabete, on POST vers le serveur tous les splits pending
+  // qui n'auraient pas encore été synchronisés (cas : reminder créé avant
+  // que le pipeline serveur soit en place, ou réseau down au moment de
+  // l'ajout). upsertReminder est idempotent (clef = id) donc safe à rappeler.
+  // Ça garantit que le cron /api/cron/split-check les verra.
+  useEffect(() => {
+    const pendingToSync = splitDoseReminders.filter(
+      (r) => r.status === "pending",
+    );
+    if (pendingToSync.length === 0) return;
+    for (const r of pendingToSync) {
+      scheduleSplitOnServer(r); // fire-and-forget, silencieux si fail
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once au mount
+
+  // ─── Phase 11 : check des split-dose reminders dûs (backup local) ─────
   // À chaque tick (60s), on regarde si un rappel pending arrive à échéance.
-  // On envoie une notification locale via le service worker si possible
-  // (l'app peut être en background mais ouverte récemment), sinon on
-  // affiche un toast dans la page.
+  // C'est la voie BACKUP : si l'utilisateur est sur /diabete au moment du
+  // déclenchement, on tire une notif locale via le service worker pour
+  // un feedback instantané. La voie principale est désormais le cron
+  // serveur /api/cron/split-check qui envoie un VAPID push même si l'app
+  // est fermée. Le tag `split-<id>` côté SW déduplique si les 2 arrivent.
   const [activeReminders, setActiveReminders] = useState<SplitDoseReminder[]>([]);
   useEffect(() => {
     const now = Date.now();
@@ -520,10 +546,10 @@ export default function DiabetePage() {
           navigator.serviceWorker.ready.then((reg) => {
             reg.showNotification("Rappel split dose", {
               body: `Il est temps de faire ${r.units}U pour couvrir les graisses/protéines de ton repas.`,
-              icon: "/icons/icon-192.png",
-              badge: "/icons/icon-192.png",
+              icon: "/icons/icon-192x192.png",
+              badge: "/icons/icon-192x192.png",
               tag: `split-${r.id}`,
-              data: { url: "/diabete", type: "split-dose" },
+              data: { url: "/diabete", type: "split" },
             });
           }).catch(() => {});
         }
@@ -554,10 +580,13 @@ export default function DiabetePage() {
       parentInjectionId: reminder.parentInjectionId,
     });
     removeSplitDoseReminder(reminder.id);
+    // Sync serveur : cancel le reminder pour que le cron ne le re-tire pas
+    cancelSplitOnServer(reminder.id);
   }
 
   function handleDismissSplitDose(reminder: SplitDoseReminder) {
     removeSplitDoseReminder(reminder.id);
+    cancelSplitOnServer(reminder.id);
   }
 
   // ─── Sessions sport enrichies (Bloc 6.3) ──────────────────────────
@@ -814,11 +843,17 @@ export default function DiabetePage() {
       .sort((a, b) => a.ms - b.ms)[0];
     if (!upcomingSplit) return;
     if (newUnits <= 0) {
-      // Skip → on supprime le rappel
+      // Skip → on supprime le rappel (local + serveur)
       removeSplitDoseReminder(upcomingSplit.id);
+      cancelSplitOnServer(upcomingSplit.id);
     } else {
-      // Réduire → on met à jour les units
+      // Réduire → on met à jour les units (local + ré-upsert serveur)
       updateSplitDoseReminder(upcomingSplit.id, { units: newUnits });
+      scheduleSplitOnServer({
+        ...upcomingSplit,
+        units: newUnits,
+        status: "pending",
+      });
     }
   }
 

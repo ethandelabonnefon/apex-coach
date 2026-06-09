@@ -1,6 +1,6 @@
 // APEX Coach — Service Worker
-// v3 : Phase 11 — split dose reminders (FPU)
-const CACHE_NAME = "apex-coach-v3";
+// v4 : pipeline serveur split reminders + fix icon path + tag perso
+const CACHE_NAME = "apex-coach-v4";
 
 const PRECACHE_URLS = [
   "/",
@@ -95,15 +95,18 @@ self.addEventListener("push", (event) => {
   }
 
   const title = payload.title || "APEX Coach";
+  // Tag : si payload.tag fourni (ex: "split-<id>"), on l'utilise pour
+  // permettre plusieurs notifs split simultanées. Sinon fallback au type.
+  const notifTag = payload.tag || payload.type || "apex-alert";
+  const isUrgent = payload.type === "hypo" || payload.type === "split";
   const options = {
     body: payload.body || "",
-    icon: "/icons/icon-192.png",
-    badge: "/icons/icon-192.png",
-    tag: payload.type || "apex-alert",
-    // Les alertes hypo/hyper sont urgentes → renotify + vibration
-    // Phase 11 : "split-dose" → vibration normale, requireInteraction
-    renotify: payload.type === "hypo" || payload.type === "hyper" || payload.type === "split-dose",
-    requireInteraction: payload.type === "hypo" || payload.type === "split-dose",
+    icon: "/icons/icon-192x192.png",
+    badge: "/icons/icon-192x192.png",
+    tag: notifTag,
+    // Les alertes hypo/hyper/split sont urgentes → renotify
+    renotify: payload.type === "hypo" || payload.type === "hyper" || payload.type === "split",
+    requireInteraction: isUrgent,
     vibrate: payload.type === "hypo" ? [200, 100, 200, 100, 400] : [200, 100, 200],
     data: {
       url: payload.url || "/diabete",
