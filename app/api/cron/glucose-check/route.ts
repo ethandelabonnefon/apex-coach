@@ -17,6 +17,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PUSH_CONFIG } from "@/lib/push/config";
 import { checkGlucoseAndAlert } from "@/lib/push/alerts";
+import { checkSplitsAndAlert } from "@/lib/split-reminders/check";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,6 +49,24 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const result = await checkGlucoseAndAlert();
-  return NextResponse.json(result);
+  // 1. Check glycémie (hypo/hyper push)
+  const glucoseResult = await checkGlucoseAndAlert();
+
+  // 2. Check splits dûs (piggyback : Hobby tier = 1 cron/jour, on
+  //    réutilise donc ce cron qui tourne toutes les 5 min). Latence
+  //    max 5 min vs triggerAt = acceptable pour un split (qui attend
+  //    déjà 2-3h avant déclenchement).
+  let splitResult;
+  try {
+    splitResult = await checkSplitsAndAlert();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "unknown";
+    console.error("[cron/glucose-check] split-check error:", msg);
+    splitResult = { ok: false, checked: 0, fired: 0, errors: [msg] };
+  }
+
+  return NextResponse.json({
+    glucose: glucoseResult,
+    splits: splitResult,
+  });
 }
