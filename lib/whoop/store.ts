@@ -54,6 +54,14 @@ export interface WhoopSnapshot {
 const K_SNAPSHOT = "whoop:snapshot";
 const SNAPSHOT_TTL_SEC = 5 * 60; // 5min
 
+// Mutex pour empêcher les refresh parallèles (race condition Whoop)
+const K_REFRESH_LOCK = "whoop:refresh-lock";
+const REFRESH_LOCK_TTL_SEC = 10; // auto-release après 10s (safety)
+
+// Compteur de fails consécutifs avant de clear (anti-clear-too-aggressive)
+const K_REFRESH_FAILS = "whoop:refresh-fails";
+const REFRESH_FAILS_TTL_SEC = 600; // 10min — si pas re-fail pendant 10min, reset
+
 export function isKvConfigured(): boolean {
   return Boolean(process.env.KV_REST_API_URL || process.env.KV_URL);
 }
@@ -77,4 +85,57 @@ export async function saveSnapshot(snapshot: WhoopSnapshot): Promise<void> {
 
 export async function getSnapshot(): Promise<WhoopSnapshot | null> {
   return (await kv.get<WhoopSnapshot>(K_SNAPSHOT)) ?? null;
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Mutex anti-race-condition pour les refresh_token
+// ───────────────────────────────────────────────────────────────────────
+
+/**
+ * Tente d'acquérir le lock de refresh. Retourne true si on a le lock,
+ * false si quelqu'un d'autre l'a (et il faut attendre + re-lire le token).
+ *
+ * Utilise `set NX` (atomic set-if-not-exists) avec TTL court pour
+ * éviter qu'un crash ne bloque le lock à vie.
+ */
+export async function acquireRefreshLock(): Promise<boolean> {
+  try {
+    const result = await kv.set(K_REFRESH_LOCK, Date.now(), {
+      nx: true,
+      ex: REFRESH_LOCK_TTL_SEC,
+    });
+    return result === "OK";
+  } catch (err) {
+    console.error("[whoop/store] acquireRefreshLock error:", err);
+    // En cas de fail KV, on autorise le refresh (mieux que de bloquer)
+    return true;
+  }
+}
+
+export async function releaseRefreshLock(): Promise<void> {
+  try {
+    await kv.del(K_REFRESH_LOCK);
+  } catch {}
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Compteur de fails consécutifs (anti-clearTokens-trop-rapide)
+// ───────────────────────────────────────────────────────────────────────
+
+export async function incrementRefreshFails(): Promise<number> {
+  try {
+    const count = (await kv.get<number>(K_REFRESH_FAILS)) ?? 0;
+    const next = count + 1;
+    await kv.set(K_REFRESH_FAILS, next, { ex: REFRESH_FAILS_TTL_SEC });
+    return next;
+  } catch (err) {
+    console.error("[whoop/store] incrementRefreshFails error:", err);
+    return 0;
+  }
+}
+
+export async function resetRefreshFails(): Promise<void> {
+  try {
+    await kv.del(K_REFRESH_FAILS);
+  } catch {}
 }

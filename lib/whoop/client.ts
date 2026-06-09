@@ -14,10 +14,22 @@
 
 import "server-only";
 import {
+  acquireRefreshLock,
   getTokens,
+  releaseRefreshLock,
+  resetRefreshFails,
   saveTokens,
   type WhoopTokens,
 } from "./store";
+
+// Marge de sécurité : on considère expiré 60s avant la vraie expiration
+// pour éviter les calls "à la frontière".
+const EXPIRY_SAFETY_MS = 60_000;
+
+// Attente entre 2 polls quand on attend que l'autre process finisse son
+// refresh (cas mutex pris).
+const POLL_INTERVAL_MS = 200;
+const MAX_POLL_WAIT_MS = 8_000; // jamais > 8s d'attente
 
 const WHOOP_AUTH_BASE = "https://api.prod.whoop.com/oauth/oauth2";
 const WHOOP_API_BASE = "https://api.prod.whoop.com/developer";
@@ -142,16 +154,64 @@ export async function refreshAccessToken(refreshToken: string): Promise<WhoopTok
 /**
  * Récupère un access token valide. Si expiré, le rafraîchit auto.
  * Renvoie null si pas de tokens (pas connecté).
+ *
+ * ⚡ Race condition Whoop (juin 2026) :
+ *   /api/whoop/sync fait 4 fetch en parallèle (cycle/recovery/sleep/workout).
+ *   Si access_token expiré → 4 refresh en parallèle → Whoop fait de la
+ *   rotation des refresh_token → le 1er invalide tout, les 3 autres
+ *   reçoivent 401 invalid_grant → cascade de fails.
+ *
+ * Solution mise en place :
+ *   1. Re-read les tokens depuis KV avant de décider de refresher (un autre
+ *      process a peut-être déjà refresh)
+ *   2. Mutex KV (set NX) : un seul refresh actif. Les autres polling le KV
+ *      jusqu'à ce que le nouveau token apparaisse (max 8s).
+ *   3. Marge de sécurité 60s sur l'expiration (évite les refresh "border").
  */
 export async function getValidAccessToken(): Promise<string | null> {
   let tokens = await getTokens();
   if (!tokens) return null;
-  if (Date.now() >= tokens.expiresAt) {
-    // Token expiré → refresh
-    tokens = await refreshAccessToken(tokens.refreshToken);
-    await saveTokens(tokens);
+
+  const isExpired = (t: WhoopTokens) =>
+    Date.now() >= t.expiresAt - EXPIRY_SAFETY_MS;
+
+  // Pas expiré → on retourne tel quel
+  if (!isExpired(tokens)) return tokens.accessToken;
+
+  // Tentative d'acquérir le lock pour refresh
+  const gotLock = await acquireRefreshLock();
+
+  if (!gotLock) {
+    // Un autre process refresh déjà → on attend et on re-lit
+    const start = Date.now();
+    while (Date.now() - start < MAX_POLL_WAIT_MS) {
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      const refreshed = await getTokens();
+      if (refreshed && !isExpired(refreshed)) {
+        return refreshed.accessToken;
+      }
+    }
+    // Timeout → le process qui avait le lock a peut-être crash. On le force.
+    console.warn("[whoop] refresh lock poll timeout, forcing refresh");
   }
-  return tokens.accessToken;
+
+  try {
+    // Double-check après lock : un autre process a peut-être finit pendant
+    // qu'on attendait notre tour
+    const reread = await getTokens();
+    if (reread && !isExpired(reread)) {
+      return reread.accessToken;
+    }
+    if (!reread) return null;
+
+    // OK on est le seul à refresh, go
+    const newTokens = await refreshAccessToken(reread.refreshToken);
+    await saveTokens(newTokens);
+    await resetRefreshFails(); // succès → on reset le compteur de fails
+    return newTokens.accessToken;
+  } finally {
+    await releaseRefreshLock();
+  }
 }
 
 /**

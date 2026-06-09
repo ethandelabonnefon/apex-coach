@@ -18,10 +18,15 @@ import {
   clearTokens,
   getSnapshot,
   getTokens,
+  incrementRefreshFails,
   isKvConfigured,
   saveSnapshot,
   type WhoopSnapshot,
 } from "@/lib/whoop/store";
+
+// On ne clear les tokens qu'après N fails consécutifs (anti-déconnexion
+// trop rapide sur race condition transitoire).
+const CLEAR_AFTER_N_FAILS = 3;
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,27 +89,50 @@ export async function GET() {
     const message = e instanceof Error ? e.message : String(e);
     console.error("[whoop/sync] fetch error", message);
 
-    // Si le refresh token a été révoqué/invalidé, on purge les tokens
-    // pour permettre à l'utilisateur de se reconnecter proprement (sinon
-    // on garde un état zombie "connected mais cassé").
+    // Détecte les erreurs de refresh (peuvent être transitoires : race
+    // condition Whoop, blip réseau, blip serveur Whoop).
     const isRefreshFailure =
       message.includes("refresh failed") ||
       message.includes("invalid_grant") ||
       message.includes("invalid_token");
 
     if (isRefreshFailure) {
-      console.warn("[whoop/sync] refresh token invalid → clearing tokens");
-      try {
-        await clearTokens();
-      } catch (clearErr) {
-        console.error("[whoop/sync] clearTokens failed", clearErr);
+      // On compte les fails consécutifs. Clear seulement après N (anti-
+      // déconnexion sur race condition transitoire qui se résoudra au
+      // prochain fetch).
+      const failCount = await incrementRefreshFails();
+      console.warn(
+        `[whoop/sync] refresh failure (#${failCount}/${CLEAR_AFTER_N_FAILS}):`,
+        message,
+      );
+
+      if (failCount >= CLEAR_AFTER_N_FAILS) {
+        console.warn(
+          "[whoop/sync] N fails consécutifs → clearing tokens (vraie révocation probable)",
+        );
+        try {
+          await clearTokens();
+        } catch (clearErr) {
+          console.error("[whoop/sync] clearTokens failed", clearErr);
+        }
+        return NextResponse.json(
+          {
+            connected: false,
+            error: "token_expired",
+            message:
+              "Ton refresh token Whoop a expiré ou a été révoqué après plusieurs tentatives. Reconnecte-toi.",
+          },
+          { status: 200 },
+        );
       }
+
+      // Fail transitoire — on reste "connected", le client retentera
+      // au prochain fetch. Pas de carte de déconnexion affichée.
       return NextResponse.json(
         {
-          connected: false,
-          error: "token_expired",
-          message:
-            "Ton refresh token Whoop a expiré ou a été révoqué. Reconnecte-toi.",
+          connected: true,
+          error: "transient_refresh_error",
+          message: `Refresh transitoire (tentative ${failCount}/${CLEAR_AFTER_N_FAILS}) — re-essai au prochain tick.`,
         },
         { status: 200 },
       );
