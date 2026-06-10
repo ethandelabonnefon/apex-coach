@@ -1,0 +1,323 @@
+/**
+ * Night Brain — couche nuit unifiée (juin 2026).
+ *
+ * UN SEUL moteur qui remplace l'empilement de cartes du soir (HypoLogger +
+ * rappel split + BedtimeAdvisor + correction). Il prend TOUT le contexte de
+ * fin de journée et produit **un plan ordonné et cohérent** — la « tête
+ * pensante » : « mange 12g lents MAINTENANT, ET fais quand même ton split de
+ * 2U, re-check à 23h40 ».
+ *
+ * Il s'appuie sur le modèle physiologique existant (`computeBedtimeAdvice`)
+ * pour les prédictions, mais réconcilie les recommandations entre elles au
+ * lieu de les afficher en silos contradictoires.
+ *
+ * Corrige l'incident terrain : être bas au coucher → le système conseillait
+ * « 30g » (cible 110, plafond 30) sans savoir que le dîner digérait encore et
+ * qu'un split était en attente → hyper toute la nuit. Ici :
+ *  - la cible d'une hypo du soir est ~95 (sortir de l'hypo, pas viser haut —
+ *    le repas en cours porte le reste)
+ *  - on utilise le GRG perso, pas une constante
+ *  - le plafond est abaissé le soir, et encore plus si le repas monte encore
+ *  - le split est PRÉSENTÉ DANS LE MÊME PLAN, avec le lien explicite
+ */
+
+import {
+  computeBedtimeAdvice,
+  type BedtimeAdvisorInput,
+  type BedtimeAdvice,
+  type BedtimePrediction,
+} from "./bedtime-advisor";
+
+// ───────────────────────────────────────────────────────────────────────
+
+export interface NightBrainInput extends BedtimeAdvisorInput {
+  /**
+   * GRG perso appris (mg/dL par gramme). Si absent → défaut 4. Permet une
+   * suggestion de glucides cohérente avec le HypoLogger (une seule source).
+   */
+  personalGrg?: {
+    value: number;
+    confidence: "low" | "medium" | "high";
+    isDefault: boolean;
+  };
+}
+
+export type NightStepKind =
+  | "eat-now"
+  | "split-keep"
+  | "split-reduce"
+  | "split-skip"
+  | "correction"
+  | "wait"
+  | "recheck"
+  | "all-good";
+
+export interface NightStepAction {
+  kind: "log-carbs" | "log-correction" | "confirm-split" | "adjust-split";
+  label: string;
+  /** Grammes ou unités selon `unit`. 0 pour un skip. */
+  quantity: number;
+  unit: "g" | "U" | "";
+}
+
+export interface NightStep {
+  id: string;
+  /** Position dans la séquence (1, 2, 3…). */
+  order: number;
+  kind: NightStepKind;
+  tone: "success" | "warning" | "error" | "info";
+  headline: string;
+  detail: string;
+  action?: NightStepAction;
+}
+
+export interface NightPlan {
+  title: string;
+  subtitle: string;
+  steps: NightStep[];
+  predictions: BedtimePrediction[];
+  breakdown: BedtimeAdvice["breakdown"];
+  risk: BedtimeAdvice["risk"];
+  unreliableTooFresh: boolean;
+  recheckAt?: { hourLabel: string; minutesFromNow: number };
+}
+
+// ───────────────────────────────────────────────────────────────────────
+
+/** Cible d'une hypo du soir : juste sortir de la zone basse en sécurité. */
+const EVENING_HYPO_TARGET = 95;
+/** Cible d'une collation préventive (hypo prédite, pas encore arrivée). */
+const PREVENTIVE_TARGET = 100;
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+function fmt(n: number): string {
+  return n.toFixed(1).replace(".", ",");
+}
+
+function hourLabel(ms: number): string {
+  return new Date(ms).toLocaleTimeString("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// ───────────────────────────────────────────────────────────────────────
+
+export function computeNightPlan(input: NightBrainInput): NightPlan {
+  const advice = computeBedtimeAdvice(input);
+  const nowMs = input.nowMs ?? Date.now();
+  const grg = input.personalGrg ?? {
+    value: 4,
+    confidence: "low" as const,
+    isDefault: true,
+  };
+  const grgVal = grg.value > 0 ? grg.value : 4;
+
+  const predictions = advice.predictions;
+  const minPred = Math.min(...predictions.map((p) => p.glucose));
+  const wakeup = predictions[predictions.length - 1];
+  const subtitle = `${input.currentGlucose} mg/dL · réveil prévu ~${wakeup.glucose} à ${wakeup.hourLabel}`;
+
+  // ── Cas « repas trop récent » : on ne bluffe pas une prédiction ──────
+  if (advice.unreliableTooFresh) {
+    return {
+      title: "Ton plan pour la nuit",
+      subtitle,
+      steps: [
+        {
+          id: "too-fresh",
+          order: 1,
+          kind: "recheck",
+          tone: "info",
+          headline: "Repas trop récent pour un plan fiable",
+          detail: advice.recommendation.detail,
+        },
+      ],
+      predictions,
+      breakdown: advice.breakdown,
+      risk: advice.risk,
+      unreliableTooFresh: true,
+    };
+  }
+
+  const steps: NightStep[] = [];
+  let order = 1;
+
+  const liveLow = input.currentGlucose < 80;
+  const mealRisingSoon =
+    (input.lastMealCarbs ?? 0) > 0 && (input.lastMealHoursAgo ?? 99) < 2;
+  const hasPendingSplit = !!input.pendingSplitUnits && input.pendingSplitUnits > 0;
+  const splitAdj = advice.recommendation.splitAdjustment;
+  const splitKept =
+    hasPendingSplit && !!splitAdj && splitAdj.type !== "skip";
+
+  // ── ÉTAPE A — Glucides maintenant (hypo réelle ou prédite) ──────────
+  let carbsNow = 0;
+  let acute = false;
+  if (liveLow) {
+    acute = true;
+    const gap = Math.max(0, EVENING_HYPO_TARGET - input.currentGlucose);
+    carbsNow = clamp(Math.ceil(gap / grgVal), 8, mealRisingSoon ? 15 : 20);
+  } else if (minPred < 70) {
+    const gap = Math.max(0, PREVENTIVE_TARGET - minPred);
+    carbsNow = clamp(Math.ceil(gap / grgVal), 10, 20);
+  } else if (minPred < 90) {
+    carbsNow = 10;
+  }
+
+  if (carbsNow > 0) {
+    const grgNote = grg.isDefault
+      ? `1g ≈ ${fmt(grgVal)} mg/dL (estimation standard)`
+      : `d'après tes hypos, 1g te remonte de ~${fmt(grgVal)} mg/dL`;
+    // Le lien explicite avec le split — le cœur du fix terrain.
+    const splitNote = splitKept
+      ? " Et fais quand même ton split (étape suivante) : il couvre la digestion lente de ton dîner. Le sauter = hyper au réveil."
+      : "";
+    steps.push({
+      id: "eat-now",
+      order: order++,
+      kind: "eat-now",
+      tone: acute ? "error" : "warning",
+      headline: acute
+        ? `Mange ${carbsNow}g maintenant (tu es à ${input.currentGlucose})`
+        : `Mange ${carbsNow}g avant de te coucher`,
+      detail: acute
+        ? `Objectif : sortir de l'hypo en sécurité (~${EVENING_HYPO_TARGET} mg/dL), pas viser haut${
+            mealRisingSoon ? " — ton dîner qui digère encore te portera le reste" : ""
+          }. Privilégie des glucides lents (biscotte, pain) plutôt que du sucre rapide pour éviter le rebond nocturne. ${grgNote}.${splitNote}`
+        : `Sans ça, ta glycémie tomberait à ~${minPred} mg/dL dans la nuit. Une petite collation lente sécurise sans risquer l'hyper. ${grgNote}.${splitNote}`,
+      action: { kind: "log-carbs", label: `${carbsNow}g`, quantity: carbsNow, unit: "g" },
+    });
+  }
+
+  // ── ÉTAPE B — Décision sur le split en attente ──────────────────────
+  if (hasPendingSplit && splitAdj) {
+    if (splitAdj.type === "skip") {
+      steps.push({
+        id: "split",
+        order: order++,
+        kind: "split-skip",
+        tone: "error",
+        headline: `Saute ton split de ${splitAdj.originalUnits}U`,
+        detail: splitAdj.detail,
+        action: { kind: "adjust-split", label: "Annuler le split", quantity: 0, unit: "" },
+      });
+    } else if (splitAdj.type === "reduce") {
+      steps.push({
+        id: "split",
+        order: order++,
+        kind: "split-reduce",
+        tone: "warning",
+        headline: `Réduis ton split à ${splitAdj.suggestedUnits}U (au lieu de ${splitAdj.originalUnits}U)`,
+        detail: splitAdj.detail,
+        action: {
+          kind: "adjust-split",
+          label: `Réduire à ${splitAdj.suggestedUnits}U`,
+          quantity: splitAdj.suggestedUnits,
+          unit: "U",
+        },
+      });
+    } else {
+      steps.push({
+        id: "split",
+        order: order++,
+        kind: "split-keep",
+        tone: "info",
+        headline: `Fais ton split de ${splitAdj.originalUnits}U`,
+        detail: splitAdj.detail,
+        action: {
+          kind: "confirm-split",
+          label: `Logger ${splitAdj.originalUnits}U`,
+          quantity: splitAdj.originalUnits,
+          unit: "U",
+        },
+      });
+    }
+  }
+
+  // ── ÉTAPE C — Correction / attente (jamais si on est déjà bas) ───────
+  if (!liveLow) {
+    if (
+      advice.recommendation.type === "correction-bolus" &&
+      advice.recommendation.action
+    ) {
+      const a = advice.recommendation.action;
+      steps.push({
+        id: "correction",
+        order: order++,
+        kind: "correction",
+        tone: "error",
+        headline: advice.recommendation.headline,
+        detail: advice.recommendation.detail,
+        action: {
+          kind: "log-correction",
+          label: a.label,
+          quantity: a.quantity,
+          unit: "U",
+        },
+      });
+    } else if (advice.recommendation.type === "wait-iob") {
+      steps.push({
+        id: "wait",
+        order: order++,
+        kind: "wait",
+        tone: "info",
+        headline: advice.recommendation.headline,
+        detail: advice.recommendation.detail,
+      });
+    }
+  }
+
+  // ── Re-check (timing) ───────────────────────────────────────────────
+  let recheckAt: NightPlan["recheckAt"];
+  const actedKinds: NightStepKind[] = [
+    "correction",
+    "split-keep",
+    "split-reduce",
+  ];
+  const needsRecheck =
+    acute || steps.some((s) => actedKinds.includes(s.kind)) || advice.risk !== "safe";
+  if (needsRecheck) {
+    const mins = acute ? 20 : 120;
+    const t = nowMs + mins * 60_000;
+    recheckAt = { hourLabel: hourLabel(t), minutesFromNow: mins };
+    steps.push({
+      id: "recheck",
+      order: order++,
+      kind: "recheck",
+      tone: "info",
+      headline: `Re-check ta glycémie à ${recheckAt.hourLabel}`,
+      detail: acute
+        ? "Confirme que tu es bien remonté avant de dormir."
+        : "Pour t'assurer que la nuit part dans la bonne zone.",
+    });
+  }
+
+  // ── Rien à faire ────────────────────────────────────────────────────
+  if (steps.length === 0) {
+    steps.push({
+      id: "all-good",
+      order: order++,
+      kind: "all-good",
+      tone: "success",
+      headline: "Va te coucher, rien à ajuster",
+      detail: `Prédictions : ${predictions
+        .map((p) => `${p.label} ${p.glucose}`)
+        .join(" · ")} mg/dL. Cible nocturne (90-160) respectée toute la nuit.`,
+    });
+  }
+
+  return {
+    title: "Ton plan pour la nuit",
+    subtitle,
+    steps,
+    predictions,
+    breakdown: advice.breakdown,
+    risk: advice.risk,
+    unreliableTooFresh: false,
+    recheckAt,
+  };
+}

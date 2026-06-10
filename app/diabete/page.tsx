@@ -40,7 +40,8 @@ import {
   type RecentExercise,
 } from "@/lib/exercise-insulin-adjustment";
 import { useWhoop } from "@/hooks/useWhoop";
-import BedtimeAdvisor from "@/components/diabete/BedtimeAdvisor";
+import NightBrain from "@/components/diabete/NightBrain";
+import { estimatePersonalGRG, classifyHypoContext } from "@/lib/hypo-resucrage";
 import HypoLogger from "@/components/diabete/HypoLogger";
 import HypoFeedback from "@/components/diabete/HypoFeedback";
 import { useHypoTracker } from "@/hooks/useHypoTracker";
@@ -184,6 +185,9 @@ export default function DiabetePage() {
   // Phase 11 Bloc 6.3 — séances historiques pour personnaliser l'advisor
   const completedWorkouts = useStore((s) => s.completedWorkouts);
   const completedRunningSessions = useStore((s) => s.completedRunningSessions);
+  // Phase « Night Brain » — GRG perso pour une suggestion de glucides unifiée
+  const hypoEvents = useStore((s) => s.hypoEvents);
+  const addHypoEvent = useStore((s) => s.addHypoEvent);
 
   // Phase H — Auto-enrichissement des checkpoints des hypos en cours.
   // Le hook tick toutes les 60s et update les hypoEvents non-évalués.
@@ -826,10 +830,52 @@ export default function DiabetePage() {
     });
   }
 
-  function handleBedtimeSnack(_carbs: number) {
-    // Pour l'instant on ne logge pas les collations dans insulinLogs
-    // (pas de structure dédiée). On pourrait étendre si besoin.
-    // L'utilisateur sait juste quoi manger via la reco.
+  // ─── Night Brain — GRG perso + handlers unifiés ──────────────────
+  const personalGrg = useMemo(() => estimatePersonalGRG(hypoEvents), [hypoEvents]);
+
+  const nightBrainInput = useMemo(
+    () => ({ ...bedtimeInput, personalGrg }),
+    [bedtimeInput, personalGrg],
+  );
+
+  // Logge une prise de glucides d'hypo depuis le plan nuit → crée un
+  // HypoEvent (comme le HypoLogger) pour que le tracker apprenne le GRG.
+  function handleNightHypoCarbs(grams: number) {
+    if (grams <= 0) return;
+    const context = classifyHypoContext({
+      iobUnits: iob.totalIOB,
+      lastBolusMinutesAgo: lastActiveInjection?.minutesAgo ?? null,
+    });
+    const now = new Date();
+    addHypoEvent({
+      id: crypto.randomUUID(),
+      detectedAt: now.toISOString(),
+      initialGlucose: liveGlucose?.value ?? currentGlucose,
+      carbsConsumed: grams,
+      consumedAt: now.toISOString(),
+      glucoseAt15min: null,
+      glucoseAt30min: null,
+      glucoseAt45min: null,
+      glucoseAt60min: null,
+      peakGlucose: null,
+      assessment: "pending",
+      iobAtDetection: iob.totalIOB,
+      lastBolusMinutesAgo: lastActiveInjection?.minutesAgo ?? null,
+      lastBolusUnits: lastActiveInjection?.log.units ?? null,
+      context,
+      excludeFromLearning: context === "over-bolus",
+    });
+  }
+
+  // Confirme (logge) le split en attente le plus proche depuis le plan nuit.
+  function handleNightConfirmSplit() {
+    const upcoming = splitDoseReminders
+      .filter((r) => r.status === "pending")
+      .sort(
+        (a, b) =>
+          new Date(a.triggerAt).getTime() - new Date(b.triggerAt).getTime(),
+      )[0];
+    if (upcoming) handleConfirmSplitDose(upcoming);
   }
 
   // Phase G fix juin 2026 — Ajuste ou supprime le split en attente le plus
@@ -933,8 +979,10 @@ export default function DiabetePage() {
         </section>
       )}
 
-      {/* ── HYPO LOGGER (Phase H — apparait si glycémie < 80) ── */}
-      {(liveGlucose?.value ?? currentGlucose) < 80 && (
+      {/* ── HYPO LOGGER (Phase H — apparait si glycémie < 80) ──
+          En soirée (20h-2h), c'est le Night Brain qui gère l'hypo dans le
+          plan unifié → on masque le logger autonome pour éviter le doublon. */}
+      {!isEveningHours && (liveGlucose?.value ?? currentGlucose) < 80 && (
         <HypoLogger
           currentGlucose={liveGlucose?.value ?? currentGlucose}
           trendArrow={trendStringToNumber(liveGlucose?.trend) ?? trendArrow}
@@ -1013,12 +1061,15 @@ export default function DiabetePage() {
         </section>
       )}
 
-      {/* ── BEDTIME ADVISOR (Phase G — visible en soirée 20h-2h) ── */}
+      {/* ── NIGHT BRAIN (plan nuit unifié — visible en soirée 20h-2h) ──
+          Remplace l'empilement HypoLogger + rappel split + BedtimeAdvisor
+          par UNE carte : un plan ordonné et cohérent. */}
       {isEveningHours && (
-        <BedtimeAdvisor
-          input={bedtimeInput}
+        <NightBrain
+          input={nightBrainInput}
+          onLogHypoCarbs={handleNightHypoCarbs}
           onLogCorrection={handleBedtimeCorrection}
-          onLogSnack={handleBedtimeSnack}
+          onConfirmSplit={handleNightConfirmSplit}
           onAdjustSplit={handleAdjustBedtimeSplit}
         />
       )}
