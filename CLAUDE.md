@@ -9,7 +9,7 @@
 - **State**: Zustand 5.0.12 avec persistence localStorage (`apex-coach-storage`)
 - **Styling**: Tailwind CSS 4 + PostCSS, design system premium (tokens via `@theme`)
 - **Design System**: clsx 2.1.1, tailwind-merge 3.5, class-variance-authority 0.7.1
-- **Fonts**: Inter (primary, via `next/font`), Geist/Geist Mono (legacy), JetBrains Mono (stats)
+- **Fonts**: Geist Sans (primary, via `next/font`), Geist Mono (chiffres/métriques via `.num`/`.num-hero`), Inter (fallback). JetBrains Mono abandonné en brand v1.
 - **AI**: Anthropic Claude Sonnet 4 (`@anthropic-ai/sdk` v0.80.0) - toutes les routes API
 - **Charts**: Recharts 3.8.1
 - **Dates**: date-fns 4.1.0
@@ -29,7 +29,15 @@ apex-coach/
 │   │   ├── coach-chat/           # Chat IA interactif (actions + modifications)
 │   │   ├── generate-muscu-program/ # Génération programme muscu (retry 529/503)
 │   │   ├── generate-running-plan/  # Plan running semi-marathon
-│   │   └── update-programs/      # Comparaison diagnostics + MAJ programme
+│   │   ├── update-programs/      # Comparaison diagnostics + MAJ programme
+│   │   ├── glucose/              # Proxy LibreLink Up (current + history)
+│   │   ├── push/                 # Web Push : subscribe + test (VAPID)
+│   │   ├── whoop/                # OAuth Whoop : auth/callback/status/sync/disconnect
+│   │   ├── split/               # NEW : schedule (POST) + cancel (DELETE) split reminders
+│   │   └── cron/
+│   │       ├── glucose-check/    # Cron 5min : alertes hypo/hyper + piggyback split-check
+│   │       ├── split-check/      # Check split reminders dus (exposé debug, piggybacké)
+│   │       └── archive-glucose/  # Archivage glycémie long terme
 │   ├── diabete/                  # Suivi glycémie, calculateur bolus, IOB
 │   │   ├── page.tsx              # Page principale (glucose, bolus, logs)
 │   │   ├── parametres/           # Config ratios insuline, ISF, cibles
@@ -48,10 +56,15 @@ apex-coach/
 │   └── diagnostic/               # Ancien formulaire diagnostic (legacy)
 │
 ├── components/
+│   ├── Logo.tsx                  # NEW : logo Pulse Cockpit (LogoMark + wordmark + tagline)
+│   ├── SplashScreen.tsx          # Splash au load (logo + spinner, palette brand)
 │   ├── ui.tsx                    # LEGACY: anciens composants UI (Card, Button, Badge, Modal) — utilisés par pages existantes
 │   ├── ui/                       # DESIGN SYSTEM (Phase 1) : Button, Card, Input, NumberInput, StatCard, Badge, Progress, Skeleton
 │   ├── layout/                   # Layout primitives : PageLayout, Container, Section
 │   ├── navigation.tsx            # Sidebar desktop (64px) + bottom nav mobile
+│   ├── diabete/                  # HypoLogger, HypoFeedback, BedtimeAdvisor, CorrectionSuggestion…
+│   ├── whoop/                    # WhoopCard (compact/full), WhoopConnection
+│   ├── running/                  # RunningTracker, RunningMap (Leaflet)
 │   ├── coach/
 │   │   ├── CoachButton.tsx       # FAB flottant draggable (z-40, safe zones)
 │   │   ├── CoachPanel.tsx        # Panel chat IA
@@ -85,40 +98,57 @@ apex-coach/
 │   │   ├── exercises.ts          # Base de données 50+ exercices (61KB)
 │   │   ├── exercises-database.ts # Types (MuscleGroup, Equipment, Exercise)
 │   │   └── split-templates.ts    # Templates PPL, Upper/Lower, Full Body, Bro
-│   └── generators/
-│       ├── program-generator-local.ts  # Générateur déterministe (fallback)
-│       ├── exercise-selector.ts        # Sélection par morpho/mobilité/équipement
-│       └── volume-calculator.ts        # Volume cible par muscle selon statut
+│   ├── generators/
+│   │   ├── program-generator-local.ts  # Générateur déterministe (fallback)
+│   │   ├── exercise-selector.ts        # Sélection par morpho/mobilité/équipement
+│   │   └── volume-calculator.ts        # Volume cible par muscle selon statut
+│   ├── insulin-calculator.ts     # Bolus, FPU, split dose, IOB (getInsulinOnBoard), pre-sport
+│   ├── bedtime-advisor.ts        # Phase G : prédiction glycémie nuit + reco split
+│   ├── hypo-resucrage.ts         # Phase H : GRG perso, suggestCarbs, classifyHypoContext
+│   ├── exercise-insulin-adjustment.ts # Phase F : sensibilité post-exercice + sportFactor
+│   ├── running-tracker.ts        # GPS Haversine, allure, splits
+│   ├── libre-link/               # Client LibreLink Up (glycémie live FreeStyle)
+│   ├── push/                     # VAPID config + store KV + alerts (hypo/hyper/split)
+│   ├── whoop/                    # client.ts (OAuth + mutex refresh) + store.ts (KV tokens)
+│   ├── split-reminders/          # NEW : store/check/client (pipeline serveur notifs split)
+│   └── glucose-archive/          # Archivage + pattern-engine + analytics long terme
 │
-├── types/index.ts                # Types TS (UserProfile, ActiveProgram, Exercise, etc.)
-├── hooks/usePWA.ts               # Hook installation PWA
+├── types/index.ts                # Types TS (UserProfile, SplitDoseReminder, HypoEvent, etc.)
+├── hooks/                        # usePWA, useGlucose, useWhoop, useHypoTracker, useRunningTracker…
+├── BRAND.md                      # NEW : source de vérité identité (voice, couleurs, logo, surfaces)
+├── TODO.md                       # NEW : chantiers connus non-fixés (P0/P2)
+├── vercel.json                   # Config Vercel (cron via piggyback glucose-check)
 └── public/
     ├── manifest.json             # Config PWA
-    ├── sw.js                     # Service worker
-    └── icons/                    # Icônes app
+    ├── sw.js                     # Service worker (v4 : split tag + fix icon path)
+    ├── favicon.svg               # NEW : logo Pulse Cockpit canonique (source des PNGs)
+    └── icons/                    # Icônes app (régénérées via sharp depuis favicon.svg)
 ```
 
-## Design System (Phase 2 — "Precision Instrument", avril 2026)
+## Design System (Phase 2 — "Precision Instrument", avril 2026 · brand v1 juin 2026)
 
 Refonte créative après analyse de Linear, Raycast, Arc, Strava, MacroFactor. Identité **Precise. Athletic. Clinical.** — instrument de performance médicale, pas un tracker amateur.
 
+> ⚠️ **Source de vérité identité = `BRAND.md` à la racine** (depuis brand v1, juin 2026). En cas de désaccord entre cette section et BRAND.md, **BRAND.md gagne**. Règle d'or : lime = seul accent primaire ; les 4 hues catégorielles sont strictement des codes de données.
+
 ### Direction créative
-- **Signature typographique** : JetBrains Mono tabular-nums pour TOUS les chiffres. Les métriques sont les héros.
+- **Signature typographique** : Geist Mono tabular-nums pour TOUS les chiffres (`.num` / `.num-hero`). Les métriques sont les héros. (JetBrains Mono abandonné en brand v1 — jamais chargé, fallback SF Mono.)
 - **Label cockpit** : uppercase 10px tracking-wide (`.label` utility) — feel instrument de précision
 - **Hiérarchie par surfaces, pas par borders** : `surface-1 / surface-2 / surface-3` au lieu d'empiler des bordures
-- **Accent primaire Electric Lime** `#D4FF4F` — énergie contenue (remplace l'ancien `#10B981`)
-- **Accent secondaire Soft Lavender** `#B4A7FF` — recovery, T1D, données cliniques
+- **Accent primaire Electric Lime** `#D4FF00` — seul accent de marque (CTA, focus, logo, sélection)
+- **Accent secondaire Soft Lavender** `#B4A7FF` — recovery, T1D, données cliniques (data viz, pas CTA)
+- **Logo Pulse Cockpit** (`components/Logo.tsx`) : signal ECG dont le pic forme un A
 
 ### Tokens (globals.css `@theme`)
 - **Backgrounds** : `bg-bg-primary` (#0A0A0B), `bg-bg-secondary` (#111113), `bg-bg-tertiary` (#18181B), `bg-bg-elevated` (#1F1F23), `bg-bg-hover` (#26262B)
 - **Texte** : `text-text-primary` (#FAFAFA), `text-text-secondary` (#A1A1AA), `text-text-tertiary` (#71717A), `text-text-disabled` (#3F3F46), `text-ink` (inverse pour texte sur accent)
-- **Accent primaire** : `bg-accent` (#D4FF4F), `bg-accent-hover` (#C7F026), `bg-accent-pressed`, `bg-accent-subtle`, `text-accent-ink` (noir sur lime)
+- **Accent primaire** : `bg-accent` (#D4FF00), `bg-accent-hover` (#C7F000), `bg-accent-pressed` (#B8E000), `bg-accent-subtle`, `text-accent-ink` (noir sur lime)
 - **Accent secondaire** : `bg-accent-2` (#B4A7FF), `bg-accent-2-hover`, `bg-accent-2-subtle`
 - **Bordures** : `border-border-subtle` (6% white), `border-border-default` (10%), `border-border-strong` (16%) — rgba au lieu de hex
 - **États** : `success` (#7AE582), `warning` (#FFAE5C), `error` (#FF6B6B), `info` (#7FC7FF) — palette chaude cohérente
 - **Catégories** : `muscu` (lime), `running` (sky #7FC7FF), `nutrition` (amber #FFAE5C), `diabete` (lavender #B4A7FF)
 - **Glucose** : `glucose-low` (#FF6B6B), `glucose-normal` (#7AE582), `glucose-high` (#FFAE5C), `glucose-critical` (#FF3B3B)
-- **Fonts** : `font-sans` → Inter (letter-spacing -0.01em), `font-mono` → JetBrains Mono
+- **Fonts** : `font-sans` → Geist Sans (letter-spacing -0.01em), `font-mono` → Geist Mono (`.num`/`.num-hero`)
 
 ### Composants UI (`components/ui/`)
 - **Button / Card / Input / NumberInput / StatCard / Badge / Progress / Skeleton** : Phase 1, inchangés mais récupèrent les nouveaux tokens via CSS variables
@@ -286,9 +316,18 @@ Refonte créative après analyse de Linear, Raycast, Arc, Strava, MacroFactor. I
 
 ## Etat Actuel du Projet
 
-Le projet est une PWA fonctionnelle deployee sur Vercel. **Toutes les fonctionnalites planifiees sont implementees**, incluant la **Phase 11 "Diabète Intelligence Layer" (mai 2026, 6 blocs + 5 itérations de calibrage)**. Les modules principaux (diagnostic, generation programme, coach IA, suivi diabete, running tracking, nutrition tracking) sont operationnels. Le build TypeScript strict passe sans erreur. Validé en preview navigateur cas par cas.
+Le projet est une PWA fonctionnelle deployee sur Vercel. **Toutes les fonctionnalites planifiees sont implementees**, incluant la **Phase 11 "Diabète Intelligence Layer" (mai 2026, 6 blocs + 5 itérations de calibrage)** et les **modules juin 2026 (Phases F/G/H + brand v1 + fixes infra)**. Les modules principaux (diagnostic, generation programme, coach IA, suivi diabete, running tracking, nutrition tracking) sont operationnels. Le build TypeScript strict passe sans erreur. Validé en preview navigateur cas par cas.
 
-### Phase la plus récente (mai 2026) : Diabète Intelligence Layer
+### Phases les plus récentes (juin 2026)
+- **Phase F** : sensibilité insuline post-exercice + intégration Whoop OAuth (recovery/strain/sleep) + différenciation muscu vs cardio (Yardley 2013)
+- **Phase G** : Bedtime Advisor (prédiction glycémie nuit, reco combinée glucides + ajustement split)
+- **Phase H** : Hypo Management + GRG personnel auto-appris + **anti-pollution GRG** (exclusion auto des hypos over-bolus du calcul)
+- **Brand v1** : logo Pulse Cockpit, `BRAND.md` (source de vérité identité), purge legacy CSS, un seul accent lime, FAB migré dans la palette
+- **Infra critique** : pipeline serveur notifs split dose (KV + cron piggyback, marche app fermée) + fix session Whoop "infinie" (mutex anti-race-condition)
+
+Voir les sections `### Phase F/G/H`, `### Brand v1`, `### Fix critique — Pipeline serveur...` et `### Fix Whoop — session "permanente"...` plus bas pour les détails.
+
+### Phase précédente (mai 2026) : Diabète Intelligence Layer
 - **Bolus Calculator v2** : FPU + split dose, trend arrow adjustment, IOB stacking advisor, pre-workout advisor, conseil de timing d'injection
 - **Meal Logger** : 9 quick-tags (Pâtes, Riz, Pizza…) × 3 tailles avec pré-fill macros, score complexité digestive, historique par tag avec suggestions
 - **Pattern Engine** : 5 règles cliniques (nuit-hyper, recurring-hypo, post-meal-spike, dawn, CV-degradation) avec push notif locale + UI cartes dismiss
@@ -1083,6 +1122,73 @@ Résultat : l'over-bolus n'empoisonne plus le GRG, mais reste loggé pour le sui
 **Sources scientifiques** :
 - ADA T1D Self-Management Education — règle classique "15-15"
 - GRG typique adulte T1D : 3-6 mg/dL/g, variable selon vitesse absorption, glycémie de départ, IOB en cours
+
+### Fix Whoop — token expiré → reconnexion UI (juin 2026)
+
+**Bug constaté** : Ethan ne voyait plus sa récupération / son sommeil sur le Dashboard alors qu'il se croyait connecté.
+
+**Root cause** (confirmée via logs Vercel `[whoop/sync] fetch error ... refresh failed`) :
+1. Son refresh_token Whoop avait été révoqué (rotation, inactivité, ou révocation depuis l'app Whoop officielle).
+2. `/api/whoop/sync` retournait `{ connected: true, error: "fetch_failed" }` **sans purger les tokens KV** → état zombie.
+3. `WhoopCard variant="compact"` faisait `if (!connected || !snapshot) return null` → **cachait la carte silencieusement**, aucun feedback.
+
+**Fixes** :
+- `/api/whoop/sync` détecte les erreurs de refresh (`refresh failed` / `invalid_grant` / `invalid_token`) et purge les tokens via `clearTokens()`. Retourne `{ connected: false, error: "token_expired" }` avec message FR.
+- `WhoopCard` compact ne retourne plus `null` silencieusement :
+  - `error === "token_expired"` → `<ReconnectCard />` orange + lien `/diabete/parametres` + bouton "Reconnecter Whoop"
+  - connecté mais snapshot null → `<ErrorCard />` rouge + bouton "Réessayer"
+  - Loading initial → `null` (évite flash)
+
+⚠️ Ce fix sera affiné juste après par le fix mutex (voir plus bas) car le `clearTokens()` immédiat s'est avéré trop agressif.
+
+### Brand v1 — logo Pulse Cockpit + BRAND.md + purge legacy (juin 2026)
+
+Audit branding (via `/design-critique`) → identité fragmentée (4 hues catégorielles par page), logo placeholder, legacy CSS, FAB rose/violet hors palette. Refonte en 5 chantiers.
+
+**Décision fond** : garder le noir "Precision Instrument" (Voie A) — introduire des surfaces claires ponctuelles seulement pour les futurs rapports de lecture longue. Pas de bascule blanc (le lime ne passe pas sur blanc, contraste 1.4:1).
+
+1. **Logo Pulse Cockpit** (`components/Logo.tsx`) : signal ECG dont le pic anguleux forme un A via la traverse + dot au sommet. Variants : `LogoMark` seul / `Logo` + wordmark / + tagline. SVG canonique `public/favicon.svg` (1.5 KB), 6 PNGs régénérés via `sharp` (192, 512, apple-touch, web-app-manifest×2, favicon-96). Intégré dans `Navigation` (sidebar + header mobile) + `SplashScreen`.
+2. **`BRAND.md`** à la racine = source de vérité : promesse ("instrument de bord de l'athlète diabétique"), voice & tone (tutoiement, brièveté, jargon T1D explicité, pas d'emoji UI), **règle d'or couleurs** (lime = seul accent primaire ; les 4 hues muscu/running/nutrition/diabete = strictement codes de données, jamais CTA/hero), surfaces (3 niveaux sombre + Voie A surface claire), composants tabou, ship checklist.
+3. **Purge legacy** (`globals.css`) : supprimé `--accent-green/blue/purple/orange/red`, `--bg-card`, `--text-muted`, classes `.card`, `.neon-*`, `.glow-green/blue/purple/orange`. `--font-mono` pointe sur Geist Mono (déjà chargé) au lieu de JetBrains Mono (jamais chargé). `public/` purgé des assets template Next.js (next/vercel/file/globe/window.svg).
+4. **POC un accent** : `components/coach/CoachButton.tsx` — FAB chat migré du gradient rose/violet (`#a855f7→#ec4899`) vers cercle bg-elevated discret + icône lime + badge unread sur `--error`.
+5. **Voie A** (surface claire `#FAFAFA` + accent indigo `#3D2BFF`) documentée mais **pas encore implémentée** → introduction progressive sur les futurs rapports hebdo.
+
+**TODO.md créé** à la racine pour tracker les chantiers connus non-fixés (cf. notamment split notifs serveur ci-dessous, désormais résolu, + P2 : onglet actif bottom nav toujours lime, emojis HypoFeedback → lucide, audit /muscu et /nutrition).
+
+### Fix critique — Pipeline serveur pour notifs split dose (juin 2026)
+
+**Bug constaté** : Ethan ne recevait plus les rappels split dose (FPU) quand l'app PWA était fermée. Manqué un midi → hyperglycémie tardive non couverte.
+
+**Root cause** : les reminders étaient stockés uniquement dans Zustand persist (localStorage). La notif était déclenchée par un `useEffect` dans la page `/diabete` → ne tourne **QUE si la page est ouverte et montée**. App fermée / autre page / device en veille → silence total. Aucun cron serveur. Bug bonus : path icon `/icons/icon-192.png` inexistant (c'est `icon-192x192.png` depuis le rebrand).
+
+**Architecture du fix** (pipeline parallèle au `glucose-check`) :
+- `lib/split-reminders/store.ts` : KV `split:reminders` → `SplitDoseReminder[]`. Helpers `getAllReminders` / `upsertReminder` (idempotent par id) / `getDueReminders` / `markFired` / `removeReminder`. Auto-purge fired/dismissed > 48h, cap 100.
+- `lib/split-reminders/check.ts` : `checkSplitsAndAlert()` itère les reminders dus, envoie push VAPID via `sendGlucosePush`, marque `fired`. Si `subscription_gone` → marque fired pour ne pas retenter.
+- `lib/split-reminders/client.ts` : `scheduleSplitOnServer` / `cancelSplitOnServer` (fire-and-forget, silencieux si réseau down).
+- `app/api/split/schedule` (POST) + `app/api/split/cancel` (DELETE) : endpoints simples, validation minimale, pas d'auth (single-user).
+- `app/api/cron/split-check` (GET) : route protégée par `CRON_SECRET`, exposée pour debug manuel.
+- `lib/push/alerts.ts` : `GlucoseAlertPayload` étendu avec type `"split"` + champ `tag` optionnel.
+- `public/sw.js` (v3 → v4) : lit `payload.tag` (`split-<id>`) pour notifs multiples simultanées + dedup ; fix path icon ; `"split"` dans `requireInteraction` + `renotify`.
+- `app/diabete/page.tsx` : à la création split → `addSplitDoseReminder` + `scheduleSplitOnServer` ; à confirmation/dismiss/ajustement bedtime → `removeSplitDoseReminder` + `cancelSplitOnServer` ; **migration douce** au mount (POST tous les pending locaux non syncés) ; useEffect local conservé en backup pour feedback instantané si app ouverte.
+
+**⚠️ Contrainte Vercel Hobby tier** : limite à **1 cron/jour** (pas par minute). Impossible d'avoir un cron dédié `* * * * *`. Solution **piggyback** : `checkSplitsAndAlert()` est appelé depuis le cron `glucose-check` existant (toutes les 5 min). Latence push split = max 5 min après triggerAt — acceptable car un split attend déjà 2-3h. `vercel.json` ne déclare PAS de cron dédié split.
+
+### Fix Whoop — session "permanente" via mutex anti-race-condition (juin 2026)
+
+**Question Ethan** : "puis-je avoir une session Whoop infinie sans devoir reconnecter à chaque fois ?" → **Oui, c'est le comportement attendu**. S'il devait reconnecter, c'était un bug.
+
+**Root cause** : `/api/whoop/sync` fait **4 fetch parallèles** (cycle/recovery/sleep/workout) → tous appellent `getValidAccessToken()` en simultané → si access_token expiré, **4 refresh en parallèle**. Whoop fait de la **rotation des refresh_token** : le 1er invalide le token, les 3 autres reçoivent `invalid_grant` 401 → cascade de fails → `clearTokens()` (fix précédent trop agressif) → déconnexion quasi à chaque ouverture.
+
+**Fix en 2 couches** :
+1. **Mutex KV** (`lib/whoop/store.ts` + `client.ts`) :
+   - `acquireRefreshLock` / `releaseRefreshLock` : KV `set NX` avec TTL 10s.
+   - `getValidAccessToken` refactor : (a) re-read tokens KV avant de décider ; (b) si expiré, try acquire lock ; (c) si lock pas obtenu → poll KV jusqu'à 8s (un autre process refresh) puis utiliser le nouveau token ; (d) si lock obtenu → double-check puis refresh/save/release.
+   - Marge de sécurité 60s sur l'expiration (évite les "border refresh").
+2. **Adoucissement clearTokens** (`app/api/whoop/sync/route.ts`) :
+   - Compteur de fails consécutifs en KV (`whoop:refresh-fails`, TTL 10min).
+   - Clear seulement après **3 fails consécutifs**. Fail transitoire (1-2) → reste `connected`, retentera au prochain fetch. Succès → reset compteur.
+
+**Résultat** : session vraiment "infinie" tant qu'Ethan ouvre l'app au moins 1× / 60 jours. Les blips transitoires ne déconnectent plus. Vraie révocation → carte de reconnexion après ~3 fails (~15 min).
 
 ### Phase A — Running tracker GPS live (mai 2026)
 Démarrage du module **"vrai Strava"** pour le running. Phase A = MVP tracking GPS sans carte (carte = Phase B prévue ensuite). Killer feature unique vs Strava : intégration native avec la glycémie live FreeStyle Libre + corrélation sport-glucose déjà existante.
