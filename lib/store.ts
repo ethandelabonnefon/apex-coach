@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { USER_PROFILE, DIABETES_CONFIG, DIABETES_PROFILES_DEFAULT, MUSCU_PROGRAM } from './constants';
-import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile, SplitDoseReminder, HypoEvent } from '@/types';
+import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile, SplitDoseReminder, HypoEvent, ManualDigestion } from '@/types';
 
 interface CompletedWorkout {
   id: string;
@@ -94,6 +94,10 @@ interface AppState {
   addHypoEvent: (event: HypoEvent) => void;
   updateHypoEvent: (id: string, updates: Partial<HypoEvent>) => void;
   removeHypoEvent: (id: string) => void;
+
+  // Night Brain — repas déclaré à la main en cours de digestion (juin 2026)
+  manualDigestion: ManualDigestion | null;
+  setManualDigestion: (digestion: ManualDigestion | null) => void;
 
   // Nutrition
   meals: Meal[];
@@ -303,6 +307,8 @@ export const useStore = create<AppState>()(
           e.id === id ? { ...e, ...updates } : e,
         ),
       })),
+      manualDigestion: null,
+      setManualDigestion: (digestion) => set({ manualDigestion: digestion }),
       removeHypoEvent: (id) => set((s) => ({
         hypoEvents: s.hypoEvents.filter((e) => e.id !== id),
       })),

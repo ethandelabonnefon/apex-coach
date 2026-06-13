@@ -41,6 +41,7 @@ import {
 } from "@/lib/exercise-insulin-adjustment";
 import { useWhoop } from "@/hooks/useWhoop";
 import NightBrain from "@/components/diabete/NightBrain";
+import DigestionInput from "@/components/diabete/DigestionInput";
 import { estimatePersonalGRG, classifyHypoContext } from "@/lib/hypo-resucrage";
 import HypoLogger from "@/components/diabete/HypoLogger";
 import HypoFeedback from "@/components/diabete/HypoFeedback";
@@ -188,6 +189,8 @@ export default function DiabetePage() {
   // Phase « Night Brain » — GRG perso pour une suggestion de glucides unifiée
   const hypoEvents = useStore((s) => s.hypoEvents);
   const addHypoEvent = useStore((s) => s.addHypoEvent);
+  // Repas déclaré à la main en cours de digestion (override prédiction nuit)
+  const manualDigestion = useStore((s) => s.manualDigestion);
 
   // Phase H — Auto-enrichissement des checkpoints des hypos en cours.
   // Le hook tick toutes les 60s et update les hypoEvents non-évalués.
@@ -777,9 +780,38 @@ export default function DiabetePage() {
         return { ...log, injectedAt, hoursAgo: (nowTick - injectedAt) / 3_600_000 };
       })
       .sort((a, b) => b.injectedAt - a.injectedAt)[0];
-    const lastMealFpu = lastMeal?.fatGrams && lastMeal?.proteinGrams
+    const inferredFpu = lastMeal?.fatGrams && lastMeal?.proteinGrams
       ? (lastMeal.fatGrams * 9 + lastMeal.proteinGrams * 4) / 100
       : 0;
+
+    // Repas déclaré à la main : s'il est frais (< 6h), il prime sur le repas
+    // inféré des injections → le plan nuit voit exactement ce qu'Ethan digère.
+    const dinnerGramsPerU =
+      diabetesConfig.ratios?.dinner && diabetesConfig.ratios.dinner > 0
+        ? diabetesConfig.ratios.dinner
+        : undefined;
+    let mealHoursAgo = lastMeal?.hoursAgo;
+    let mealFpu = inferredFpu;
+    let mealCarbs = lastMeal?.carbsGrams;
+    let mealCoverage:
+      | { carbsGrams: number; insulinUnits: number; gramsPerU: number }
+      | undefined;
+    if (manualDigestion) {
+      const ageH = (nowTick - new Date(manualDigestion.eatenAt).getTime()) / 3_600_000;
+      if (ageH >= 0 && ageH < 6) {
+        mealHoursAgo = ageH;
+        mealFpu = (manualDigestion.fatGrams * 9 + manualDigestion.proteinGrams * 4) / 100;
+        mealCarbs = manualDigestion.carbsGrams;
+        if (dinnerGramsPerU && manualDigestion.carbsGrams > 0) {
+          mealCoverage = {
+            carbsGrams: manualDigestion.carbsGrams,
+            insulinUnits: manualDigestion.insulinUnits,
+            gramsPerU: dinnerGramsPerU,
+          };
+        }
+      }
+    }
+
     // Split en attente
     const upcomingSplit = splitDoseReminders
       .filter((r) => r.status === "pending")
@@ -791,12 +823,19 @@ export default function DiabetePage() {
       trendArrow: refTrend,
       iobUnits: iob.totalIOB,
       isfMgPerU: diabetesConfig.insulinSensitivityFactor,
+      // Montée par gramme de glucides = ISF / ratio du soir (g par U).
+      // Sert à équilibrer la montée FPU avec la dose split qui la couvre.
+      mgPerGramCarb:
+        diabetesConfig.ratios?.dinner && diabetesConfig.ratios.dinner > 0
+          ? diabetesConfig.insulinSensitivityFactor / diabetesConfig.ratios.dinner
+          : undefined,
       insulinActiveMinutes: diabetesConfig.insulinActiveDuration,
       targetGlucose: diabetesConfig.targetGlucose,
       hoursUntilWakeup: 7,
-      lastMealHoursAgo: lastMeal?.hoursAgo,
-      lastMealFpu,
-      lastMealCarbs: lastMeal?.carbsGrams,
+      lastMealHoursAgo: mealHoursAgo,
+      lastMealFpu: mealFpu,
+      lastMealCarbs: mealCarbs,
+      mealCoverage,
       exerciseAdjustmentPct: exerciseAdjustment?.reductionPct,
       exerciseSource: exerciseAdjustment?.source as 'running' | 'muscu' | 'cardio-other' | undefined,
       exerciseHoursAgo: exerciseAdjustment?.hoursAgo,
@@ -813,6 +852,7 @@ export default function DiabetePage() {
     diabetesConfig,
     exerciseAdjustment,
     splitDoseReminders,
+    manualDigestion,
     nowTick,
   ]);
 
@@ -837,6 +877,29 @@ export default function DiabetePage() {
     () => ({ ...bedtimeInput, personalGrg }),
     [bedtimeInput, personalGrg],
   );
+
+  // Repas loggé récent (calculateur de bolus) à reprendre dans la carte
+  // "Ce que tu digères" → Ethan n'a qu'à ajouter un en-cas par-dessus.
+  const loggedMealPrefill = useMemo(() => {
+    const m = insulinLogs
+      .filter((log) => log.carbsGrams > 0 && log.mealType !== "correction")
+      .map((log) => ({ ...log, t: new Date(log.injectedAt).getTime() }))
+      .sort((a, b) => b.t - a.t)[0];
+    if (!m) return null;
+    const minsAgo = Math.max(0, Math.round((nowTick - m.t) / 60000));
+    if (minsAgo > 360) return null; // > 6h → plus pertinent pour la nuit
+    return {
+      carbsGrams: m.carbsGrams,
+      fatGrams: m.fatGrams ?? 0,
+      proteinGrams: m.proteinGrams ?? 0,
+      insulinUnits: m.units,
+      minsAgo,
+      timeLabel: new Date(m.t).toLocaleTimeString("fr-FR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+  }, [insulinLogs, nowTick]);
 
   // Logge une prise de glucides d'hypo depuis le plan nuit → crée un
   // HypoEvent (comme le HypoLogger) pour que le tracker apprenne le GRG.
@@ -1065,13 +1128,19 @@ export default function DiabetePage() {
           Remplace l'empilement HypoLogger + rappel split + BedtimeAdvisor
           par UNE carte : un plan ordonné et cohérent. */}
       {isEveningHours && (
-        <NightBrain
-          input={nightBrainInput}
-          onLogHypoCarbs={handleNightHypoCarbs}
-          onLogCorrection={handleBedtimeCorrection}
-          onConfirmSplit={handleNightConfirmSplit}
-          onAdjustSplit={handleAdjustBedtimeSplit}
-        />
+        <>
+          <DigestionInput
+            gramsPerU={diabetesConfig.ratios?.dinner}
+            suggestedMeal={loggedMealPrefill}
+          />
+          <NightBrain
+            input={nightBrainInput}
+            onLogHypoCarbs={handleNightHypoCarbs}
+            onLogCorrection={handleBedtimeCorrection}
+            onConfirmSplit={handleNightConfirmSplit}
+            onAdjustSplit={handleAdjustBedtimeSplit}
+          />
+        </>
       )}
 
       {/* ── BRIEFING PRÉ-SPORT (advisor indépendant) ── */}

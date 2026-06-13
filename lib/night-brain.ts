@@ -40,9 +40,22 @@ export interface NightBrainInput extends BedtimeAdvisorInput {
     confidence: "low" | "medium" | "high";
     isDefault: boolean;
   };
+
+  /**
+   * Couverture du repas déclaré à la main : combien de glucides ont été
+   * mangés vs combien d'insuline a été prise. Permet l'alerte « tu as
+   * peut-être trop mangé » (sous-dosage) ou « trop d'insuline » (sur-dosage).
+   */
+  mealCoverage?: {
+    carbsGrams: number;
+    insulinUnits: number;
+    /** Ratio glucides du repas (g par U). */
+    gramsPerU: number;
+  };
 }
 
 export type NightStepKind =
+  | "coverage"
   | "eat-now"
   | "split-keep"
   | "split-reduce"
@@ -145,6 +158,33 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
 
   const steps: NightStep[] = [];
   let order = 1;
+
+  // ── Couverture du repas déclaré à la main (trop mangé / trop d'insuline) ──
+  let coverageStep: NightStep | undefined;
+  if (input.mealCoverage && input.mealCoverage.gramsPerU > 0) {
+    const { carbsGrams, insulinUnits, gramsPerU } = input.mealCoverage;
+    const expected = carbsGrams / gramsPerU;
+    const delta = insulinUnits - expected; // <0 = sous-dosé, >0 = sur-dosé
+    if (delta <= -1.5) {
+      coverageStep = {
+        id: "coverage",
+        order: 0,
+        kind: "coverage",
+        tone: "warning",
+        headline: `Attention, tu as peut-être trop mangé pour ton insuline`,
+        detail: `${carbsGrams}g de glucides ≈ ${expected.toFixed(1).replace(".", ",")}U nécessaires, mais tu n'as pris que ${insulinUnits.toFixed(1).replace(".", ",")}U. Il manque ~${(-delta).toFixed(1).replace(".", ",")}U → ça va te faire monter (vois le réveil prédit ci-dessous). Surveille, une correction sera peut-être conseillée plus bas.`,
+      };
+    } else if (delta >= 1.5) {
+      coverageStep = {
+        id: "coverage",
+        order: 0,
+        kind: "coverage",
+        tone: "info",
+        headline: `Tu as pris plus d'insuline que pour ces glucides`,
+        detail: `${insulinUnits.toFixed(1).replace(".", ",")}U pour ${carbsGrams}g (il en fallait ~${expected.toFixed(1).replace(".", ",")}U). Surplus ~${delta.toFixed(1).replace(".", ",")}U → risque de baisse. Garde du sucre à portée et surveille.`,
+      };
+    }
+  }
 
   const liveLow = input.currentGlucose < 80;
   const mealRisingSoon =
@@ -297,7 +337,7 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
   }
 
   // ── Rien à faire ────────────────────────────────────────────────────
-  if (steps.length === 0) {
+  if (steps.length === 0 && !coverageStep) {
     steps.push({
       id: "all-good",
       order: order++,
@@ -308,6 +348,12 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
         .map((p) => `${p.label} ${p.glucose}`)
         .join(" · ")} mg/dL. Cible nocturne (90-160) respectée toute la nuit.`,
     });
+  }
+
+  // L'alerte couverture passe en tête (contexte avant les actions).
+  if (coverageStep) {
+    steps.unshift(coverageStep);
+    steps.forEach((s, i) => (s.order = i + 1));
   }
 
   return {

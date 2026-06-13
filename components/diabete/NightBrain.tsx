@@ -28,6 +28,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Activity,
+  AlertTriangle,
   X,
   Minus,
 } from "lucide-react";
@@ -57,6 +58,7 @@ const TONE: Record<
 };
 
 const STEP_ICON: Record<NightStep["kind"], ComponentType<{ className?: string }>> = {
+  coverage: AlertTriangle,
   "eat-now": Apple,
   "split-keep": Syringe,
   "split-reduce": Minus,
@@ -92,6 +94,16 @@ export default function NightBrain({
   const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
 
   const plan = useMemo(() => computeNightPlan(input), [input]);
+
+  // Numérotation : seules les actions concrètes portent un numéro.
+  const badges = useMemo(() => {
+    let n = 0;
+    return plan.steps.map((s) =>
+      s.kind === "all-good" || s.kind === "recheck" || s.kind === "coverage"
+        ? ""
+        : String(++n),
+    );
+  }, [plan.steps]);
 
   function markDone(id: string) {
     setDoneIds((prev) => new Set(prev).add(id));
@@ -156,12 +168,13 @@ export default function NightBrain({
         </p>
       ) : (
         <>
-          {/* Étapes ordonnées */}
+          {/* Étapes ordonnées — on ne numérote que les actions concrètes */}
           <ol className="space-y-2 mb-4">
             {plan.steps.map((step, i) => {
               const tone = TONE[step.tone];
               const Icon = STEP_ICON[step.kind];
               const done = doneIds.has(step.id);
+              const badge = badges[i];
               return (
                 <li
                   key={step.id}
@@ -175,9 +188,7 @@ export default function NightBrain({
                       <span
                         className={`w-6 h-6 rounded-full ${tone.ring} ${tone.text} text-xs font-bold flex items-center justify-center num`}
                       >
-                        {step.kind === "all-good" || step.kind === "recheck"
-                          ? ""
-                          : i + 1}
+                        {badge}
                       </span>
                       <Icon className={`w-3.5 h-3.5 ${tone.text}`} />
                     </div>

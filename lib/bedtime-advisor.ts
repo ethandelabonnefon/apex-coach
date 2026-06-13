@@ -36,6 +36,12 @@ export interface BedtimeAdvisorInput {
   iobUnits: number;
   /** Insulin Sensitivity Factor (mg/dL par U). */
   isfMgPerU: number;
+  /**
+   * Montée glycémique par gramme de glucides (mg/dL/g) = ISF / ratio (g par U).
+   * Sert à modéliser la montée FPU sur la même échelle que la dose split qui
+   * la couvre (facteur 6), pour que les deux s'équilibrent. Default 4.
+   */
+  mgPerGramCarb?: number;
   /** Durée d'action insuline rapide en minutes (default 195). */
   insulinActiveMinutes: number;
   /** Cible glycémie diurne (default 110). */
@@ -149,6 +155,25 @@ function trendVelocity(arrow?: number): number {
 }
 
 // ───────────────────────────────────────────────────────────────────────
+// FPU ↔ split : paire couplée (fix juin 2026)
+// ───────────────────────────────────────────────────────────────────────
+//
+// La dose split est calculée avec FPU_CARB_EQUIVALENT_FACTOR = 6
+// (insulin-calculator.ts). On modélise la MONTÉE FPU avec ce même facteur 6,
+// donc un split bien dosé annule la montée par construction (net ≈ 0).
+//  - Pas de split → la montée FPU apparaît → hyper prédite → on recommande
+//    de GARDER le split (au lieu de le sauter à tort).
+//  - Split bien dosé → net ≈ 0 → "tout va bien".
+//
+// Plancher sur la chute nette : un split qui couvre du FPU ne doit pas se lire
+// comme une grosse chute "gratuite" (c'était le bug qui faisait recommander
+// "saute ton split" en permanence). Il peut tirer un peu (effet correctif
+// léger) mais pas te faire plonger.
+const FPU_GLUCOSE_FACTOR = 6;
+const FPU_WINDOW_H = 5;
+const SPLIT_NET_DROP_FLOOR = 35;
+
+// ───────────────────────────────────────────────────────────────────────
 // Prédiction glycémie à un horizon donné
 // ───────────────────────────────────────────────────────────────────────
 
@@ -228,38 +253,45 @@ function predictGlucoseAt(
     glucose += carbsRise;
   }
 
-  // ─── 3. Split dose en attente : effet futur ──────────
-  let splitDrop = 0;
-  if (input.pendingSplitUnits && input.pendingSplitMinutesUntil !== undefined) {
-    const splitWillFireAtHours = input.pendingSplitMinutesUntil / 60;
-    if (hoursFromNow > splitWillFireAtHours) {
-      const hoursSinceSplit = hoursFromNow - splitWillFireAtHours;
-      const splitFraction = Math.min(
-        PRACTICAL_IOB_CAP,
-        (hoursSinceSplit * 60) / input.insulinActiveMinutes,
-      );
-      splitDrop = input.pendingSplitUnits * input.isfMgPerU * splitFraction;
-      glucose -= splitDrop;
-    }
-  }
-
-  // ─── 4. FPU restant du dernier repas (digestion lente) ──
-  // Si dîner FPU élevé il y a < 5h, la digestion continue et fait monter.
-  // Modèle : effet de 1 FPU ≈ +3 mg/dL/h pendant la fenêtre 1h-5h post-repas.
+  // ─── 3+4. FPU restant ↔ split qui le couvre (paire couplée) ──
+  // On modélise la montée FPU (facteur 6) et la couverture du split sur la
+  // MÊME échelle, puis on les nette. Un split bien dosé annule la montée FPU
+  // (net ≈ 0) ; pas de split → la montée apparaît → hyper prédite. Plancher
+  // sur la chute nette pour qu'un split couvrant ne se lise pas comme un crash.
   let fpuRise = 0;
+  let rawSplitDrop = 0;
+  const mgPerG = input.mgPerGramCarb ?? 4;
   if (
     input.lastMealFpu &&
     input.lastMealFpu >= 1 &&
     input.lastMealHoursAgo !== undefined &&
-    input.lastMealHoursAgo < 5
+    input.lastMealHoursAgo < FPU_WINDOW_H
   ) {
-    const fpuWindowRemaining = 5 - input.lastMealHoursAgo;
-    const effectiveHours = Math.min(fpuWindowRemaining, hoursFromNow);
-    if (effectiveHours > 0) {
-      fpuRise = input.lastMealFpu * 3 * effectiveHours;
-      glucose += fpuRise;
+    const totalFpuGlucose = input.lastMealFpu * FPU_GLUCOSE_FACTOR * mgPerG;
+    const ratePerHour = totalFpuGlucose / FPU_WINDOW_H;
+    const remaining = FPU_WINDOW_H - input.lastMealHoursAgo;
+    const effectiveHours = Math.max(0, Math.min(remaining, hoursFromNow));
+    fpuRise = ratePerHour * effectiveHours;
+  }
+  if (input.pendingSplitUnits && input.pendingSplitMinutesUntil !== undefined) {
+    const splitWillFireAtHours = input.pendingSplitMinutesUntil / 60;
+    if (hoursFromNow > splitWillFireAtHours) {
+      const hoursSinceSplit = hoursFromNow - splitWillFireAtHours;
+      // Le split est là pour couvrir le FPU : on le laisse couvrir jusqu'à
+      // 100% de son potentiel (pas le cap 0.5 de l'IOB de fond).
+      const splitFraction = Math.min(
+        1,
+        (hoursSinceSplit * 60) / input.insulinActiveMinutes,
+      );
+      rawSplitDrop = input.pendingSplitUnits * input.isfMgPerU * splitFraction;
     }
   }
+  // Net couplé, avec plancher sur la chute
+  let netFpuSplit = fpuRise - rawSplitDrop;
+  if (netFpuSplit < 0) netFpuSplit = Math.max(netFpuSplit, -SPLIT_NET_DROP_FLOOR);
+  glucose += netFpuSplit;
+  // splitDrop "effectif" pour la transparence UI (réconcilie avec le net)
+  const splitDrop = fpuRise - netFpuSplit;
 
   // ─── 5. Effet sport (sensibilité insuline ↑) ─────────
   // L'IOB est plus efficace que prévu → on retire en plus.
@@ -287,8 +319,8 @@ function predictGlucoseAt(
     glucose += dawnBump;
   }
 
-  // ─── 7. Floor à 40 mg/dL pour réalisme ───────────────
-  glucose = Math.max(40, Math.round(glucose));
+  // ─── 7. Clamp 40-350 mg/dL pour réalisme ─────────────
+  glucose = Math.min(350, Math.max(40, Math.round(glucose)));
 
   return {
     trendShift: Math.round(trendShift),

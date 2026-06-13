@@ -161,6 +161,23 @@ export interface SplitDoseReminder {
 }
 
 /**
+ * Repas déclaré à la main en cours de digestion (Night Brain, juin 2026).
+ *
+ * Permet à Ethan de dire « voilà ce que j'ai actuellement dans le ventre »
+ * (glucides/lipides/protéines + insuline prise) pour que le plan nuit en
+ * tienne compte et alerte s'il a trop mangé pour son insuline.
+ */
+export interface ManualDigestion {
+  carbsGrams: number;
+  fatGrams: number;
+  proteinGrams: number;
+  /** Insuline prise pour ce repas (U). 0 si rien (ex: glucides d'hypo). */
+  insulinUnits: number;
+  /** ISO du moment où il a commencé à manger. */
+  eatenAt: string;
+}
+
+/**
  * Hypoglycemia event — Phase H (juin 2026).
  *
  * Trace une hypo et son re-sucrage pour permettre :
