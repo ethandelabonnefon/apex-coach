@@ -43,6 +43,13 @@ import { useWhoop } from "@/hooks/useWhoop";
 import NightBrain from "@/components/diabete/NightBrain";
 import DigestionInput from "@/components/diabete/DigestionInput";
 import { estimatePersonalGRG, classifyHypoContext } from "@/lib/hypo-resucrage";
+import {
+  estimateNightDrift,
+  estimateDawnCurve,
+  resolveNightLogs,
+  estimateWakeupBias,
+} from "@/lib/night-calibration";
+import { computeNightPlan } from "@/lib/night-brain";
 import HypoLogger from "@/components/diabete/HypoLogger";
 import HypoFeedback from "@/components/diabete/HypoFeedback";
 import { useHypoTracker } from "@/hooks/useHypoTracker";
@@ -191,6 +198,10 @@ export default function DiabetePage() {
   const addHypoEvent = useStore((s) => s.addHypoEvent);
   // Repas déclaré à la main en cours de digestion (override prédiction nuit)
   const manualDigestion = useStore((s) => s.manualDigestion);
+  // Boucle d'auto-apprentissage de la prédiction nuit (prédit vs réel)
+  const nightPredictionLogs = useStore((s) => s.nightPredictionLogs);
+  const addNightPredictionLog = useStore((s) => s.addNightPredictionLog);
+  const setNightPredictionLogs = useStore((s) => s.setNightPredictionLogs);
 
   // Phase H — Auto-enrichissement des checkpoints des hypos en cours.
   // Le hook tick toutes les 60s et update les hypoEvents non-évalués.
@@ -769,6 +780,40 @@ export default function DiabetePage() {
     return h >= 20 || h < 2;
   }, [nowTick]);
 
+  // ─── Calibration nuit perso (archive + injections + backtest) ─────
+  const nightCalibration = useMemo(() => {
+    const pts = archivePoints as ArchivedPoint[];
+    const injections = insulinLogs.map((l) => ({
+      injectedAt: new Date(l.injectedAt).toISOString(),
+      units: l.units,
+    }));
+    const drift = estimateNightDrift(pts, injections);
+    const dawn = estimateDawnCurve(pts);
+    const resolved = resolveNightLogs(nightPredictionLogs, pts, nowTick);
+    const bias = estimateWakeupBias(resolved);
+    return {
+      drift,
+      dawn,
+      bias,
+      verifiedNights: resolved.filter((r) => r.errorMgDl !== undefined).length,
+    };
+  }, [archivePoints, insulinLogs, nightPredictionLogs, nowTick]);
+
+  // Persiste la résolution des prédictions passées (backtest) dès que
+  // l'archive permet de remplir de nouvelles nuits.
+  useEffect(() => {
+    const resolved = resolveNightLogs(
+      nightPredictionLogs,
+      archivePoints as ArchivedPoint[],
+      Date.now(),
+    );
+    const changed = resolved.some(
+      (r, i) => r.actualWakeupGlucose !== nightPredictionLogs[i]?.actualWakeupGlucose,
+    );
+    if (changed) setNightPredictionLogs(resolved);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [archivePoints, nightPredictionLogs]);
+
   const bedtimeInput = useMemo(() => {
     const refGlucose = liveGlucose?.value ?? currentGlucose;
     const refTrend = liveGlucose ? trendStringToNumber(liveGlucose.trend) : trendArrow;
@@ -822,6 +867,17 @@ export default function DiabetePage() {
       currentGlucose: refGlucose,
       trendArrow: refTrend,
       iobUnits: iob.totalIOB,
+      // IOB exponentiel par injection (plus précis que le scalaire linéaire)
+      iobInjections: iob.details.map((d) => ({ units: d.units, minutesAgo: d.minutesAgo })),
+      // Calibration perso (gâtée par la confiance — sinon fallback scolaire)
+      nightDriftPerHour:
+        nightCalibration.drift.sampleNights >= 4 ? nightCalibration.drift.driftPerHour : undefined,
+      dawnCurveByHour:
+        nightCalibration.dawn.sampleDays >= 4 &&
+        Object.keys(nightCalibration.dawn.curve).length > 0
+          ? nightCalibration.dawn.curve
+          : undefined,
+      wakeupBias: nightCalibration.bias.bias || undefined,
       isfMgPerU: diabetesConfig.insulinSensitivityFactor,
       // Montée par gramme de glucides = ISF / ratio du soir (g par U).
       // Sert à équilibrer la montée FPU avec la dose split qui la couvre.
@@ -853,6 +909,7 @@ export default function DiabetePage() {
     exerciseAdjustment,
     splitDoseReminders,
     manualDigestion,
+    nightCalibration,
     nowTick,
   ]);
 
@@ -877,6 +934,26 @@ export default function DiabetePage() {
     () => ({ ...bedtimeInput, personalGrg }),
     [bedtimeInput, personalGrg],
   );
+
+  // Backtest : logge UNE prédiction de réveil par nuit (dédup 12h) pour
+  // qu'on puisse la comparer à la glycémie réelle le lendemain et apprendre.
+  useEffect(() => {
+    if (!isEveningHours) return;
+    const glu = liveGlucose?.value ?? currentGlucose;
+    if (!glu || glu <= 0) return;
+    const last = nightPredictionLogs[0];
+    if (last && Date.now() - new Date(last.createdAt).getTime() < 12 * 3_600_000) return;
+    const plan = computeNightPlan(nightBrainInput);
+    const wake = plan.predictions[plan.predictions.length - 1];
+    if (!wake) return;
+    addNightPredictionLog({
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      predictedWakeupGlucose: wake.glucose,
+      wakeupAtMs: Date.now() + 7 * 3_600_000,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEveningHours, nightBrainInput]);
 
   // Repas loggé récent (calculateur de bolus) à reprendre dans la carte
   // "Ce que tu digères" → Ethan n'a qu'à ajouter un en-cas par-dessus.
@@ -1135,6 +1212,13 @@ export default function DiabetePage() {
           />
           <NightBrain
             input={nightBrainInput}
+            calibration={{
+              driftPerHour: nightCalibration.drift.driftPerHour,
+              driftNights: nightCalibration.drift.sampleNights,
+              dawnDays: nightCalibration.dawn.sampleDays,
+              verifiedNights: nightCalibration.verifiedNights,
+              bias: nightCalibration.bias.bias,
+            }}
             onLogHypoCarbs={handleNightHypoCarbs}
             onLogCorrection={handleBedtimeCorrection}
             onConfirmSplit={handleNightConfirmSplit}

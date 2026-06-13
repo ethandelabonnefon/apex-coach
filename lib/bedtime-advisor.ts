@@ -27,6 +27,8 @@
  *    (anti-stacking, déjà beaucoup d'insuline active)
  */
 
+import { iobRemainingFraction } from "./night-calibration";
+
 export interface BedtimeAdvisorInput {
   /** Glycémie actuelle (live FreeStyle Libre ou manuelle). */
   currentGlucose: number;
@@ -34,8 +36,21 @@ export interface BedtimeAdvisorInput {
   trendArrow?: number;
   /** IOB total en U. */
   iobUnits: number;
+  /**
+   * Injections récentes (units + minutesAgo) pour un IOB exponentiel précis.
+   * Si fourni, on l'utilise à la place du modèle linéaire sur `iobUnits`.
+   */
+  iobInjections?: { units: number; minutesAgo: number }[];
   /** Insulin Sensitivity Factor (mg/dL par U). */
   isfMgPerU: number;
+
+  // ─── Calibration perso (lib/night-calibration.ts) ──────────────
+  /** Dérive basale nocturne mesurée (mg/dL/h). Négatif = tu descends. */
+  nightDriftPerHour?: number;
+  /** Courbe dawn mesurée : heure du jour (4..9) → rise mg/dL. Remplace le +40 figé. */
+  dawnCurveByHour?: Record<number, number>;
+  /** Biais appris (mg/dL) à ajouter à la prédiction de réveil (backtest). */
+  wakeupBias?: number;
   /**
    * Montée glycémique par gramme de glucides (mg/dL/g) = ISF / ratio (g par U).
    * Sert à modéliser la montée FPU sur la même échelle que la dose split qui
@@ -212,11 +227,32 @@ function predictGlucoseAt(
   const justAteRecently =
     input.lastMealHoursAgo !== undefined && input.lastMealHoursAgo < 2;
   const PRACTICAL_IOB_CAP = justAteRecently ? 0.3 : 0.5;
-  const fractionConsumed = Math.min(
-    PRACTICAL_IOB_CAP,
-    (hoursFromNow * 60) / input.insulinActiveMinutes,
-  );
-  const iobDrop = input.iobUnits * input.isfMgPerU * fractionConsumed;
+  let iobDrop: number;
+  if (input.iobInjections && input.iobInjections.length > 0) {
+    // Modèle EXPONENTIEL par injection (plus juste que le linéaire) : on
+    // somme la baisse de chaque injection entre maintenant et l'horizon.
+    const horizonMin = hoursFromNow * 60;
+    let drop = 0;
+    for (const inj of input.iobInjections) {
+      const remNow = iobRemainingFraction(inj.minutesAgo, input.insulinActiveMinutes);
+      const remFuture = iobRemainingFraction(
+        inj.minutesAgo + horizonMin,
+        input.insulinActiveMinutes,
+      );
+      drop += inj.units * Math.max(0, remNow - remFuture);
+    }
+    iobDrop = drop * input.isfMgPerU;
+    // Anti double-comptage : si on vient de manger, l'IOB couvre surtout les
+    // glucides (modélisés à part en carbsRise) → on amortit.
+    if (justAteRecently) iobDrop *= 0.6;
+  } else {
+    // Fallback linéaire (pas d'historique d'injections fourni).
+    const fractionConsumed = Math.min(
+      PRACTICAL_IOB_CAP,
+      (hoursFromNow * 60) / input.insulinActiveMinutes,
+    );
+    iobDrop = input.iobUnits * input.isfMgPerU * fractionConsumed;
+  }
   glucose -= iobDrop;
 
   // ─── 2bis. Glucides résiduels du dernier repas (effet montant) ─
@@ -307,16 +343,34 @@ function predictGlucoseAt(
     glucose -= sportBoostDrop;
   }
 
-  // ─── 6. Dawn phenomenon (4h-8h) ──────────────────────
+  // ─── 6. Dawn phenomenon — courbe mesurée si dispo, sinon ladder ──
   const predictedDate = new Date(nowMs + hoursFromNow * 3600_000);
   const predictedHour = predictedDate.getHours();
   let dawnBump = 0;
-  if (predictedHour >= 4 && predictedHour <= 8) {
-    // Bump progressif : max à 6h-7h
+  const measuredDawn = input.dawnCurveByHour?.[predictedHour];
+  if (measuredDawn !== undefined) {
+    dawnBump = measuredDawn; // ta vraie montée mesurée sur l'archive
+    glucose += dawnBump;
+  } else if (predictedHour >= 4 && predictedHour <= 8) {
     if (predictedHour >= 6 && predictedHour <= 7) dawnBump = 40;
     else if (predictedHour === 5 || predictedHour === 8) dawnBump = 25;
     else dawnBump = 15;
     glucose += dawnBump;
+  }
+
+  // ─── 6bis. Dérive basale apprise (Lantus) ────────────
+  // La pente nocturne réelle mesurée sur tes nuits propres. Négatif = tu
+  // descends (basale trop forte) → on l'intègre pour ne pas rater une dérive.
+  if (input.nightDriftPerHour) {
+    const driftEffect = input.nightDriftPerHour * hoursFromNow;
+    glucose += Math.max(-80, Math.min(80, driftEffect));
+  }
+
+  // ─── 6ter. Biais appris (backtest prédit vs réel) ────
+  // Correction du biais systématique, proportionnelle à l'horizon (pleine au
+  // réveil, faible à T+2h).
+  if (input.wakeupBias) {
+    glucose += input.wakeupBias * Math.min(1, hoursFromNow / 6);
   }
 
   // ─── 7. Clamp 40-350 mg/dL pour réalisme ─────────────

@@ -36,6 +36,14 @@ import type { ComponentType } from "react";
 
 interface NightBrainProps {
   input: NightBrainInput;
+  /** Statut de calibration perso (transparence). */
+  calibration?: {
+    driftPerHour: number;
+    driftNights: number;
+    dawnDays: number;
+    verifiedNights: number;
+    bias: number;
+  };
   /** Logge une prise de glucides en cas d'hypo (crée un HypoEvent). */
   onLogHypoCarbs?: (grams: number) => void;
   /** Logge une injection de correction. */
@@ -84,6 +92,7 @@ function predictionBg(g: number): string {
 
 export default function NightBrain({
   input,
+  calibration,
   onLogHypoCarbs,
   onLogCorrection,
   onConfirmSplit,
@@ -268,9 +277,37 @@ export default function NightBrain({
               )}
             </div>
           )}
+
+          {/* Statut de calibration perso */}
+          {calibration && <CalibrationLine c={calibration} />}
         </>
       )}
     </section>
+  );
+}
+
+function CalibrationLine({
+  c,
+}: {
+  c: NonNullable<NightBrainProps["calibration"]>;
+}) {
+  const parts: string[] = [];
+  if (c.driftNights >= 4) {
+    const sign = c.driftPerHour > 0 ? "+" : "";
+    parts.push(
+      `dérive basale ${sign}${c.driftPerHour.toFixed(1).replace(".", ",")} mg/dL/h (${c.driftNights} nuits)`,
+    );
+  }
+  if (c.dawnDays >= 4) parts.push(`dawn mesuré sur ${c.dawnDays} j`);
+  if (c.verifiedNights > 0) parts.push(`${c.verifiedNights} nuit${c.verifiedNights > 1 ? "s" : ""} vérifiée${c.verifiedNights > 1 ? "s" : ""}`);
+  if (c.bias) parts.push(`biais appris ${c.bias > 0 ? "+" : ""}${c.bias}`);
+
+  return (
+    <p className="mt-3 pt-3 border-t border-border-subtle text-[10px] text-text-tertiary leading-snug">
+      {parts.length > 0
+        ? `Calibré sur tes données : ${parts.join(" · ")}.`
+        : "Calibration en cours — il faut quelques nuits d'archive pour personnaliser."}
+    </p>
   );
 }
 

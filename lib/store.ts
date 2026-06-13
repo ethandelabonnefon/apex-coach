@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { USER_PROFILE, DIABETES_CONFIG, DIABETES_PROFILES_DEFAULT, MUSCU_PROGRAM } from './constants';
 import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile, SplitDoseReminder, HypoEvent, ManualDigestion } from '@/types';
+import type { NightPredictionRecord } from '@/lib/night-calibration';
 
 interface CompletedWorkout {
   id: string;
@@ -98,6 +99,11 @@ interface AppState {
   // Night Brain — repas déclaré à la main en cours de digestion (juin 2026)
   manualDigestion: ManualDigestion | null;
   setManualDigestion: (digestion: ManualDigestion | null) => void;
+
+  // Night Brain — boucle d'auto-apprentissage (prédit vs réel)
+  nightPredictionLogs: NightPredictionRecord[];
+  addNightPredictionLog: (record: NightPredictionRecord) => void;
+  setNightPredictionLogs: (records: NightPredictionRecord[]) => void;
 
   // Nutrition
   meals: Meal[];
@@ -309,6 +315,10 @@ export const useStore = create<AppState>()(
       })),
       manualDigestion: null,
       setManualDigestion: (digestion) => set({ manualDigestion: digestion }),
+      nightPredictionLogs: [],
+      addNightPredictionLog: (record) =>
+        set((s) => ({ nightPredictionLogs: [record, ...s.nightPredictionLogs].slice(0, 60) })),
+      setNightPredictionLogs: (records) => set({ nightPredictionLogs: records }),
       removeHypoEvent: (id) => set((s) => ({
         hypoEvents: s.hypoEvents.filter((e) => e.id !== id),
       })),
