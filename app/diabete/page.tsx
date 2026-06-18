@@ -72,8 +72,6 @@ import {
   ChevronDown,
   Dumbbell,
   Footprints,
-  TrendingUp,
-  TrendingDown,
   Minus,
   Trash2,
   History,
@@ -165,6 +163,14 @@ function trendStringToNumber(trend: GlucoseTrend | string | undefined): number |
   }
 }
 
+/** Formate un délai en minutes pour le briefing pré-sport ("1 h 30"). */
+function formatBriefingDelay(min: number): string {
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const rem = min % 60;
+  return rem ? `${h} h ${rem}` : `${h} h`;
+}
+
 function trendNumberToArrow(trend?: number): string {
   switch (trend) {
     case 1: return "↓↓";
@@ -181,7 +187,6 @@ export default function DiabetePage() {
     profile,
     diabetesConfig,
     glucoseReadings,
-    addGlucoseReading,
     insulinLogs,
     addInsulinLog,
     removeInsulinLog,
@@ -420,10 +425,6 @@ export default function DiabetePage() {
     return 'precise'; // saisie sans tag = considérée précise
   }, [fatGrams, proteinGrams, macrosManuallyEdited, mealTag]);
 
-  // ─── Quick logs ───────────────────────────────
-  const [glucoseValue, setGlucoseValue] = useState(110);
-  const [glucoseTrend, setGlucoseTrend] = useState("stable");
-
   // ─── Toast split dose ─────────────────────────
   const [splitToast, setSplitToast] = useState<string | null>(null);
   useEffect(() => {
@@ -431,15 +432,6 @@ export default function DiabetePage() {
     const id = setTimeout(() => setSplitToast(null), 6000);
     return () => clearTimeout(id);
   }, [splitToast]);
-
-  function handleLogGlucose() {
-    addGlucoseReading({
-      id: crypto.randomUUID(),
-      value: glucoseValue,
-      trend: glucoseTrend,
-      recordedAt: new Date(),
-    });
-  }
 
   function handleLogInjection() {
     if (finalUnits <= 0) return;
@@ -1288,28 +1280,34 @@ export default function DiabetePage() {
               </button>
             </div>
 
-            {/* Slider minutes */}
+            {/* Quand fais-tu ton sport ? — boutons discrets (le slider était
+                trompeur : les repères ne correspondaient pas à l'échelle). */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <p className="label">Dans combien de min</p>
+                <p className="label">Dans combien de temps ?</p>
                 <span className="num text-xs text-diabete font-semibold">
-                  {briefingMinutes} min
+                  {formatBriefingDelay(briefingMinutes)} · à{" "}
+                  {new Date(nowTick + briefingMinutes * 60000).toLocaleTimeString("fr-FR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </span>
               </div>
-              <input
-                type="range"
-                min={5}
-                max={180}
-                step={5}
-                value={briefingMinutes}
-                onChange={(e) => setBriefingMinutes(Number(e.target.value))}
-                className="w-full accent-diabete"
-              />
-              <div className="flex justify-between text-[9px] text-text-tertiary mt-0.5">
-                <span>5 min</span>
-                <span>30 min</span>
-                <span>1 h</span>
-                <span>3 h</span>
+              <div className="grid grid-cols-3 gap-2">
+                {[15, 30, 45, 60, 90, 120].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setBriefingMinutes(m)}
+                    className={`py-2 text-xs font-semibold rounded-lg border transition-all tap-scale num ${
+                      briefingMinutes === m
+                        ? "bg-diabete/15 border-diabete/40 text-diabete"
+                        : "bg-bg-tertiary border-border-subtle text-text-secondary hover:border-border-default"
+                    }`}
+                  >
+                    {formatBriefingDelay(m)}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -1382,6 +1380,21 @@ export default function DiabetePage() {
                     </div>
                   );
                 })()}
+                {/* Repas récent en digestion (transparence — la prédiction
+                    reste prudente et ne crédite pas la montée du repas). */}
+                {loggedMealPrefill && loggedMealPrefill.minsAgo < 180 && (
+                  <div className="flex items-start gap-1.5 col-span-2">
+                    <Apple className="w-3 h-3 text-text-tertiary shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-[9px] text-text-tertiary uppercase tracking-wide">
+                        Repas en digestion
+                      </p>
+                      <p className="num text-text-secondary text-[11px] leading-snug">
+                        {loggedMealPrefill.carbsGrams}g il y a {loggedMealPrefill.minsAgo}min — l&apos;estimation reste prudente
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -2194,94 +2207,8 @@ export default function DiabetePage() {
         </div>
       )}
 
-      {/* ── GRID : Glucose log + Injection history ── */}
-      <div className="grid lg:grid-cols-2 gap-4 mb-4">
-        <section className="surface-1 rounded-3xl p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Droplet className="w-4 h-4 text-diabete" />
-            <h2 className="text-base font-semibold text-text-primary">Logger une glycémie</h2>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <BolusInput
-              label="Valeur"
-              unit="mg/dL"
-              value={glucoseValue}
-              onChange={setGlucoseValue}
-              min={30}
-              max={500}
-            />
-            <div>
-              <p className="label mb-2">Tendance</p>
-              <div className="grid grid-cols-3 gap-1">
-                <TrendButton
-                  active={glucoseTrend === "rising"}
-                  onClick={() => setGlucoseTrend("rising")}
-                  icon={<TrendingUp className="w-3.5 h-3.5" />}
-                  label="↑"
-                />
-                <TrendButton
-                  active={glucoseTrend === "stable"}
-                  onClick={() => setGlucoseTrend("stable")}
-                  icon={<Minus className="w-3.5 h-3.5" />}
-                  label="→"
-                />
-                <TrendButton
-                  active={glucoseTrend === "falling"}
-                  onClick={() => setGlucoseTrend("falling")}
-                  icon={<TrendingDown className="w-3.5 h-3.5" />}
-                  label="↓"
-                />
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleLogGlucose}
-            className="w-full bg-bg-tertiary hover:bg-bg-hover text-text-primary text-sm font-medium py-2.5 rounded-xl transition-colors border border-border-subtle tap-scale"
-          >
-            Enregistrer
-          </button>
-
-          {glucoseReadings.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-border-subtle">
-              <p className="label mb-2">Dernières lectures</p>
-              <div className="space-y-1">
-                {glucoseReadings.slice(0, 5).map((r) => {
-                  const tone = glucoseTone(r.value);
-                  return (
-                    <div
-                      key={r.id}
-                      className="flex items-center justify-between bg-bg-tertiary rounded-lg px-3 py-2"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <span
-                          className="w-1.5 h-1.5 rounded-full"
-                          style={{ background: glucoseColor(tone) }}
-                        />
-                        <span
-                          className="num text-sm font-semibold"
-                          style={{ color: glucoseColor(tone) }}
-                        >
-                          {r.value}
-                        </span>
-                        <span className="text-[10px] text-text-tertiary">mg/dL</span>
-                      </div>
-                      <span className="num text-[10px] text-text-tertiary">
-                        {new Date(r.recordedAt).toLocaleTimeString("fr-FR", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </section>
-
+      {/* ── Historique des injections ── */}
+      <div className="mb-4">
         <section className="surface-1 rounded-3xl p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
@@ -2468,33 +2395,6 @@ function BolusInput({
         </span>
       </div>
     </label>
-  );
-}
-
-function TrendButton({
-  active,
-  onClick,
-  icon,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`py-3 rounded-lg border transition-all flex items-center justify-center gap-1 tap-scale ${
-        active
-          ? "bg-diabete/15 border-diabete/40 text-diabete"
-          : "bg-bg-tertiary border-border-subtle text-text-secondary"
-      }`}
-      aria-label={label}
-    >
-      {icon}
-    </button>
   );
 }
 
