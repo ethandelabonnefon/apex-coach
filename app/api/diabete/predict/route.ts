@@ -49,14 +49,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readPoints, isKvConfigured } from "@/lib/glucose-archive/store";
 import { estimateNightDrift, estimateDawnCurve } from "@/lib/night-calibration";
-import {
-  predictGlucoseCurve,
-  carbSensitivity,
-  DEFAULT_DIA_MIN,
-  type PredictionEvent,
-} from "@/lib/glucose-prediction";
+import { predictGlucoseCurve, DEFAULT_DIA_MIN } from "@/lib/glucose-prediction";
+import { buildPredictionEvents } from "@/lib/prediction-inputs";
 import type { RecentExercise } from "@/lib/exercise-insulin-adjustment";
-import type { InsulinLog } from "@/types";
+import type { InsulinLog, CarbEntry } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -86,24 +82,6 @@ interface RequestBody {
   days?: number;
 }
 
-/** Ratio (g par U) pour un mealType, avec repli sur le ratio midi. */
-function ratioForMeal(
-  ratios: Record<MealKey, number> | undefined,
-  mealType: string,
-): number {
-  const fallback = ratios?.lunch ?? 10;
-  if (!ratios) return fallback;
-  if (mealType === "morning" || mealType === "lunch" || mealType === "snack" || mealType === "dinner") {
-    return ratios[mealType] ?? fallback;
-  }
-  return fallback;
-}
-
-/**
- * Au-delà de cette ancienneté (min), un événement n'a plus d'effet :
- * l'IOB (DIA ~195) est épuisé ET la fenêtre FPU (300) est passée.
- */
-const EVENT_ACTIVE_WINDOW_MIN = 360;
 
 export async function POST(req: NextRequest) {
   let body: RequestBody;
@@ -161,35 +139,26 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ─── 2. Mapping injections + repas → PredictionEvent[] ─────────────────
-  const events: PredictionEvent[] = [];
-  for (const log of body.injections ?? []) {
-    if (!log || typeof log.units !== "number") continue;
-    const minutesAgo = (now - new Date(log.injectedAt).getTime()) / 60_000;
-    if (!Number.isFinite(minutesAgo)) continue;
-    // On garde les futurs proches (skew d'horloge) et tout ce qui est encore actif.
-    if (minutesAgo < -5 || minutesAgo > EVENT_ACTIVE_WINDOW_MIN) continue;
-    events.push({
-      minutesAgo: Math.max(0, minutesAgo),
-      units: log.units > 0 ? log.units : undefined,
-      carbsGrams: log.carbsGrams || 0,
-      fatGrams: log.fatGrams ?? 0,
-      proteinGrams: log.proteinGrams ?? 0,
-      carbSensitivity: carbSensitivity(isf, ratioForMeal(body.ratios, log.mealType)),
-    });
-  }
-  for (const meal of body.standaloneMeals ?? []) {
-    if (!meal || typeof meal.eatenAtMs !== "number") continue;
-    const minutesAgo = (now - meal.eatenAtMs) / 60_000;
-    if (minutesAgo < -5 || minutesAgo > EVENT_ACTIVE_WINDOW_MIN) continue;
-    events.push({
-      minutesAgo: Math.max(0, minutesAgo),
-      carbsGrams: meal.carbsGrams || 0,
-      fatGrams: meal.fatGrams ?? 0,
-      proteinGrams: meal.proteinGrams ?? 0,
-      carbSensitivity: carbSensitivity(isf, ratioForMeal(body.ratios, "lunch")),
-    });
-  }
+  // ─── 2. Mapping injections + repas → PredictionEvent[] (source unique) ──
+  // Les repas sans bolus (standaloneMeals) sont convertis en CarbEntry pour
+  // passer par le même mapper que le plan nuit → prédictions cohérentes.
+  const carbEntriesFromMeals: CarbEntry[] = (body.standaloneMeals ?? [])
+    .filter((m) => m && typeof m.eatenAtMs === "number")
+    .map((m, i) => ({
+      id: `m${i}`,
+      carbsGrams: m.carbsGrams,
+      fatGrams: m.fatGrams,
+      proteinGrams: m.proteinGrams,
+      insulinUnits: 0,
+      eatenAt: new Date(m.eatenAtMs).toISOString(),
+    }));
+  const events = buildPredictionEvents({
+    insulinLogs: body.injections ?? [],
+    carbEntries: carbEntriesFromMeals,
+    isf,
+    ratios: body.ratios,
+    nowMs: now,
+  });
 
   // ─── 3. Prédiction ─────────────────────────────────────────────────────
   const prediction = predictGlucoseCurve({

@@ -28,6 +28,11 @@
  */
 
 import { iobRemainingFraction } from "./night-calibration";
+import {
+  predictGlucoseCurve,
+  type PredictionEvent,
+} from "./glucose-prediction";
+import type { RecentExercise } from "./exercise-insulin-adjustment";
 
 export interface BedtimeAdvisorInput {
   /** Glycémie actuelle (live FreeStyle Libre ou manuelle). */
@@ -89,6 +94,17 @@ export interface BedtimeAdvisorInput {
   // ─── Heure actuelle ────────────────────────────
   /** Date/heure de référence (default now). Utile pour tests. */
   nowMs?: number;
+
+  // ─── Moteur unifié (consolidation juin 2026) ───────────────────────────
+  /**
+   * Événements unifiés (bolus + glucides sans insuline). Si fourni, les
+   * prédictions viennent de `predictGlucoseCurve` — LE MÊME moteur que la
+   * courbe 8h → plus de divergence entre les deux. Si absent, on garde le
+   * modèle legacy (predictGlucoseAt) pour rétrocompat.
+   */
+  events?: PredictionEvent[];
+  /** Séance récente pour la modulation sport en mode unifié. */
+  sportExercise?: RecentExercise;
 }
 
 export interface BedtimePrediction {
@@ -398,20 +414,53 @@ export function computeBedtimeAdvice(input: BedtimeAdvisorInput): BedtimeAdvice 
 
   // ─── Prédictions à T+2h / T+4h / Réveil ──────────────
   const horizons = [2, 4, hoursUntilWakeup];
-  const predictions: BedtimePrediction[] = horizons.map((h) => {
-    const breakdown = predictGlucoseAt(h, input);
+  const labelFor = (h: number) => {
     const time = new Date(nowMs + h * 3600_000);
-    const hourLabel = time.toLocaleTimeString('fr-FR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
     return {
-      offsetHours: h,
-      glucose: breakdown.finalGlucose,
-      label: h === hoursUntilWakeup ? 'Réveil' : `+${h}h`,
-      hourLabel,
+      label: h === hoursUntilWakeup ? "Réveil" : `+${h}h`,
+      hourLabel: time.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
     };
-  });
+  };
+
+  let predictions: BedtimePrediction[];
+  let curveUnreliable: boolean | undefined;
+
+  if (input.events) {
+    // ── Mode unifié : mêmes chiffres que la courbe 8h ──────────────────
+    const horizonMin = Math.max(hoursUntilWakeup, 4) * 60;
+    const curve = predictGlucoseCurve({
+      currentGlucose: input.currentGlucose,
+      trendArrow: input.trendArrow,
+      events: input.events,
+      isf: input.isfMgPerU,
+      dia: input.insulinActiveMinutes,
+      basalDriftPerHour: input.nightDriftPerHour,
+      dawnCurveByHour: input.dawnCurveByHour,
+      pendingSplit:
+        input.pendingSplitUnits && input.pendingSplitMinutesUntil !== undefined
+          ? { units: input.pendingSplitUnits, minutesUntil: input.pendingSplitMinutesUntil }
+          : undefined,
+      sport: input.sportExercise,
+      learnedBias: input.wakeupBias,
+      horizonMinutes: horizonMin,
+      stepMinutes: 15,
+      nowMs,
+    });
+    const sampleAt = (h: number) => {
+      const m = Math.round((h * 60) / 15) * 15;
+      const pt = curve.curve.find((x) => x.minute === m) ?? curve.curve[curve.curve.length - 1];
+      return pt.value;
+    };
+    predictions = horizons.map((h) => ({ offsetHours: h, glucose: sampleAt(h), ...labelFor(h) }));
+    curveUnreliable = curve.unreliableTooFresh;
+  } else {
+    // ── Mode legacy (rétrocompat) ──────────────────────────────────────
+    predictions = horizons.map((h) => ({
+      offsetHours: h,
+      glucose: predictGlucoseAt(h, input).finalGlucose,
+      ...labelFor(h),
+    }));
+  }
 
   // ─── Breakdown global (T+2h pour résumé) ─────────────
   const breakdown2h = predictGlucoseAt(2, input);
@@ -435,8 +484,9 @@ export function computeBedtimeAdvice(input: BedtimeAdvisorInput): BedtimeAdvice 
   // dynamique glucides/insuline est encore très instable. La prédiction
   // peut être fausse. On préfère le dire honnêtement.
   const unreliableTooFresh =
-    (input.lastMealHoursAgo !== undefined && input.lastMealHoursAgo < 1 && input.iobUnits > 2) ||
-    (input.iobUnits > 4 && input.lastMealHoursAgo !== undefined && input.lastMealHoursAgo < 1.5);
+    curveUnreliable ??
+    ((input.lastMealHoursAgo !== undefined && input.lastMealHoursAgo < 1 && input.iobUnits > 2) ||
+      (input.iobUnits > 4 && input.lastMealHoursAgo !== undefined && input.lastMealHoursAgo < 1.5));
 
   // ─── Évaluation risque ───────────────────────────────
   let risk: BedtimeRisk = 'safe';

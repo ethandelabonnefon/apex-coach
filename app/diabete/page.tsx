@@ -38,11 +38,12 @@ import {
   findMostRecentExercise,
   computeExerciseAdjustment,
   classifySport,
+  resolveRecentExercise,
   type RecentExercise,
 } from "@/lib/exercise-insulin-adjustment";
+import { buildPredictionEvents } from "@/lib/prediction-inputs";
 import { useWhoop } from "@/hooks/useWhoop";
 import NightBrain from "@/components/diabete/NightBrain";
-import DigestionInput from "@/components/diabete/DigestionInput";
 import { estimatePersonalGRG, classifyHypoContext } from "@/lib/hypo-resucrage";
 import {
   estimateNightDrift,
@@ -202,8 +203,8 @@ export default function DiabetePage() {
   // Phase « Night Brain » — GRG perso pour une suggestion de glucides unifiée
   const hypoEvents = useStore((s) => s.hypoEvents);
   const addHypoEvent = useStore((s) => s.addHypoEvent);
-  // Repas déclaré à la main en cours de digestion (override prédiction nuit)
-  const manualDigestion = useStore((s) => s.manualDigestion);
+  // Glucides sans insuline (re-sucrage course, collation) — alimente la prédiction
+  const carbEntries = useStore((s) => s.carbEntries);
   // Boucle d'auto-apprentissage de la prédiction nuit (prédit vs réel)
   const nightPredictionLogs = useStore((s) => s.nightPredictionLogs);
   const addNightPredictionLog = useStore((s) => s.addNightPredictionLog);
@@ -822,33 +823,30 @@ export default function DiabetePage() {
       ? (lastMeal.fatGrams * 9 + lastMeal.proteinGrams * 4) / 100
       : 0;
 
-    // Repas déclaré à la main : s'il est frais (< 6h), il prime sur le repas
-    // inféré des injections → le plan nuit voit exactement ce qu'Ethan digère.
-    const dinnerGramsPerU =
-      diabetesConfig.ratios?.dinner && diabetesConfig.ratios.dinner > 0
-        ? diabetesConfig.ratios.dinner
-        : undefined;
-    let mealHoursAgo = lastMeal?.hoursAgo;
-    let mealFpu = inferredFpu;
-    let mealCarbs = lastMeal?.carbsGrams;
-    let mealCoverage:
-      | { carbsGrams: number; insulinUnits: number; gramsPerU: number }
-      | undefined;
-    if (manualDigestion) {
-      const ageH = (nowTick - new Date(manualDigestion.eatenAt).getTime()) / 3_600_000;
-      if (ageH >= 0 && ageH < 6) {
-        mealHoursAgo = ageH;
-        mealFpu = (manualDigestion.fatGrams * 9 + manualDigestion.proteinGrams * 4) / 100;
-        mealCarbs = manualDigestion.carbsGrams;
-        if (dinnerGramsPerU && manualDigestion.carbsGrams > 0) {
-          mealCoverage = {
-            carbsGrams: manualDigestion.carbsGrams,
-            insulinUnits: manualDigestion.insulinUnits,
-            gramsPerU: dinnerGramsPerU,
-          };
-        }
-      }
-    }
+    const mealHoursAgo = lastMeal?.hoursAgo;
+    const mealFpu = inferredFpu;
+    const mealCarbs = lastMeal?.carbsGrams;
+
+    // Moteur unifié : mêmes événements que la prédiction 8h (bolus + glucides
+    // sans insuline) → le plan nuit voit exactement le même contexte.
+    const events = buildPredictionEvents({
+      insulinLogs,
+      carbEntries,
+      isf: diabetesConfig.insulinSensitivityFactor,
+      ratios: diabetesConfig.ratios,
+      nowMs: nowTick,
+    });
+    const sportExercise = resolveRecentExercise({
+      nowMs: nowTick,
+      lastWhoopWorkout: whoop.connected ? whoop.snapshot?.lastWorkout ?? null : null,
+      completedWorkouts: completedWorkouts.map((w) => ({ id: w.id, date: w.date, duration: w.duration })),
+      completedRunningSessions: completedRunningSessions.map((r) => ({
+        id: r.id,
+        date: r.date,
+        actualDuration: r.actualDuration,
+        glucoseCheckpoints: r.glucoseCheckpoints,
+      })),
+    });
 
     // Split en attente
     const upcomingSplit = splitDoseReminders
@@ -884,7 +882,9 @@ export default function DiabetePage() {
       lastMealHoursAgo: mealHoursAgo,
       lastMealFpu: mealFpu,
       lastMealCarbs: mealCarbs,
-      mealCoverage,
+      // Moteur unifié (consolidation) — prédictions = même moteur que la courbe 8h
+      events,
+      sportExercise: sportExercise ?? undefined,
       exerciseAdjustmentPct: exerciseAdjustment?.reductionPct,
       exerciseSource: exerciseAdjustment?.source as 'running' | 'muscu' | 'cardio-other' | undefined,
       exerciseHoursAgo: exerciseAdjustment?.hoursAgo,
@@ -901,7 +901,11 @@ export default function DiabetePage() {
     diabetesConfig,
     exerciseAdjustment,
     splitDoseReminders,
-    manualDigestion,
+    carbEntries,
+    completedWorkouts,
+    completedRunningSessions,
+    whoop.connected,
+    whoop.snapshot,
     nightCalibration,
     nowTick,
   ]);
@@ -1204,10 +1208,6 @@ export default function DiabetePage() {
           par UNE carte : un plan ordonné et cohérent. */}
       {isEveningHours && (
         <>
-          <DigestionInput
-            gramsPerU={diabetesConfig.ratios?.dinner}
-            suggestedMeal={loggedMealPrefill}
-          />
           <NightBrain
             input={nightBrainInput}
             calibration={{
