@@ -178,6 +178,27 @@ export interface ManualDigestion {
 }
 
 /**
+ * Glucides ingérés SANS (ou avec peu d') insuline — ex: re-sucrage pendant
+ * une course, compote quand on est bas, collation non bolussée (juin 2026).
+ *
+ * Sert à la prédiction glycémique 8h : ces glucides font MONTER la glycémie
+ * sans baisse d'IOB associée. Distinct des `meals` (tracker nutrition) pour
+ * éviter tout double-comptage avec les bolus.
+ */
+export interface CarbEntry {
+  id: string;
+  /** Libellé optionnel (ex: "Compote", "Banane"). */
+  label?: string;
+  carbsGrams: number;
+  fatGrams?: number;
+  proteinGrams?: number;
+  /** Insuline prise pour ces glucides (U). 0 par défaut (glucides sans insuline). */
+  insulinUnits?: number;
+  /** ISO du moment de l'ingestion. */
+  eatenAt: string;
+}
+
+/**
  * Hypoglycemia event — Phase H (juin 2026).
  *
  * Trace une hypo et son re-sucrage pour permettre :

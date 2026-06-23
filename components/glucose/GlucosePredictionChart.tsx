@@ -31,6 +31,9 @@ import {
   TrendingUp,
   Info,
   RefreshCw,
+  Plus,
+  Trash2,
+  Apple,
 } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useGlucose } from "@/hooks/useGlucose";
@@ -87,6 +90,16 @@ export default function GlucosePredictionChart() {
   const splitDoseReminders = useStore((s) => s.splitDoseReminders);
   const completedWorkouts = useStore((s) => s.completedWorkouts);
   const completedRunningSessions = useStore((s) => s.completedRunningSessions);
+  const carbEntries = useStore((s) => s.carbEntries);
+  const addCarbEntry = useStore((s) => s.addCarbEntry);
+  const removeCarbEntry = useStore((s) => s.removeCarbEntry);
+
+  // Formulaire "glucides sans insuline"
+  const [showCarbForm, setShowCarbForm] = useState(false);
+  const [carbLabel, setCarbLabel] = useState("");
+  const [carbG, setCarbG] = useState("");
+  const [carbProt, setCarbProt] = useState("");
+  const [carbFat, setCarbFat] = useState("");
 
   const [data, setData] = useState<PredictionResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -121,6 +134,35 @@ export default function GlucosePredictionChart() {
         .map((r) => ({ units: r.units, minutesUntil: (new Date(r.triggerAt).getTime() - now) / 60_000 }))
         .filter((s) => s.minutesUntil > 0)
         .sort((a, b) => a.minutesUntil - b.minutesUntil)[0];
+      // Glucides sans insuline (re-sucrage course, collation) des 8 dernières h.
+      const recentCarbs = carbEntries.filter((e) => {
+        const t = new Date(e.eatenAt).getTime();
+        return Number.isFinite(t) && now - t < EIGHT_HOURS_MS;
+      });
+      // Sans insuline → montée pure (standaloneMeals). Avec insuline → événement.
+      const standaloneMeals = recentCarbs
+        .filter((e) => !(e.insulinUnits && e.insulinUnits > 0))
+        .map((e) => ({
+          carbsGrams: e.carbsGrams,
+          fatGrams: e.fatGrams,
+          proteinGrams: e.proteinGrams,
+          eatenAtMs: new Date(e.eatenAt).getTime(),
+        }));
+      const carbInjections = recentCarbs
+        .filter((e) => e.insulinUnits && e.insulinUnits > 0)
+        .map((e) => ({
+          id: e.id,
+          units: e.insulinUnits!,
+          insulinType: "rapide",
+          mealType: "other",
+          carbsGrams: e.carbsGrams,
+          fatGrams: e.fatGrams,
+          proteinGrams: e.proteinGrams,
+          glucoseBefore: 0,
+          notes: "glucides sans bolus complet",
+          injectedAt: e.eatenAt,
+        }));
+
       // Séance récente (Whoop-first sinon estimation) — réutilise la lib.
       const sport = resolveRecentExercise({
         nowMs: now,
@@ -140,7 +182,8 @@ export default function GlucosePredictionChart() {
         body: JSON.stringify({
           currentGlucose,
           trendArrow: trendStringToNumber(current?.trend),
-          injections: recentInjections,
+          injections: [...recentInjections, ...carbInjections],
+          standaloneMeals,
           pendingSplit: upcomingSplit,
           sport: sport ?? undefined,
           isf: diabetesConfig.insulinSensitivityFactor,
@@ -163,6 +206,7 @@ export default function GlucosePredictionChart() {
     currentGlucose,
     current?.trend,
     insulinLogs,
+    carbEntries,
     splitDoseReminders,
     completedWorkouts,
     completedRunningSessions,
@@ -171,11 +215,37 @@ export default function GlucosePredictionChart() {
     diabetesConfig,
   ]);
 
-  // Calcul auto au mount + quand la glycémie de référence change.
+  // Calcul auto au mount + quand la glycémie de référence ou les glucides changent.
   useEffect(() => {
     runPrediction();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentGlucose]);
+  }, [currentGlucose, carbEntries]);
+
+  const submitCarb = () => {
+    const carbs = parseFloat(carbG.replace(",", "."));
+    if (!Number.isFinite(carbs) || carbs <= 0) return;
+    const prot = parseFloat(carbProt.replace(",", "."));
+    const fat = parseFloat(carbFat.replace(",", "."));
+    addCarbEntry({
+      id: `carb-${Date.now()}`,
+      label: carbLabel.trim() || undefined,
+      carbsGrams: carbs,
+      proteinGrams: Number.isFinite(prot) && prot > 0 ? prot : undefined,
+      fatGrams: Number.isFinite(fat) && fat > 0 ? fat : undefined,
+      insulinUnits: 0,
+      eatenAt: new Date().toISOString(),
+    });
+    setCarbLabel("");
+    setCarbG("");
+    setCarbProt("");
+    setCarbFat("");
+    setShowCarbForm(false);
+  };
+
+  // Glucides sans insuline encore en digestion (< 4h) pour l'affichage.
+  const activeCarbs = carbEntries.filter(
+    (e) => Date.now() - new Date(e.eatenAt).getTime() < 4 * 3_600_000,
+  );
 
   const chartData = data?.prediction.curve ?? [];
 
@@ -203,6 +273,121 @@ export default function GlucosePredictionChart() {
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
           {loading ? "Calcul…" : "Recalculer"}
         </button>
+      </div>
+
+      {/* Glucides sans insuline (re-sucrage course, collation non bolussée) */}
+      <div className="mb-4 rounded-2xl surface-2 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Apple className="w-4 h-4 text-diabete" />
+            <span className="text-sm font-medium text-text-primary">Glucides sans insuline</span>
+          </div>
+          {!showCarbForm && (
+            <button
+              type="button"
+              onClick={() => setShowCarbForm(true)}
+              className="flex items-center gap-1 text-xs text-accent-ink bg-accent rounded-full px-2.5 py-1 tap-scale"
+            >
+              <Plus className="w-3.5 h-3.5" /> Ajouter
+            </button>
+          )}
+        </div>
+
+        {/* Liste des glucides actifs (< 4h) */}
+        {activeCarbs.length > 0 && (
+          <div className="flex flex-col gap-1.5 mt-3">
+            {activeCarbs.map((e) => {
+              const min = Math.round((Date.now() - new Date(e.eatenAt).getTime()) / 60000);
+              return (
+                <div key={e.id} className="flex items-center justify-between text-xs bg-bg-secondary rounded-lg px-2.5 py-1.5">
+                  <span className="text-text-secondary">
+                    <span className="text-text-primary font-medium">{e.label || "Glucides"}</span>
+                    {" · "}{e.carbsGrams}g gluc
+                    {e.proteinGrams ? ` · ${e.proteinGrams}g prot` : ""}
+                    {e.fatGrams ? ` · ${e.fatGrams}g lip` : ""}
+                    {" · il y a "}{min}min
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeCarbEntry(e.id)}
+                    className="text-text-tertiary hover:text-error tap-scale"
+                    aria-label="Supprimer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Formulaire d'ajout */}
+        {showCarbForm && (
+          <div className="mt-3 flex flex-col gap-2 animate-slide-up">
+            <input
+              type="text"
+              value={carbLabel}
+              onChange={(e) => setCarbLabel(e.target.value)}
+              placeholder="Aliment (ex: compote) — optionnel"
+              className="w-full rounded-lg bg-bg-secondary border border-border-default px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary"
+            />
+            <div className="grid grid-cols-3 gap-2">
+              <label className="flex flex-col gap-1">
+                <span className="label">Glucides (g)</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={carbG}
+                  onChange={(e) => setCarbG(e.target.value)}
+                  placeholder="39"
+                  className="w-full rounded-lg bg-bg-secondary border border-border-default px-2 py-2 text-sm num text-text-primary"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="label">Prot. (g)</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={carbProt}
+                  onChange={(e) => setCarbProt(e.target.value)}
+                  placeholder="0"
+                  className="w-full rounded-lg bg-bg-secondary border border-border-default px-2 py-2 text-sm num text-text-primary"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="label">Lip. (g)</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={carbFat}
+                  onChange={(e) => setCarbFat(e.target.value)}
+                  placeholder="0"
+                  className="w-full rounded-lg bg-bg-secondary border border-border-default px-2 py-2 text-sm num text-text-primary"
+                />
+              </label>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={submitCarb}
+                disabled={!carbG}
+                className="flex-1 rounded-lg bg-accent text-accent-ink text-sm font-medium py-2 disabled:opacity-40 tap-scale"
+              >
+                Ajouter
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCarbForm(false)}
+                className="rounded-lg bg-bg-secondary text-text-secondary text-sm px-4 py-2 tap-scale"
+              >
+                Annuler
+              </button>
+            </div>
+            <p className="text-[10px] text-text-tertiary">
+              Pour les glucides mangés sans faire d&apos;insuline (re-sucrage pendant une course, collation). Pris en compte comme une montée pure dans la prédiction.
+            </p>
+          </div>
+        )}
       </div>
 
       {currentGlucose === undefined ? (
