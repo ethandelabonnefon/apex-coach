@@ -319,6 +319,65 @@ export function findMostRecentExercise(
   return candidates[0];
 }
 
+/** Dernier workout Whoop (sous-ensemble du snapshot useWhoop). */
+export interface LastWhoopWorkout {
+  sport: string | null;
+  startedAt: string;
+  endedAt: string;
+  strain: number;
+}
+
+/**
+ * Résout la séance récente à utiliser pour la modulation insuline/prédiction,
+ * en priorisant le strain Whoop réel (< 24h) puis en retombant sur
+ * findMostRecentExercise (estimation depuis nos données). Renvoie un
+ * RecentExercise prêt pour computeExerciseAdjustment / predictGlucoseCurve.
+ *
+ * Centralise l'assemblage Whoop-first-sinon-estimation pour éviter de le
+ * dupliquer entre le calculateur de dose et le prédicteur.
+ */
+export function resolveRecentExercise(input: {
+  nowMs?: number;
+  lastWhoopWorkout?: LastWhoopWorkout | null;
+  completedWorkouts: { id: string; date: string; duration?: number }[];
+  completedRunningSessions: {
+    id: string;
+    date: string;
+    actualDuration?: number;
+    glucoseCheckpoints?: { value: number; offsetSec: number }[];
+  }[];
+}): RecentExercise | null {
+  const nowMs = input.nowMs ?? Date.now();
+  const lw = input.lastWhoopWorkout;
+  if (lw) {
+    const endedAtMs = new Date(lw.endedAt).getTime();
+    if (!Number.isNaN(endedAtMs) && endedAtMs <= nowMs && nowMs - endedAtMs < 24 * 3_600_000) {
+      const durationMin = Math.max(
+        1,
+        Math.round((endedAtMs - new Date(lw.startedAt).getTime()) / 60_000),
+      );
+      return {
+        source: classifySport(lw.sport),
+        endedAtMs,
+        durationMin,
+        strain: lw.strain,
+        strainSource: "whoop",
+      };
+    }
+  }
+  return findMostRecentExercise(
+    input.completedWorkouts.map((w) => ({ id: w.id, date: w.date, duration: w.duration ?? 60 })),
+    input.completedRunningSessions.map((r) => ({
+      id: r.id,
+      date: r.date,
+      actualDuration: r.actualDuration ?? 45,
+      glucoseCheckpoints: r.glucoseCheckpoints,
+    })),
+    undefined,
+    nowMs,
+  );
+}
+
 /** Compte les points GPS valides (utilitaire pour debug). */
 export function _countValidGpsPoints(points: GpsPoint[] | undefined): number {
   if (!points) return 0;
