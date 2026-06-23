@@ -80,6 +80,24 @@ function formatTick(t: number): string {
 const EIGHT_HOURS_MS = 8 * 3_600_000;
 const SIX_HOURS_MS = 6 * 3_600_000;
 
+/** "HH:MM" de l'instant courant (pour pré-remplir le champ heure). */
+function nowHHMM(): string {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/** Convertit une heure "HH:MM" en ISO aujourd'hui ; si l'heure est dans le
+ *  futur (oubli de la veille), on recule d'un jour. Vide → maintenant. */
+function hhmmToISO(hhmm: string): string {
+  if (!hhmm) return new Date().toISOString();
+  const [h, m] = hhmm.split(":").map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return new Date().toISOString();
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  if (d.getTime() > Date.now() + 60_000) d.setDate(d.getDate() - 1);
+  return d.toISOString();
+}
+
 export default function GlucosePredictionChart() {
   const { current } = useGlucose({ mode: "current" });
   const whoop = useWhoop();
@@ -100,6 +118,7 @@ export default function GlucosePredictionChart() {
   const [carbG, setCarbG] = useState("");
   const [carbProt, setCarbProt] = useState("");
   const [carbFat, setCarbFat] = useState("");
+  const [carbTime, setCarbTime] = useState(""); // "HH:MM" — heure d'ingestion
 
   const [data, setData] = useState<PredictionResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -233,13 +252,19 @@ export default function GlucosePredictionChart() {
       proteinGrams: Number.isFinite(prot) && prot > 0 ? prot : undefined,
       fatGrams: Number.isFinite(fat) && fat > 0 ? fat : undefined,
       insulinUnits: 0,
-      eatenAt: new Date().toISOString(),
+      eatenAt: hhmmToISO(carbTime),
     });
     setCarbLabel("");
     setCarbG("");
     setCarbProt("");
     setCarbFat("");
+    setCarbTime("");
     setShowCarbForm(false);
+  };
+
+  const openCarbForm = () => {
+    setCarbTime(nowHHMM()); // pré-rempli à maintenant, modifiable
+    setShowCarbForm(true);
   };
 
   // Glucides sans insuline encore en digestion (< 4h) pour l'affichage.
@@ -285,7 +310,7 @@ export default function GlucosePredictionChart() {
           {!showCarbForm && (
             <button
               type="button"
-              onClick={() => setShowCarbForm(true)}
+              onClick={openCarbForm}
               className="flex items-center gap-1 text-xs text-accent-ink bg-accent rounded-full px-2.5 py-1 tap-scale"
             >
               <Plus className="w-3.5 h-3.5" /> Ajouter
@@ -324,13 +349,24 @@ export default function GlucosePredictionChart() {
         {/* Formulaire d'ajout */}
         {showCarbForm && (
           <div className="mt-3 flex flex-col gap-2 animate-slide-up">
-            <input
-              type="text"
-              value={carbLabel}
-              onChange={(e) => setCarbLabel(e.target.value)}
-              placeholder="Aliment (ex: compote) — optionnel"
-              className="w-full rounded-lg bg-bg-secondary border border-border-default px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={carbLabel}
+                onChange={(e) => setCarbLabel(e.target.value)}
+                placeholder="Aliment (ex: compote) — optionnel"
+                className="flex-1 rounded-lg bg-bg-secondary border border-border-default px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary"
+              />
+              <label className="flex flex-col gap-1 shrink-0">
+                <input
+                  type="time"
+                  value={carbTime}
+                  onChange={(e) => setCarbTime(e.target.value)}
+                  className="rounded-lg bg-bg-secondary border border-border-default px-2 py-2 text-sm num text-text-primary"
+                  aria-label="Heure d'ingestion"
+                />
+              </label>
+            </div>
             <div className="grid grid-cols-3 gap-2">
               <label className="flex flex-col gap-1">
                 <span className="label">Glucides (g)</span>
