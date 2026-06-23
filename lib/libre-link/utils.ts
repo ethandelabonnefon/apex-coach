@@ -85,6 +85,23 @@ export function trendArrow(trend: GlucoseTrend): string {
 }
 
 /**
+ * Tendance Libre → entier 1..5 (slide rule Abbott) attendu par les calculs
+ * insuline/prédiction. Renvoie undefined si inconnue.
+ */
+export function trendStringToNumber(
+  trend: GlucoseTrend | string | undefined,
+): number | undefined {
+  switch (trend) {
+    case "SingleDown": return 1;
+    case "FortyFiveDown": return 2;
+    case "Flat": return 3;
+    case "FortyFiveUp": return 4;
+    case "SingleUp": return 5;
+    default: return undefined;
+  }
+}
+
+/**
  * Libellé français d'une tendance.
  */
 export function trendLabel(trend: GlucoseTrend): string {
