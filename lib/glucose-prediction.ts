@@ -358,6 +358,31 @@ function trendVelocityMgPerMin(arrow?: number): number {
  */
 export const SPORT_SENSITIVITY_DAMPING = 0.4;
 
+/** Amortissement de la montée FPU NON couverte par un split (cas goûter). */
+export const FPU_UNCOVERED_DAMPING = 0.6;
+/** Contre-régulation : seuil sous lequel la chute prédite est amortie (mg/dL). */
+export const CR_THRESHOLD = 80;
+/** Fraction de la chute SOUS le seuil qui est conservée (0.5 = moitié amortie). */
+export const CR_DAMP = 0.5;
+
+/**
+ * Heures de l'intervalle [now, now+minutesAhead] qui tombent dans la fenêtre
+ * nocturne à jeun [0h, 6h) locale. La dérive basale n'est mesurée QUE sur cette
+ * fenêtre (estimateNightDrift, 00h-03h) → on ne l'applique donc pas en soirée
+ * pendant la digestion du repas (sinon elle écrase la prédiction du repas).
+ */
+function nightFastingHours(nowMs: number, minutesAhead: number): number {
+  if (minutesAhead <= 0) return 0;
+  let hours = 0;
+  const steps = Math.ceil(minutesAhead / 15);
+  for (let i = 0; i < steps; i++) {
+    const mid = nowMs + (i * 15 + 7.5) * 60_000;
+    const hr = new Date(mid).getHours();
+    if (hr >= 0 && hr < 6) hours += 0.25;
+  }
+  return hours;
+}
+
 /** Échelle dawn par défaut (mg/dL) quand aucune courbe mesurée n'est dispo. */
 function defaultDawnBump(hourOfDay: number): number {
   if (hourOfDay >= 6 && hourOfDay <= 7) return 40;
@@ -443,7 +468,10 @@ export interface GlucoseAlert {
   type: "hypo" | "hyper";
   /** Minute où le seuil est franchi pour la première fois. */
   minute: number;
-  /** Heure absolue lisible (fr-FR). */
+  /** Timestamp absolu (ms) — à formater CÔTÉ CLIENT (la TZ serveur = UTC). */
+  at: number;
+  /** Heure absolue lisible — NE PAS utiliser pour l'affichage (formatée dans
+   *  la TZ du runtime ; côté serveur Vercel = UTC). Conservé pour debug. */
   hourLabel: string;
   /** Valeur prédite à ce point. */
   value: number;
@@ -512,7 +540,14 @@ function effectsAt(
       peak,
     );
   }
-  glucose += fpuRiseTotal - splitDrop;
+  // Net FPU↔split. Si une 2e dose (split) couvre le FPU → cancellation
+  // exacte (net ≤ 0, on garde). Si le FPU n'est PAS couvert (pas de split,
+  // cas goûter) → on amortit la montée : en pratique le FPU non bolussé
+  // monte MOINS que la couverture théorique (facteur 6), et le léger
+  // sur-dosage glucides l'absorbe en partie. Évite les "+90 mg/dL" irréalistes.
+  let fpuNet = fpuRiseTotal - splitDrop;
+  if (fpuNet > 0) fpuNet *= FPU_UNCOVERED_DAMPING;
+  glucose += fpuNet;
   glucose -= insulinDrop;
 
   // 3bis. Modulation sport (sensibilité insuline ↑) — Étape 5d.
@@ -529,8 +564,12 @@ function effectsAt(
     }
   }
 
-  // 4. Effet basal net (dérive mesurée)
-  glucose += basalGlucoseEffect(minutesAhead, input.basalDriftPerHour ?? 0);
+  // 4. Effet basal net (dérive mesurée) — UNIQUEMENT sur les heures nocturnes
+  // à jeun de l'horizon. Évite que la dérive nuit écrase la digestion du soir.
+  const nightHours = nightFastingHours(nowMs, minutesAhead);
+  if (nightHours > 0 && input.basalDriftPerHour) {
+    glucose += basalGlucoseEffect(nightHours * 60, input.basalDriftPerHour);
+  }
 
   // 5. Dawn (mesuré sinon échelle)
   const hourOfDay = new Date(nowMs + minutesAhead * 60_000).getHours();
@@ -542,7 +581,16 @@ function effectsAt(
     glucose += input.learnedBias * Math.min(1, minutesAhead / 360);
   }
 
-  // 7. Clamp réalisme
+  // 7. Contre-régulation : quand la glycémie chuterait dans le bas, le foie
+  // libère du glucose (glucagon) → la chute réelle est amortie. Sans ça, le
+  // modèle sur-prédit des hypos sur les grosses corrections / IOB résiduel.
+  // N'affecte QUE les trajectoires basses → les repas équilibrés (qui restent
+  // en cible) ne bougent pas.
+  if (glucose < CR_THRESHOLD) {
+    glucose = CR_THRESHOLD - (CR_THRESHOLD - glucose) * CR_DAMP;
+  }
+
+  // 8. Clamp réalisme
   return Math.min(350, Math.max(40, Math.round(glucose)));
 }
 
@@ -583,8 +631,8 @@ export function predictGlucoseCurve(input: PredictGlucoseInput): GlucosePredicti
   const firstHyper = future.find((p) => p.value > hyper);
   const fmt = (ms: number) =>
     new Date(ms).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  if (firstHypo) alerts.push({ type: "hypo", minute: firstHypo.minute, hourLabel: fmt(firstHypo.at), value: firstHypo.value });
-  if (firstHyper) alerts.push({ type: "hyper", minute: firstHyper.minute, hourLabel: fmt(firstHyper.at), value: firstHyper.value });
+  if (firstHypo) alerts.push({ type: "hypo", minute: firstHypo.minute, at: firstHypo.at, hourLabel: fmt(firstHypo.at), value: firstHypo.value });
+  if (firstHyper) alerts.push({ type: "hyper", minute: firstHyper.minute, at: firstHyper.at, hourLabel: fmt(firstHyper.at), value: firstHyper.value });
 
   // Fiabilité : repas très récent + IOB élevé → dynamique instable
   const totalIOB = activeIOB(

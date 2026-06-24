@@ -50,6 +50,7 @@ interface PredictionPoint {
 interface GlucoseAlert {
   type: "hypo" | "hyper";
   minute: number;
+  at: number;
   hourLabel: string;
   value: number;
 }
@@ -460,7 +461,7 @@ export default function GlucosePredictionChart() {
                   )}
                   <span>
                     {a.type === "hypo" ? "Hypo prévue" : "Hyper prévue"} ~{a.value} mg/dL à{" "}
-                    {a.hourLabel} (dans {Math.round(a.minute / 60 * 10) / 10}h)
+                    {formatTick(a.at)} (dans {Math.round(a.minute / 60 * 10) / 10}h)
                   </span>
                 </div>
               ))}

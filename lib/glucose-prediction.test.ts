@@ -351,16 +351,30 @@ test("predictGlucoseCurve: correction en hyper → descente + détection cohére
   assert.ok(r.min.value < 100, `min=${r.min.value}`);
 });
 
-test("predictGlucoseCurve: dérive basale négative → pente descendante + alerte hypo", () => {
+test("predictGlucoseCurve: dérive basale négative la NUIT → descente + alerte hypo", () => {
+  // La dérive ne s'applique QUE sur les heures nocturnes [0h-6h) → on part du soir.
+  const NIGHT = new Date("2026-06-20T23:00:00").getTime();
   const r = predictGlucoseCurve({
     currentGlucose: 110,
     events: [],
     isf: ISF,
-    nowMs: NOON,
-    basalDriftPerHour: -10, // nuits qui descendent
+    nowMs: NIGHT,
+    basalDriftPerHour: -20, // nuits qui descendent franchement
   });
-  assert.ok(r.curve[r.curve.length - 1].value < 110);
+  assert.ok(r.min.value < 110);
   assert.ok(r.alerts.some((a) => a.type === "hypo"));
+});
+
+test("predictGlucoseCurve: dérive basale NON appliquée en journée (digestion)", () => {
+  // À midi, horizon 12h-20h → aucune heure nocturne → la dérive n'écrase pas.
+  const r = predictGlucoseCurve({
+    currentGlucose: 150,
+    events: [],
+    isf: ISF,
+    nowMs: NOON,
+    basalDriftPerHour: 10,
+  });
+  for (const p of r.curve) assert.equal(p.value, 150); // plat, dérive ignorée le jour
 });
 
 test("predictGlucoseCurve: dawn appliqué quand l'horizon traverse 4h-8h", () => {
