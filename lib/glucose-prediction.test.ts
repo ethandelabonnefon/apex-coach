@@ -214,6 +214,39 @@ test("advice: en cible → rien à ajuster", () => {
   assert.equal(a.kind, "in-range");
 });
 
+test("advice fiabilité: correction 30 min après bolus → faible + reliableAt", () => {
+  const now = NOON;
+  const a = buildPredictionAdvice({
+    prediction: curveFlatHigh(160), targetGlucose: 110, isf: ISF, iobUnits: 0,
+    lastBolusMinutesAgo: 30, lastBolusAtMs: now - 30 * 60000,
+  });
+  assert.equal(a.kind, "correction");
+  assert.equal(a.reliability.level, "low");
+  assert.ok(a.reliability.reliableAtMs); // "fiable vers HH:MM"
+});
+
+test("advice fiabilité: correction 100 min après bolus → moyenne", () => {
+  const a = buildPredictionAdvice({
+    prediction: curveFlatHigh(160), targetGlucose: 110, isf: ISF, iobUnits: 0,
+    lastBolusMinutesAgo: 100, lastBolusAtMs: NOON - 100 * 60000,
+  });
+  assert.equal(a.reliability.level, "medium");
+});
+
+test("advice fiabilité: correction 2h+ après bolus (ou aucun) → bonne", () => {
+  const a1 = buildPredictionAdvice({ prediction: curveFlatHigh(160), targetGlucose: 110, isf: ISF, iobUnits: 0, lastBolusMinutesAgo: 130 });
+  assert.equal(a1.reliability.level, "high");
+  const a2 = buildPredictionAdvice({ prediction: curveFlatHigh(160), targetGlucose: 110, isf: ISF, iobUnits: 0 });
+  assert.equal(a2.reliability.level, "high");
+});
+
+test("advice fiabilité: hypo (glucides) JAMAIS gatée même bolus récent", () => {
+  const pred = predictGlucoseCurve({ currentGlucose: 160, events: [{ minutesAgo: 0, units: 3 }], isf: ISF, nowMs: NOON });
+  const a = buildPredictionAdvice({ prediction: pred, targetGlucose: 110, isf: ISF, iobUnits: 0, lastBolusMinutesAgo: 5 });
+  assert.equal(a.kind, "carbs");
+  assert.equal(a.reliability.level, "high");
+});
+
 test("advice: trajectoire qui descend bas → glucides", () => {
   // 3U de correction sur 160 → chute → hypo prévue
   const pred = predictGlucoseCurve({ currentGlucose: 160, events: [{ minutesAgo: 0, units: 3 }], isf: ISF, nowMs: NOON });

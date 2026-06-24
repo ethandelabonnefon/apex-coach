@@ -656,6 +656,26 @@ function fmtU(n: number): string {
   return (Math.round(n * 10) / 10).toString().replace(".", ",");
 }
 
+/**
+ * Fiabilité d'un conseil de CORRECTION selon le temps depuis le dernier bolus.
+ * Recherche : analogue rapide (Novorapid) pic 60-90 min, durée ~4h ; corriger
+ * dans les 2h = "stacking" (risque d'hypo max au pic). Tant que le bolus n'a
+ * pas passé son pic, on ne peut pas savoir s'il "suffit" → décision peu fiable.
+ *   < 90 min  → faible (bolus encore en montée / au pic)
+ *   90-120 min → moyenne (pic passé, tendance se dessine)
+ *   ≥ 120 min  → bonne (s'il reste haut, le bolus a vraiment sous-dosé)
+ */
+export const CORRECTION_RELIABLE_MIN = 120;
+export const CORRECTION_PEAK_MIN = 90;
+
+export interface AdviceReliability {
+  level: "high" | "medium" | "low";
+  /** ms à partir duquel le conseil devient fiable (dernier bolus + 2h). */
+  reliableAtMs?: number;
+  /** Note explicative courte. */
+  note?: string;
+}
+
 export interface PredictionAdvice {
   kind: "correction" | "carbs" | "wait-iob" | "in-range";
   tone: "success" | "warning" | "error" | "info";
@@ -664,6 +684,26 @@ export interface PredictionAdvice {
   /** Quantité (U ou g) si action concrète. */
   quantity?: number;
   unit?: "U" | "g";
+  /** Fiabilité du conseil (surtout pertinent pour une correction). */
+  reliability: AdviceReliability;
+}
+
+function correctionReliability(
+  lastBolusMinutesAgo?: number,
+  lastBolusAtMs?: number,
+): AdviceReliability {
+  if (lastBolusMinutesAgo == null || lastBolusMinutesAgo >= CORRECTION_RELIABLE_MIN) {
+    return { level: "high" };
+  }
+  const reliableAtMs = lastBolusAtMs != null ? lastBolusAtMs + CORRECTION_RELIABLE_MIN * 60_000 : undefined;
+  if (lastBolusMinutesAgo >= CORRECTION_PEAK_MIN) {
+    return { level: "medium", reliableAtMs, note: "Le bolus précédent agit encore — surveille avant de corriger." };
+  }
+  return {
+    level: "low",
+    reliableAtMs,
+    note: `Bolus d'il y a ${Math.round(lastBolusMinutesAgo)} min encore en pleine action (pic ~1-1h30) — trop tôt pour juger.`,
+  };
 }
 
 /**
@@ -682,6 +722,10 @@ export function buildPredictionAdvice(input: {
   targetGlucose: number;
   isf: number;
   iobUnits: number;
+  /** Minutes depuis le dernier bolus rapide (pour la fiabilité d'une correction). */
+  lastBolusMinutesAgo?: number;
+  /** ms du dernier bolus rapide (pour calculer "fiable vers HH:MM"). */
+  lastBolusAtMs?: number;
   /** Début de la fenêtre de référence (min). Défaut 120 (après le pic repas). */
   fromMinutes?: number;
   /** Plafond de correction suggérée (U). Défaut 3. */
@@ -690,6 +734,7 @@ export function buildPredictionAdvice(input: {
   const { prediction, targetGlucose, isf, iobUnits } = input;
   const from = input.fromMinutes ?? 120;
   const maxCorr = input.maxCorrection ?? 3;
+  const HIGH: AdviceReliability = { level: "high" };
 
   if (prediction.unreliableTooFresh) {
     return {
@@ -697,17 +742,19 @@ export function buildPredictionAdvice(input: {
       tone: "info",
       headline: "Repas trop récent pour conseiller",
       detail: "La dynamique glucides/insuline est encore instable. Reviens dans 1-2h.",
+      reliability: { level: "low" },
     };
   }
 
   const later = prediction.curve.filter((p) => p.minute >= from);
   if (later.length === 0) {
-    return { kind: "in-range", tone: "success", headline: "Rien à ajuster", detail: "Horizon trop court." };
+    return { kind: "in-range", tone: "success", headline: "Rien à ajuster", detail: "Horizon trop court.", reliability: HIGH };
   }
   const minLater = Math.min(...later.map((p) => p.value));
   const maxLater = Math.max(...later.map((p) => p.value));
 
-  // 1. Hypo à venir → glucides (priorité absolue)
+  // 1. Hypo à venir → glucides (priorité absolue — JAMAIS gaté par la fiabilité :
+  // on traite un risque d'hypo tout de suite).
   if (minLater < 75) {
     const carbs = Math.min(25, Math.max(8, Math.ceil((targetGlucose - minLater) / 4)));
     return {
@@ -717,6 +764,7 @@ export function buildPredictionAdvice(input: {
       detail: `Sans ça, tu descends vers ~${minLater} mg/dL. ${carbs}g te ramènent vers la cible.`,
       quantity: carbs,
       unit: "g",
+      reliability: HIGH,
     };
   }
 
@@ -728,6 +776,7 @@ export function buildPredictionAdvice(input: {
         tone: "info",
         headline: `Attends — ${fmtU(iobUnits)}U encore actives`,
         detail: `Tu restes vers ${minLater} mg/dL, mais ${fmtU(iobUnits)}U travaillent déjà (c'est intégré au calcul). Re-vérifie dans 1-2h avant de corriger.`,
+        reliability: { level: "low", note: "IOB élevé — laisse l'insuline finir d'agir." },
       };
     }
     const raw = (minLater - targetGlucose) / isf;
@@ -740,6 +789,7 @@ export function buildPredictionAdvice(input: {
       detail: `Sans rien, tu restes autour de ${minLater} mg/dL pendant des heures. ~${fmtU(units)}U te ramènent vers ${landing} mg/dL. Valide avec ton ressenti.`,
       quantity: units,
       unit: "U",
+      reliability: correctionReliability(input.lastBolusMinutesAgo, input.lastBolusAtMs),
     };
   }
 
@@ -749,5 +799,6 @@ export function buildPredictionAdvice(input: {
     tone: "success",
     headline: "Bonne trajectoire — rien à ajuster",
     detail: `Tu restes en cible (mini ~${minLater}, maxi ~${maxLater} mg/dL sur l'horizon).`,
+    reliability: HIGH,
   };
 }

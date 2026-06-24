@@ -48,7 +48,7 @@ import {
   DEFAULT_PEAK_MIN,
   type GlucosePrediction,
 } from "@/lib/glucose-prediction";
-import { Syringe, Apple as AppleIcon, Clock, CheckCircle2 } from "lucide-react";
+import { Syringe, Apple as AppleIcon, Clock, CheckCircle2, ShieldCheck, ShieldAlert } from "lucide-react";
 
 interface PredictionPoint {
   minute: number;
@@ -158,6 +158,18 @@ export default function GlucosePredictionChart() {
     return activeIOB(boluses, dia, DEFAULT_PEAK_MIN);
   }, [insulinLogs, diabetesConfig.insulinActiveDuration]);
 
+  // Dernier bolus rapide (pour juger la fiabilité d'une correction).
+  const lastBolus = useMemo(() => {
+    const now = Date.now();
+    const recent = insulinLogs
+      .filter((l) => l.units > 0)
+      .map((l) => ({ atMs: new Date(l.injectedAt).getTime(), units: l.units }))
+      .filter((b) => Number.isFinite(b.atMs) && b.atMs <= now)
+      .sort((a, b) => b.atMs - a.atMs)[0];
+    if (!recent) return null;
+    return { atMs: recent.atMs, minutesAgo: (now - recent.atMs) / 60_000 };
+  }, [insulinLogs]);
+
   // Conseil actionnable dérivé de la courbe (atterrir à la cible).
   const advice = useMemo(() => {
     if (!data) return null;
@@ -166,8 +178,10 @@ export default function GlucosePredictionChart() {
       targetGlucose: diabetesConfig.targetGlucose,
       isf: diabetesConfig.insulinSensitivityFactor,
       iobUnits,
+      lastBolusMinutesAgo: lastBolus?.minutesAgo,
+      lastBolusAtMs: lastBolus?.atMs,
     });
-  }, [data, diabetesConfig.targetGlucose, diabetesConfig.insulinSensitivityFactor, iobUnits]);
+  }, [data, diabetesConfig.targetGlucose, diabetesConfig.insulinSensitivityFactor, iobUnits, lastBolus]);
 
   const applyAdvice = () => {
     if (!advice?.quantity) return;
@@ -549,16 +563,52 @@ export default function GlucosePredictionChart() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold leading-snug">{advice.headline}</p>
                 <p className="text-[11px] text-text-secondary mt-1 leading-snug">{advice.detail}</p>
-                {advice.quantity && (advice.unit === "U" || advice.unit === "g") && (
-                  <button
-                    type="button"
-                    onClick={applyAdvice}
-                    className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold bg-bg-tertiary border border-border-default hover:bg-bg-hover transition-colors px-3 py-1.5 rounded-md tap-scale"
-                  >
-                    {advice.unit === "U" ? <Syringe className="w-3 h-3" /> : <AppleIcon className="w-3 h-3" />}
-                    Logger {advice.quantity.toString().replace(".", ",")}
-                    {advice.unit}
-                  </button>
+
+                {/* Fiabilité (surtout pour une correction après un bolus récent) */}
+                {(() => {
+                  const r = advice.reliability;
+                  // Pertinent surtout quand ce n'est pas "high" et qu'il y a une action.
+                  if (r.level === "high") return null;
+                  const reliableAt = r.reliableAtMs ? formatTick(r.reliableAtMs) : null;
+                  const isLow = r.level === "low";
+                  return (
+                    <div
+                      className={`mt-2 flex items-start gap-1.5 text-[10px] leading-snug ${
+                        isLow ? "text-error" : "text-warning"
+                      }`}
+                    >
+                      <ShieldAlert className="w-3 h-3 shrink-0 mt-0.5" />
+                      <span>
+                        Fiabilité {isLow ? "faible" : "moyenne"} — {r.note}
+                        {reliableAt ? ` Fiable vers ${reliableAt}.` : ""}
+                      </span>
+                    </div>
+                  );
+                })()}
+
+                {/* Bouton Logger : masqué pour une correction PEU fiable (bolus
+                    trop récent) → on évite le stacking. Les glucides (hypo) et
+                    les corrections fiables/moyennes gardent le bouton. */}
+                {advice.quantity &&
+                  (advice.unit === "U" || advice.unit === "g") &&
+                  !(advice.kind === "correction" && advice.reliability.level === "low") && (
+                    <button
+                      type="button"
+                      onClick={applyAdvice}
+                      className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold bg-bg-tertiary border border-border-default hover:bg-bg-hover transition-colors px-3 py-1.5 rounded-md tap-scale"
+                    >
+                      {advice.unit === "U" ? <Syringe className="w-3 h-3" /> : <AppleIcon className="w-3 h-3" />}
+                      Logger {advice.quantity.toString().replace(".", ",")}
+                      {advice.unit}
+                    </button>
+                  )}
+
+                {/* Correction fiable → petit badge vert rassurant */}
+                {advice.kind === "correction" && advice.reliability.level === "high" && (
+                  <div className="mt-2 flex items-center gap-1 text-[10px] text-success">
+                    <ShieldCheck className="w-3 h-3 shrink-0" />
+                    <span>Conseil fiable (bolus précédent a passé son pic)</span>
+                  </div>
                 )}
               </div>
             </div>
