@@ -647,3 +647,107 @@ export function predictGlucoseCurve(input: PredictGlucoseInput): GlucosePredicti
 
   return { curve, min, max, alerts, unreliableTooFresh };
 }
+
+// ───────────────────────────────────────────────────────────────────────
+// Conseil actionnable dérivé de la courbe (atterrir à la cible)
+// ───────────────────────────────────────────────────────────────────────
+
+function fmtU(n: number): string {
+  return (Math.round(n * 10) / 10).toString().replace(".", ",");
+}
+
+export interface PredictionAdvice {
+  kind: "correction" | "carbs" | "wait-iob" | "in-range";
+  tone: "success" | "warning" | "error" | "info";
+  headline: string;
+  detail: string;
+  /** Quantité (U ou g) si action concrète. */
+  quantity?: number;
+  unit?: "U" | "g";
+}
+
+/**
+ * Transforme la courbe prédite en UN conseil : « fais ~XU » / « mange ~Yg » /
+ * « attends, IOB en cours » / « rien à ajuster ».
+ *
+ * Sûreté : la correction se base sur le MINIMUM de la trajectoire à venir
+ * (à partir de `fromMinutes`), pas sur un pic transitoire → on ne corrige que
+ * si MÊME le point le plus bas reste au-dessus de la cible+marge, donc une
+ * correction ne peut pas provoquer d'hypo sur un creux à venir. L'IOB est déjà
+ * intégré dans la courbe ; on bloque quand même la suggestion si l'IOB actif
+ * est élevé (anti-stacking). Décision finale = ressenti utilisateur.
+ */
+export function buildPredictionAdvice(input: {
+  prediction: GlucosePrediction;
+  targetGlucose: number;
+  isf: number;
+  iobUnits: number;
+  /** Début de la fenêtre de référence (min). Défaut 120 (après le pic repas). */
+  fromMinutes?: number;
+  /** Plafond de correction suggérée (U). Défaut 3. */
+  maxCorrection?: number;
+}): PredictionAdvice {
+  const { prediction, targetGlucose, isf, iobUnits } = input;
+  const from = input.fromMinutes ?? 120;
+  const maxCorr = input.maxCorrection ?? 3;
+
+  if (prediction.unreliableTooFresh) {
+    return {
+      kind: "wait-iob",
+      tone: "info",
+      headline: "Repas trop récent pour conseiller",
+      detail: "La dynamique glucides/insuline est encore instable. Reviens dans 1-2h.",
+    };
+  }
+
+  const later = prediction.curve.filter((p) => p.minute >= from);
+  if (later.length === 0) {
+    return { kind: "in-range", tone: "success", headline: "Rien à ajuster", detail: "Horizon trop court." };
+  }
+  const minLater = Math.min(...later.map((p) => p.value));
+  const maxLater = Math.max(...later.map((p) => p.value));
+
+  // 1. Hypo à venir → glucides (priorité absolue)
+  if (minLater < 75) {
+    const carbs = Math.min(25, Math.max(8, Math.ceil((targetGlucose - minLater) / 4)));
+    return {
+      kind: "carbs",
+      tone: "error",
+      headline: `Mange ~${carbs}g de glucides`,
+      detail: `Sans ça, tu descends vers ~${minLater} mg/dL. ${carbs}g te ramènent vers la cible.`,
+      quantity: carbs,
+      unit: "g",
+    };
+  }
+
+  // 2. Tu restes au-dessus de la cible → correction pour atterrir à la cible
+  if (minLater > targetGlucose + 25) {
+    if (iobUnits > 1.5) {
+      return {
+        kind: "wait-iob",
+        tone: "info",
+        headline: `Attends — ${fmtU(iobUnits)}U encore actives`,
+        detail: `Tu restes vers ${minLater} mg/dL, mais ${fmtU(iobUnits)}U travaillent déjà (c'est intégré au calcul). Re-vérifie dans 1-2h avant de corriger.`,
+      };
+    }
+    const raw = (minLater - targetGlucose) / isf;
+    const units = Math.min(maxCorr, Math.max(0.5, Math.round(raw * 2) / 2));
+    const landing = Math.round(minLater - units * isf);
+    return {
+      kind: "correction",
+      tone: "warning",
+      headline: `Fais ~${fmtU(units)}U de correction`,
+      detail: `Sans rien, tu restes autour de ${minLater} mg/dL pendant des heures. ~${fmtU(units)}U te ramènent vers ${landing} mg/dL. Valide avec ton ressenti.`,
+      quantity: units,
+      unit: "U",
+    };
+  }
+
+  // 3. En cible
+  return {
+    kind: "in-range",
+    tone: "success",
+    headline: "Bonne trajectoire — rien à ajuster",
+    detail: `Tu restes en cible (mini ~${minLater}, maxi ~${maxLater} mg/dL sur l'horizon).`,
+  };
+}

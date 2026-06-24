@@ -19,6 +19,7 @@ import {
   DEFAULT_DIA_MIN,
   carbSensitivity,
   predictGlucoseCurve,
+  buildPredictionAdvice,
 } from "./glucose-prediction";
 
 // Midi (12:00 local) → l'horizon 8h reste hors fenêtre dawn (4h-8h).
@@ -179,6 +180,46 @@ test("assessBasalTitration: dérive montante franche → basale trop faible", ()
 test("assessBasalTitration: dans la bande ±5 → ok", () => {
   assert.equal(assessBasalTitration(-2, "high").status, "ok");
   assert.equal(assessBasalTitration(3, "high").status, "ok");
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// Conseil actionnable buildPredictionAdvice
+// ───────────────────────────────────────────────────────────────────────
+
+function curveFlatHigh(v: number) {
+  return predictGlucoseCurve({ currentGlucose: v, events: [], isf: ISF, nowMs: NOON });
+}
+
+test("advice: reste haut (160) sans IOB → correction pour viser la cible", () => {
+  const a = buildPredictionAdvice({ prediction: curveFlatHigh(160), targetGlucose: 110, isf: ISF, iobUnits: 0 });
+  assert.equal(a.kind, "correction");
+  assert.equal(a.unit, "U");
+  // (160-110)/100 = 0,5U
+  assert.ok(a.quantity && a.quantity >= 0.5 && a.quantity <= 1, `unités=${a.quantity}`);
+});
+
+test("advice: correction plafonnée à maxCorrection", () => {
+  const a = buildPredictionAdvice({ prediction: curveFlatHigh(300), targetGlucose: 110, isf: ISF, iobUnits: 0, maxCorrection: 1 });
+  assert.equal(a.kind, "correction");
+  assert.ok(a.quantity! <= 1);
+});
+
+test("advice: IOB élevé + reste haut → wait-iob (anti-stacking)", () => {
+  const a = buildPredictionAdvice({ prediction: curveFlatHigh(200), targetGlucose: 110, isf: ISF, iobUnits: 2 });
+  assert.equal(a.kind, "wait-iob");
+});
+
+test("advice: en cible → rien à ajuster", () => {
+  const a = buildPredictionAdvice({ prediction: curveFlatHigh(120), targetGlucose: 110, isf: ISF, iobUnits: 0 });
+  assert.equal(a.kind, "in-range");
+});
+
+test("advice: trajectoire qui descend bas → glucides", () => {
+  // 3U de correction sur 160 → chute → hypo prévue
+  const pred = predictGlucoseCurve({ currentGlucose: 160, events: [{ minutesAgo: 0, units: 3 }], isf: ISF, nowMs: NOON });
+  const a = buildPredictionAdvice({ prediction: pred, targetGlucose: 110, isf: ISF, iobUnits: 0 });
+  assert.equal(a.kind, "carbs");
+  assert.equal(a.unit, "g");
 });
 
 // ───────────────────────────────────────────────────────────────────────

@@ -41,6 +41,14 @@ import { useWhoop } from "@/hooks/useWhoop";
 import { GLUCOSE_THRESHOLDS } from "@/lib/libre-link/config";
 import { trendStringToNumber } from "@/lib/libre-link/utils";
 import { resolveRecentExercise } from "@/lib/exercise-insulin-adjustment";
+import {
+  activeIOB,
+  buildPredictionAdvice,
+  DEFAULT_DIA_MIN,
+  DEFAULT_PEAK_MIN,
+  type GlucosePrediction,
+} from "@/lib/glucose-prediction";
+import { Syringe, Apple as AppleIcon, Clock, CheckCircle2 } from "lucide-react";
 
 interface PredictionPoint {
   minute: number;
@@ -112,6 +120,8 @@ export default function GlucosePredictionChart() {
   const carbEntries = useStore((s) => s.carbEntries);
   const addCarbEntry = useStore((s) => s.addCarbEntry);
   const removeCarbEntry = useStore((s) => s.removeCarbEntry);
+  const addInsulinLog = useStore((s) => s.addInsulinLog);
+  const profile = useStore((s) => s.profile);
 
   // Formulaire "glucides sans insuline"
   const [showCarbForm, setShowCarbForm] = useState(false);
@@ -136,6 +146,52 @@ export default function GlucosePredictionChart() {
     }
     return undefined;
   }, [current, glucoseReadings]);
+
+  // IOB actif (modèle bi-exp) pour l'anti-stacking du conseil.
+  const iobUnits = useMemo(() => {
+    const now = Date.now();
+    const dia = diabetesConfig.insulinActiveDuration ?? DEFAULT_DIA_MIN;
+    const boluses = insulinLogs
+      .filter((l) => l.units > 0)
+      .map((l) => ({ units: l.units, minutesAgo: (now - new Date(l.injectedAt).getTime()) / 60_000 }))
+      .filter((b) => b.minutesAgo >= 0 && b.minutesAgo < dia);
+    return activeIOB(boluses, dia, DEFAULT_PEAK_MIN);
+  }, [insulinLogs, diabetesConfig.insulinActiveDuration]);
+
+  // Conseil actionnable dérivé de la courbe (atterrir à la cible).
+  const advice = useMemo(() => {
+    if (!data) return null;
+    return buildPredictionAdvice({
+      prediction: data.prediction as unknown as GlucosePrediction,
+      targetGlucose: diabetesConfig.targetGlucose,
+      isf: diabetesConfig.insulinSensitivityFactor,
+      iobUnits,
+    });
+  }, [data, diabetesConfig.targetGlucose, diabetesConfig.insulinSensitivityFactor, iobUnits]);
+
+  const applyAdvice = () => {
+    if (!advice?.quantity) return;
+    if (advice.unit === "U") {
+      addInsulinLog({
+        id: crypto.randomUUID(),
+        units: advice.quantity,
+        insulinType: profile.insulinRapid,
+        mealType: "correction",
+        carbsGrams: 0,
+        glucoseBefore: currentGlucose ?? 0,
+        notes: "Correction (conseil prédiction 8h)",
+        injectedAt: new Date(),
+      });
+    } else if (advice.unit === "g") {
+      addCarbEntry({
+        id: `carb-${Date.now()}`,
+        label: "Glucides (conseil)",
+        carbsGrams: advice.quantity,
+        insulinUnits: 0,
+        eatenAt: new Date().toISOString(),
+      });
+    }
+  };
 
   const runPrediction = useCallback(async () => {
     if (currentGlucose === undefined) return;
@@ -465,6 +521,46 @@ export default function GlucosePredictionChart() {
                   </span>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Conseil actionnable pour viser la cible */}
+          {advice && (
+            <div
+              className={`mb-4 rounded-xl border p-3 flex items-start gap-2 ${
+                advice.tone === "error"
+                  ? "bg-error/10 border-error/30 text-error"
+                  : advice.tone === "warning"
+                  ? "bg-warning/10 border-warning/30 text-warning"
+                  : advice.tone === "success"
+                  ? "bg-success/10 border-success/30 text-success"
+                  : "bg-info/10 border-info/30 text-info"
+              }`}
+            >
+              {advice.kind === "correction" ? (
+                <Syringe className="w-4 h-4 shrink-0 mt-0.5" />
+              ) : advice.kind === "carbs" ? (
+                <AppleIcon className="w-4 h-4 shrink-0 mt-0.5" />
+              ) : advice.kind === "in-range" ? (
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+              ) : (
+                <Clock className="w-4 h-4 shrink-0 mt-0.5" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold leading-snug">{advice.headline}</p>
+                <p className="text-[11px] text-text-secondary mt-1 leading-snug">{advice.detail}</p>
+                {advice.quantity && (advice.unit === "U" || advice.unit === "g") && (
+                  <button
+                    type="button"
+                    onClick={applyAdvice}
+                    className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold bg-bg-tertiary border border-border-default hover:bg-bg-hover transition-colors px-3 py-1.5 rounded-md tap-scale"
+                  >
+                    {advice.unit === "U" ? <Syringe className="w-3 h-3" /> : <AppleIcon className="w-3 h-3" />}
+                    Logger {advice.quantity.toString().replace(".", ",")}
+                    {advice.unit}
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
