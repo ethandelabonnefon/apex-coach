@@ -101,6 +101,8 @@ export interface NightPlan {
 const EVENING_HYPO_TARGET = 95;
 /** Cible d'une collation préventive (hypo prédite, pas encore arrivée). */
 const PREVENTIVE_TARGET = 100;
+/** Cible d'atterrissage au réveil pour une correction du soir (buffer anti-hypo). */
+const EVENING_TARGET = 120;
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -132,29 +134,10 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
   const predictions = advice.predictions;
   const minPred = Math.min(...predictions.map((p) => p.glucose));
   const wakeup = predictions[predictions.length - 1];
-  const subtitle = `${input.currentGlucose} mg/dL · réveil prévu ~${wakeup.glucose} à ${wakeup.hourLabel}`;
-
-  // ── Cas « repas trop récent » : on ne bluffe pas une prédiction ──────
-  if (advice.unreliableTooFresh) {
-    return {
-      title: "Ton plan pour la nuit",
-      subtitle,
-      steps: [
-        {
-          id: "too-fresh",
-          order: 1,
-          kind: "recheck",
-          tone: "info",
-          headline: "Repas trop récent pour un plan fiable",
-          detail: advice.recommendation.detail,
-        },
-      ],
-      predictions,
-      breakdown: advice.breakdown,
-      risk: advice.risk,
-      unreliableTooFresh: true,
-    };
-  }
+  // Repas très récent → on donne quand même un plan (best-effort) mais on le
+  // signale ; on ne refuse plus avec un simple "reviens plus tard".
+  const freshCaveat = advice.unreliableTooFresh ? " · repas récent, dose prudente" : "";
+  const subtitle = `${input.currentGlucose} mg/dL · réveil prévu ~${wakeup.glucose} à ${wakeup.hourLabel}${freshCaveat}`;
 
   const steps: NightStep[] = [];
   let order = 1;
@@ -284,18 +267,24 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
       advice.recommendation.type === "correction-bolus" &&
       advice.recommendation.action
     ) {
-      const a = advice.recommendation.action;
+      // Dose recalculée pour atterrir vraiment à ~120 au réveil, arrondie EN
+      // DESSOUS (0,5U près) — la nuit on préfère finir un peu haut qu'en hypo.
+      // Plafonnée 2U (garde-fou nocturne).
+      const isf = input.isfMgPerU || 100;
+      const rawU = (wakeup.glucose - EVENING_TARGET) / isf;
+      const units = clamp(Math.floor(rawU * 2) / 2, 0.5, 2);
+      const landing = Math.round(wakeup.glucose - units * isf);
       steps.push({
         id: "correction",
         order: order++,
         kind: "correction",
         tone: "error",
-        headline: advice.recommendation.headline,
-        detail: advice.recommendation.detail,
+        headline: `Pour viser ~${EVENING_TARGET} au réveil : fais ${fmt(units)}U`,
+        detail: `Sans rien, réveil prévu ~${wakeup.glucose} mg/dL. ${fmt(units)}U te ramènent vers ~${landing} mg/dL (arrondi prudent, plafonné 2U la nuit).${freshCaveat ? " Repas récent : reste prudent." : ""}`,
         action: {
           kind: "log-correction",
-          label: a.label,
-          quantity: a.quantity,
+          label: `${fmt(units)}U`,
+          quantity: units,
           unit: "U",
         },
       });
@@ -312,16 +301,12 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
   }
 
   // ── Re-check (timing) ───────────────────────────────────────────────
+  // On ne garde le re-check QUE pour une vraie hypo en cours (sécurité) —
+  // plus de "re-check à 23h14" systématique après une correction : le plan
+  // donne une décision, pas un renvoi.
   let recheckAt: NightPlan["recheckAt"];
-  const actedKinds: NightStepKind[] = [
-    "correction",
-    "split-keep",
-    "split-reduce",
-  ];
-  const needsRecheck =
-    acute || steps.some((s) => actedKinds.includes(s.kind)) || advice.risk !== "safe";
-  if (needsRecheck) {
-    const mins = acute ? 20 : 120;
+  if (acute) {
+    const mins = 20;
     const t = nowMs + mins * 60_000;
     recheckAt = { hourLabel: hourLabel(t), minutesFromNow: mins };
     steps.push({
@@ -330,9 +315,7 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
       kind: "recheck",
       tone: "info",
       headline: `Re-check ta glycémie à ${recheckAt.hourLabel}`,
-      detail: acute
-        ? "Confirme que tu es bien remonté avant de dormir."
-        : "Pour t'assurer que la nuit part dans la bonne zone.",
+      detail: "Confirme que tu es bien remonté avant de dormir.",
     });
   }
 

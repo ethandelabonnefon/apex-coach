@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/Badge";
 import { useGlucose } from "@/hooks/useGlucose";
 import GlucoseWidget from "@/components/glucose/GlucoseWidget";
 import GlucoseChart from "@/components/glucose/GlucoseChart";
-import GlucosePredictionChart from "@/components/glucose/GlucosePredictionChart";
+import CarbEntryLogger from "@/components/glucose/CarbEntryLogger";
 import CorrectionSuggestion from "@/components/glucose/CorrectionSuggestion";
 import PushOptIn from "@/components/glucose/PushOptIn";
 import {
@@ -1107,9 +1107,9 @@ export default function DiabetePage() {
         <GlucoseChart />
       </div>
 
-      {/* ── PRÉDICTION 8H (IOB + COB + basal + sport) ── */}
+      {/* ── GLUCIDES SANS INSULINE (entrée pour le plan nuit) ── */}
       <div className="mb-4">
-        <GlucosePredictionChart />
+        <CarbEntryLogger />
       </div>
 
       {/* ── PATTERNS DÉTECTÉS (Phase 11 Bloc 3) ── */}
