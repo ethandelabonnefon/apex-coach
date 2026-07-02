@@ -212,26 +212,26 @@ export default function CoachPanel({ isOpen, onClose }: CoachPanelProps) {
 
       {/* Panel */}
       <div
-        className={`fixed inset-y-0 right-0 w-full sm:w-[400px] bg-[#0f0f18] border-l border-white/[0.06] shadow-2xl flex flex-col z-50 transition-transform duration-300 ease-out ${
+        className={`fixed inset-y-0 right-0 w-full sm:w-[400px] bg-[#ffffff] border-l border-black/[0.06] shadow-2xl flex flex-col z-50 transition-transform duration-300 ease-out ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 pt-safe border-b border-white/[0.06]">
+        <div className="flex items-center justify-between px-5 py-4 pt-safe border-b border-black/[0.06]">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-r from-[#a855f7] to-[#ec4899] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-r from-[#af52de] to-[#ff2d55] flex items-center justify-center">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white">APEX Coach</h2>
-              <p className="text-[10px] text-white/35">Ton assistant personnel</p>
+              <h2 className="text-sm font-bold text-text-primary">APEX Coach</h2>
+              <p className="text-[10px] text-black/35">Ton assistant personnel</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/[0.06] text-white/30 hover:text-white transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-black/[0.06] text-black/30 hover:text-text-primary transition-colors"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M18 6L6 18M6 6l12 12" />
@@ -249,8 +249,8 @@ export default function CoachPanel({ isOpen, onClose }: CoachPanelProps) {
               <div
                 className={`max-w-[85%] rounded-2xl px-4 py-3 ${
                   message.role === "user"
-                    ? "bg-[#00ff94] text-black"
-                    : "bg-white/[0.06]"
+                    ? "bg-[#34c759] text-white"
+                    : "bg-black/[0.06]"
                 }`}
               >
                 <p className="whitespace-pre-wrap text-sm leading-relaxed">
@@ -259,17 +259,17 @@ export default function CoachPanel({ isOpen, onClose }: CoachPanelProps) {
 
                 {/* Action buttons */}
                 {message.actions && message.actions.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-white/10">
+                  <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-black/10">
                     {message.actions.map((action, i) => (
                       <button
                         key={i}
                         onClick={() => handleAction(action)}
                         className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                           action.type === "apply"
-                            ? "bg-[#00ff94] text-black hover:bg-[#00ff94]/80"
+                            ? "bg-[#34c759] text-white hover:bg-[#34c759]/80"
                             : action.type === "reject"
-                            ? "bg-white/[0.06] text-white/50 hover:bg-white/[0.1]"
-                            : "bg-[#a855f7]/20 text-[#a855f7] hover:bg-[#a855f7]/30"
+                            ? "bg-black/[0.06] text-black/50 hover:bg-black/[0.1]"
+                            : "bg-[#af52de]/20 text-[#af52de] hover:bg-[#af52de]/30"
                         }`}
                       >
                         {action.type === "apply" && "✓ "}
@@ -285,15 +285,15 @@ export default function CoachPanel({ isOpen, onClose }: CoachPanelProps) {
           {/* Loading indicator */}
           {isLoading && (
             <div className="flex justify-start">
-              <div className="bg-white/[0.06] rounded-2xl px-4 py-3">
+              <div className="bg-black/[0.06] rounded-2xl px-4 py-3">
                 <div className="flex gap-1.5">
-                  <span className="w-2 h-2 bg-white/30 rounded-full animate-bounce" />
+                  <span className="w-2 h-2 bg-black/30 rounded-full animate-bounce" />
                   <span
-                    className="w-2 h-2 bg-white/30 rounded-full animate-bounce"
+                    className="w-2 h-2 bg-black/30 rounded-full animate-bounce"
                     style={{ animationDelay: "0.15s" }}
                   />
                   <span
-                    className="w-2 h-2 bg-white/30 rounded-full animate-bounce"
+                    className="w-2 h-2 bg-black/30 rounded-full animate-bounce"
                     style={{ animationDelay: "0.3s" }}
                   />
                 </div>
@@ -305,7 +305,7 @@ export default function CoachPanel({ isOpen, onClose }: CoachPanelProps) {
         </div>
 
         {/* Input area */}
-        <div className="px-4 py-4 border-t border-white/[0.06]">
+        <div className="px-4 py-4 border-t border-black/[0.06]">
           {/* Quick suggestions */}
           <div className="flex flex-wrap gap-1.5 mb-3">
             {QUICK_SUGGESTIONS.map((suggestion) => (
@@ -315,7 +315,7 @@ export default function CoachPanel({ isOpen, onClose }: CoachPanelProps) {
                   setInput(suggestion);
                   inputRef.current?.focus();
                 }}
-                className="px-2.5 py-1 bg-white/[0.04] hover:bg-white/[0.08] rounded-full text-[11px] text-white/50 hover:text-white/70 transition-colors"
+                className="px-2.5 py-1 bg-black/[0.04] hover:bg-black/[0.08] rounded-full text-[11px] text-black/50 hover:text-black/70 transition-colors"
               >
                 {suggestion}
               </button>
@@ -331,12 +331,12 @@ export default function CoachPanel({ isOpen, onClose }: CoachPanelProps) {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Pose ta question ou demande une modif..."
-              className="flex-1 bg-white/[0.06] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-[#a855f7]/50 transition-colors"
+              className="flex-1 bg-black/[0.06] border border-black/[0.06] rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-black/25 focus:outline-none focus:border-[#af52de]/50 transition-colors"
             />
             <button
               onClick={() => sendMessage()}
               disabled={isLoading || !input.trim()}
-              className="px-4 py-3 bg-gradient-to-r from-[#a855f7] to-[#ec4899] text-white rounded-xl font-medium text-sm disabled:opacity-30 transition-opacity hover:opacity-90"
+              className="px-4 py-3 bg-gradient-to-r from-[#af52de] to-[#ff2d55] text-white rounded-xl font-medium text-sm disabled:opacity-30 transition-opacity hover:opacity-90"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 2L11 13" />

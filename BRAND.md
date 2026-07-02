@@ -3,7 +3,7 @@
 > Document de référence pour toute décision de design, copy ou identité.
 > Avant chaque PR qui touche à du visible : checker la "Ship checklist" en fin de doc.
 
-Dernière révision : juin 2026 (post audit branding).
+Dernière révision : juillet 2026 — **brand v2 "Apple Health"** (refonte complète light mode, copie conforme du langage visuel de l'app Santé iOS).
 
 ---
 
@@ -14,6 +14,8 @@ Dernière révision : juin 2026 (post audit branding).
 Pas "coach", pas "tracker", pas "app". **Instrument.** Mot qui porte la précision, la fiabilité, le fait que l'utilisateur n'agit pas sans le consulter.
 
 Public cible : un athlète qui vit avec un T1D (musculation + running + nutrition + glycémie). Veut un outil **médical-grade qui ne ralentit pas la perf**, pas une app gamifiée.
+
+**Direction visuelle v2** : l'app Santé d'Apple. Fond gris groupé, cartes blanches, couleurs système iOS, typographie SF Pro. La hiérarchie vient du blanc sur gris, pas des bordures ni des glows.
 
 ---
 
@@ -34,7 +36,7 @@ Le logo est un **signal ECG dont le pic anguleux forme un A** via la barre horiz
 - **Signature** : raconte la double identité performance (le pic) + instrument médical (le signal) en une seule forme
 - **Composant** : `<Logo size={28} withWordmark tagline="Precision Coach" />` (cf. `components/Logo.tsx`)
 - **SVG canonique** : `public/favicon.svg` — toutes les déclinaisons PNG sont générées depuis là
-- **Couleur stroke** : lime `#D4FF00`, jamais autre chose (sauf cas spécifique sur surface claire → indigo `#3D2BFF`)
+- **Couleur stroke** : System Blue `#007AFF` (hérite de `var(--accent)`), jamais autre chose
 
 **Variantes autorisées** :
 - LogoMark seul (sans wordmark) : favicon, splash, App Store icon
@@ -72,85 +74,73 @@ Le logo est un **signal ECG dont le pic anguleux forme un A** via la barre horiz
 
 ## 4. Couleurs — Règle d'or
 
+Palette = **couleurs système iOS**, exclusivement. Aucune couleur hors de cette liste.
+
 ### Accent primaire unique
 
-**Lime `#D4FF00`** est la seule couleur de marque. Elle apparaît sur :
+**System Blue `#007AFF`** est la seule couleur d'action. Elle apparaît sur :
 
 - Logo (stroke + dot)
-- **Tous les CTA primaires** de toutes les pages
+- **Tous les CTA primaires** de toutes les pages (`bg-accent` + `text-white`)
+- Liens et boutons texte (comme "Afficher toutes les données" dans Santé)
 - Focus rings (`:focus-visible`)
-- Selection (`::selection`)
-- Glow signature des hero cards (`glow-accent`)
-- Onglet actif de la bottom nav
+- Selection (`::selection` en bleu 25%)
 
 ### Hues catégorielles : strictement données
 
-Les 4 couleurs catégorielles existent :
-- `--muscu` lime (`#D4FF00`)
-- `--running` sky (`#7FC7FF`)
-- `--nutrition` amber (`#FFAE5C`)
-- `--diabete` lavender (`#B4A7FF`)
+Les 4 couleurs catégorielles existent (mapping app Santé) :
+- `--muscu` orange `#FF9500` — activité / effort (la flamme Santé)
+- `--running` rose `#FF2D55` — cardio / fréquence cardiaque
+- `--nutrition` vert `#34C759` — alimentation / eau
+- `--diabete` indigo `#5856D6` — clinique (comme Sommeil dans Santé)
 
 Elles sont **uniquement des codes de données** :
-- Badges discrets
-- Icônes d'item de liste (lucide)
+- Icônes colorées de titre de carte (signature Santé : icône + label colorés, contenu noir)
+- Badges discrets, tint backgrounds à 10%
 - Lignes / aires de chart
-- Bordures latérales fines (`border-l-2`)
-- Halos `accent-2-glow` autorisés sur cartes data lavender
+- Onglet actif de la bottom nav (chaque module dans sa hue, comme les icônes Santé)
 
 ### ❌ Interdits absolus
 
 - CTA primaire dans une hue catégorielle
-- Halo / glow hero card dans une hue catégorielle
-- Background de section coloré
-- Onglet actif coloré différemment selon la page
+- Background de section coloré saturé (les tints 10% max)
 - Gradient à plus de 2 stops
-- Gradient hors palette (le FAB chat rose/violet doit être migré vers lime ou bg-tertiary discret)
+- Néons, glows lumineux, ombres colorées (l'époque dark v1 est finie)
+- Toute couleur hors palette système iOS
 
-### Semantic states
+### Semantic states (système iOS)
 
-- `--success` `#7AE582` — re-sucrage OK, glycémie en plage
-- `--warning` `#FFAE5C` — over-bolus détecté, IOB important
-- `--error` `#FF6B6B` — hypo critique, déconnexion CGM
-- `--info` `#7FC7FF` — info neutre, hint
+- `--success` `#34C759` — re-sucrage OK, glycémie en plage
+- `--warning` `#FF9500` — over-bolus détecté, IOB important
+- `--error` `#FF3B30` — hypo critique, déconnexion CGM
+- `--info` `#007AFF` — info neutre, hint
 
 ### Glucose scale (médical, ne pas toucher)
 
-- `--glucose-low` `#FF6B6B`
-- `--glucose-normal` `#7AE582`
-- `--glucose-high` `#FFAE5C`
-- `--glucose-critical` `#FF3B3B`
+- `--glucose-low` `#FF3B30`
+- `--glucose-normal` `#34C759`
+- `--glucose-high` `#FF9500`
+- `--glucose-critical` `#FF2D55`
 
 ---
 
 ## 5. Surfaces
 
-### Mode primary (par défaut)
+### Light mode (unique)
 
-Toute l'app est sur fond noir chaud zinc. 3 niveaux de profondeur :
+Toute l'app est en clair, hiérarchie "blanc sur gris" de l'app Santé :
 
 | Token | Hex | Usage |
 |---|---|---|
-| `--bg-primary` | `#0A0A0B` | Body, fond global |
-| `--bg-secondary` | `#111113` | `surface-1` — cards principales |
-| `--bg-tertiary` | `#18181B` | `surface-2` — cards imbriquées, badges |
-| `--bg-elevated` | `#1F1F23` | `surface-3` — modal, popover, sheet |
-| `--bg-hover` | `#26262B` | États hover |
+| `--bg-primary` | `#F2F2F7` | Body, fond global (systemGroupedBackground) |
+| `--bg-secondary` | `#FFFFFF` | `surface-1` — cartes principales |
+| `--bg-tertiary` | `#F2F2F7` | `surface-2` — insets dans les cartes |
+| `--bg-elevated` | `#FFFFFF` | `surface-3` — modal, popover, sheet (+ ombre) |
+| `--bg-hover` | `#E5E5EA` | États hover / pressed |
 
-Profondeur via background, **pas via border**. Les bordures sont des séparateurs subtils (`--border-subtle` 6%, `--border-default` 10%, `--border-strong` 16%), pas des contenants.
+Profondeur via le contraste blanc/gris + ombre quasi imperceptible (`--card-shadow`), **pas via border**. Les bordures sont des séparateurs hairline iOS (`rgba(60,60,67,…)` à 10/18/29%), pas des contenants.
 
-### Mode "surface claire" (Voie A — usage parcimonieux)
-
-Pour les **contextes de lecture longue** uniquement : rapport hebdo, journal nutritionnel imprimable, historique compact d'une séance.
-
-- Background carte : `#FAFAFA` (off-white)
-- Texte primaire : `#0A0A0B`
-- Texte secondaire : `#52525B`
-- Accent dans ce contexte : **indigo `#3D2BFF`** (le lime ne passe pas sur clair → contraste 1.4:1)
-- Bordure : `rgba(0,0,0,0.06)`
-- Pas plus d'**une carte claire par écran** (évite la cassure d'identité)
-
-À ce stade, la voie A n'est **pas encore implémentée** : on l'introduira progressivement sur les futurs rapports.
+Headers et bottom nav : `.glass` translucide clair (`rgba(242,242,247,0.82)` + blur 20px), comme les barres de navigation iOS.
 
 ---
 
@@ -158,28 +148,25 @@ Pour les **contextes de lecture longue** uniquement : rapport hebdo, journal nut
 
 ### Familles
 
-- **Texte UI** : `Geist Sans` (déjà chargé via `next/font/google`)
-- **Chiffres / métriques** : `Geist Mono` avec tabular-nums activé via `.num` / `.num-hero`
-- **Pas de JetBrains Mono** (le CSS legacy `--font-mono: "JetBrains Mono"` doit pointer vers Geist Mono)
+- **Texte UI** : SF Pro via `-apple-system` — **exactement la police de l'app Santé**. Aucune webfont chargée (Geist/Inter supprimées de `layout.tsx`), fallback système natif (Segoe UI / Roboto) hors Apple
+- **Chiffres / métriques** : SF Pro **bold + tabular-nums** via `.num` / `.num-hero` (comme les gros chiffres de Santé — plus de mono)
 
 ### Échelle
 
 | Classe utilitaire | Usage |
 |---|---|
-| `.num-hero` (Geist Mono, 500, -0.04em) | Métriques hero (glycémie 113, durée séance) |
-| `.num` (Geist Mono, tabular) | Toute donnée numérique dans une card |
-| `.label` (10px uppercase tracking 0.08em) | Label cockpit au-dessus d'une métrique |
-| `text-text-primary` `#FAFAFA` | Texte de contenu principal |
-| `text-text-secondary` `#A1A1AA` | Sous-titre, explication |
-| `text-text-tertiary` `#71717A` | Caption, metadata |
+| `.num-hero` (sans, 700, tabular) | Métriques hero (glycémie 113, pas du jour) |
+| `.num` (sans, 600, tabular) | Toute donnée numérique dans une card |
+| `.label` (11px uppercase, 600) | Label de section au-dessus d'une métrique |
+| `text-text-primary` `#000000` | Texte de contenu principal |
+| `text-text-secondary` `#6D6D72` | Sous-titre, explication |
+| `text-text-tertiary` `#8E8E93` | Caption, metadata |
 
 ### Règles
 
 - Letter-spacing global : `-0.01em` (déjà sur `body`)
-- Hero numérique : `letter-spacing: -0.04em` (signature `.num-hero`)
-- Labels uppercase : tracking `+0.08em` (signature cockpit)
 - Pas de italic dans l'UI (sauf citations / quotes)
-- Font-weight 400 = body, 500 = hero/emphasis, 600 = headings, 700+ jamais
+- Font-weight 400 = body, 600 = données/headings, 700 = hero numérique (style Santé)
 
 ---
 
@@ -189,16 +176,17 @@ Pour les **contextes de lecture longue** uniquement : rapport hebdo, journal nut
 
 | Variant | Style | Usage |
 |---|---|---|
-| **Primary** | `bg-accent` + `text-accent-ink` + `rounded-2xl` | CTA principal d'un écran (1 max) |
-| **Secondary** | `bg-bg-tertiary` + `border-border-default` + `text-text-primary` | Actions secondaires |
-| **Ghost** | Background transparent + hover `bg-bg-tertiary` | Tertiaires (annuler, fermer) |
-| **Icon** | `w-9 h-9 rounded-full` + background discret | Boutons d'icône isolés |
+| **Primary** | `bg-accent` (bleu) + `text-white` + pill/`rounded-2xl` | CTA principal d'un écran (1 max) |
+| **Secondary** | `bg-bg-hover` ou `bg-black/[0.06]` + `text-text-primary` | Actions secondaires |
+| **Ghost** | Texte bleu accent, background transparent | Tertiaires (annuler, liens) |
+| **Icon** | `w-9 h-9 rounded-full` + background blanc/gris | Boutons d'icône isolés |
 
 ### Cards
 
-- Toujours via `.surface-1` / `.surface-2` / `.surface-3`
+- Toujours via `.surface-1` / `.surface-2` / `.surface-3` (ou `.card` legacy = même rendu)
 - Radius : `--radius-lg` (16px) par défaut, `rounded-3xl` (24px) pour les hero cards
 - Padding standard : `p-5` mobile, `p-6` desktop
+- Pattern signature Santé : icône + titre colorés par catégorie, contenu en noir
 
 ### Tap feedback
 
@@ -209,40 +197,39 @@ Toujours `.tap-scale` sur les boutons mobiles (transform scale 0.97 sur active).
 ## 8. Iconographie
 
 - **Bibliothèque** : `lucide-react` uniquement
+- **Navigation (bottom nav + sidebar)** : icônes **remplies** (`fill="currentColor"`) façon SF Symbols / onglets Santé — Heart (Overview, comme l'onglet Résumé), Flame (Muscu, comme Activité), Footprints (Running, reste en outline), Apple (Nutrition), Droplet (T1D)
 - **Taille** : 14, 16, 20, 24 selon contexte (jamais d'arbitraire)
 - **Stroke** : 1.5 ou 2 (par défaut 2)
-- **Pas d'emoji dans l'UI** (un assessment de hypo peut tolérer ✅⚠️🔻 mais c'est une dérogation à éliminer dans les futures itérations)
+- **Pas d'emoji dans l'UI** (dérogations existantes à éliminer progressivement)
 
 ---
 
 ## 9. Composants tabou
 
-- ❌ FAB rose/violet hors palette (le bouton chat actuel doit passer en lime ou bg-tertiary)
+- ❌ Tout retour au dark mode ou aux néons v1 (lime `#D4FF00`, glows lumineux)
 - ❌ Gradient > 2 stops
-- ❌ Border > 1px (sauf focus ring 2px lime)
-- ❌ Shadow colorée hors `glow-accent` / `glow-accent-2`
+- ❌ Border > 1px (sauf focus ring 2px bleu)
+- ❌ Shadow colorée
 - ❌ Logos template Next.js (`next.svg`, `vercel.svg`, `file.svg`, `globe.svg`, `window.svg`)
-- ❌ Classes legacy (`.card`, `.neon-*`, `.glow-green/blue/purple/orange`)
-- ❌ Tokens legacy (`--accent-green/blue/purple/orange`, `--bg-card`, `--text-muted`)
+- ❌ Couleurs hors palette système iOS
 
 ---
 
 ## 10. Ship checklist (avant chaque deploy prod)
 
-- [ ] Aucune classe `.card` / `.neon-*` / `.glow-green|blue|purple|orange` ajoutée
-- [ ] Aucun `--accent-green|blue|purple|orange` ni `--bg-card` / `--text-muted` legacy
+- [ ] Aucune couleur hors palette système iOS (pas de lime, pas de néon)
+- [ ] Aucun `text-white` / `bg-white/[…]` hérité du dark mode sur fond clair
 - [ ] Aucun emoji nouveau dans l'UI
-- [ ] Bouton primaire = lime, pas une hue catégorielle
+- [ ] Bouton primaire = bleu `#007AFF`, pas une hue catégorielle
 - [ ] Header `<Logo />` rendu sur toutes les pages
 - [ ] Indicateur Next.js dev caché en prod
-- [ ] Pas de FAB rose/violet, ou explicitement migré vers la palette
 - [ ] `npm run build` clean (zero warning lié à mon code)
 
 ---
 
 ## 11. Évolutions prévues (roadmap brand)
 
-- **Q3 2026** : introduire mode "surface claire" (Voie A) pour le rapport hebdo
+- **Q3 2026** : dark mode système (palette iOS dark : `#000000` + `#1C1C1E`), suivant `prefers-color-scheme`
 - **Q4 2026** : audit accessibilité WCAG 2.1 AA complet
 - **2027** : décliner LogoMark animé (le dot pulse) pour splash screen et notifications
 

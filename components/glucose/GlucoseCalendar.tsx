@@ -21,11 +21,11 @@ const DAYS_PER_WEEK = 7;
 const ROWS = 5; // 35 cases > 30 jours, on affiche les 30 derniers seulement
 
 function scoreColor(score: number | null): string {
-  if (score === null) return "rgba(255,255,255,0.04)"; // jour vide / data insuffisante
-  if (score >= 80) return "#7AE582";  // vert success
-  if (score >= 60) return "#D4FF4F";  // lime
-  if (score >= 40) return "#FFAE5C";  // orange warning
-  return "#FF6B6B";                    // rouge error
+  if (score === null) return "rgba(0,0,0,0.04)"; // jour vide / data insuffisante
+  if (score >= 80) return "#34c759";  // vert success
+  if (score >= 60) return "#007aff";  // lime
+  if (score >= 40) return "#ff9500";  // orange warning
+  return "#ff3b30";                    // rouge error
 }
 
 function scoreToneLabel(score: number | null): string {
@@ -142,7 +142,7 @@ export default function GlucoseCalendar({ points, days = 30 }: GlucoseCalendarPr
                   } ${sc?.score !== null && sc?.score !== undefined ? "cursor-pointer hover:opacity-80" : "cursor-default"}`}
                   style={{
                     background: color,
-                    color: sc?.score && sc.score >= 60 ? "#000" : "rgba(255,255,255,0.6)",
+                    color: sc?.score && sc.score >= 60 ? "#000" : "rgba(0,0,0,0.6)",
                   }}
                   title={sc?.score !== null ? `${cell.date} · score ${sc?.score}` : `${cell.date} · pas de data`}
                 >
@@ -161,19 +161,19 @@ export default function GlucoseCalendar({ points, days = 30 }: GlucoseCalendarPr
           {/* Légende */}
           <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-text-tertiary">
             <span className="flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "#7AE582" }} />
+              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "#34c759" }} />
               ≥80 excellent
             </span>
             <span className="flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "#D4FF4F" }} />
+              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "#007aff" }} />
               60-80 bon
             </span>
             <span className="flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "#FFAE5C" }} />
+              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "#ff9500" }} />
               40-60 moyen
             </span>
             <span className="flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "#FF6B6B" }} />
+              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "#ff3b30" }} />
               &lt;40 à améliorer
             </span>
           </div>

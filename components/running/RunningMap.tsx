@@ -31,7 +31,7 @@ interface RunningMapProps {
   mode: "live" | "replay";
   /** Hauteur CSS de la carte (default "100%"). */
   height?: string;
-  /** Couleur de la trace (default sky #7FC7FF = running color). */
+  /** Couleur de la trace (default sky #32ade6 = running color). */
   strokeColor?: string;
   /** Phase C — si fourni + assez de checkpoints, segmente la polyline en
    *  couleurs selon la glycémie (vert / orange / rouge). */
@@ -44,17 +44,17 @@ interface RunningMapProps {
 
 /** Tone glycémie → couleur de trace. */
 function glucoseToColor(value: number | null): string {
-  if (value === null) return "#7FC7FF"; // sky default
-  if (value < 70 || value > 250) return "#FF6B6B"; // hypo / hyper → rouge
-  if (value < 80 || value > 180) return "#FFAE5C"; // low / high → orange
-  return "#7AE582"; // target → vert
+  if (value === null) return "#32ade6"; // sky default
+  if (value < 70 || value > 250) return "#ff3b30"; // hypo / hyper → rouge
+  if (value < 80 || value > 180) return "#ff9500"; // low / high → orange
+  return "#34c759"; // target → vert
 }
 
 export default function RunningMap({
   points,
   mode,
   height = "100%",
-  strokeColor = "#7FC7FF",
+  strokeColor = "#32ade6",
   glucoseCheckpoints,
   scrubIndex,
 }: RunningMapProps) {
@@ -151,13 +151,13 @@ export default function RunningMap({
         zoom={16}
         scrollWheelZoom
         zoomControl={false}
-        style={{ height: "100%", width: "100%", background: "#0A0A0B" }}
+        style={{ height: "100%", width: "100%", background: "#ffffff" }}
         attributionControl={false}
       >
-        {/* Tile layer — OpenStreetMap dark friendly. Tu peux changer pour
+        {/* Tile layer — CARTO Positron (clair, style Plans iOS).
             CartoDB Dark Matter ou Stamen pour un look plus tech si tu veux. */}
         <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
           attribution='&copy; OSM &copy; CARTO'
           maxZoom={19}
         />
@@ -211,14 +211,14 @@ export default function RunningMap({
           <CircleMarker
             center={firstPoint}
             radius={6}
-            pathOptions={{ color: "#FFFFFF", fillColor: "#7AE582", fillOpacity: 1, weight: 2 }}
+            pathOptions={{ color: "#FFFFFF", fillColor: "#34c759", fillOpacity: 1, weight: 2 }}
           />
         )}
         {mode === "replay" && lastPoint && positions.length > 1 && (
           <CircleMarker
             center={lastPoint}
             radius={6}
-            pathOptions={{ color: "#FFFFFF", fillColor: "#FF6B6B", fillOpacity: 1, weight: 2 }}
+            pathOptions={{ color: "#FFFFFF", fillColor: "#ff3b30", fillOpacity: 1, weight: 2 }}
           />
         )}
 
@@ -228,12 +228,12 @@ export default function RunningMap({
             <CircleMarker
               center={[scrubPoint.lat, scrubPoint.lon]}
               radius={14}
-              pathOptions={{ color: "#B4A7FF", fillColor: "#B4A7FF", fillOpacity: 0.25, weight: 0 }}
+              pathOptions={{ color: "#5856d6", fillColor: "#5856d6", fillOpacity: 0.25, weight: 0 }}
             />
             <CircleMarker
               center={[scrubPoint.lat, scrubPoint.lon]}
               radius={7}
-              pathOptions={{ color: "#FFFFFF", fillColor: "#B4A7FF", fillOpacity: 1, weight: 2.5 }}
+              pathOptions={{ color: "#FFFFFF", fillColor: "#5856d6", fillOpacity: 1, weight: 2.5 }}
             />
           </>
         )}

@@ -23,8 +23,8 @@ export default function ModifyDaysModal({ currentDays, onConfirm, onClose, regen
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 sm:flex sm:items-center sm:justify-center sm:p-4" onClick={onClose}>
-      <div className="absolute inset-x-0 bottom-0 sm:relative sm:inset-auto bg-[#0f0f18] border border-white/10 rounded-t-2xl sm:rounded-2xl p-6 max-w-sm w-full max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-lg font-bold text-white mb-4">Modifier le nombre de séances</h2>
+      <div className="absolute inset-x-0 bottom-0 sm:relative sm:inset-auto bg-[#ffffff] border border-black/10 rounded-t-2xl sm:rounded-2xl p-6 max-w-sm w-full max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-bold text-text-primary mb-4">Modifier le nombre de séances</h2>
 
         <div className="space-y-2 mb-5">
           {DAY_OPTIONS.map(({ value, label, note }) => (
@@ -33,15 +33,15 @@ export default function ModifyDaysModal({ currentDays, onConfirm, onClose, regen
               onClick={() => setSelectedDays(value)}
               className={`w-full p-3.5 rounded-xl border-2 transition-all flex items-center justify-between ${
                 selectedDays === value
-                  ? "border-[#00ff94]/50 bg-[#00ff94]/5"
-                  : "border-white/[0.08] hover:border-white/20 bg-white/[0.02]"
+                  ? "border-[#34c759]/50 bg-[#34c759]/5"
+                  : "border-black/[0.08] hover:border-black/20 bg-black/[0.02]"
               }`}
             >
               <div className="text-left">
-                <p className="text-sm font-medium text-white">{label}</p>
-                <p className="text-[10px] text-white/30">{note}</p>
+                <p className="text-sm font-medium text-text-primary">{label}</p>
+                <p className="text-[10px] text-black/30">{note}</p>
               </div>
-              {selectedDays === value && <span className="text-[#00ff94] text-lg">✓</span>}
+              {selectedDays === value && <span className="text-[#34c759] text-lg">✓</span>}
             </button>
           ))}
         </div>

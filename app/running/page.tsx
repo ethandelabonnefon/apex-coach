@@ -1031,7 +1031,7 @@ export default function RunningPage() {
                       ? "var(--success)"
                       : isCurrent
                       ? phaseColor(w.phase)
-                      : "rgba(255,255,255,0.06)",
+                      : "rgba(0,0,0,0.06)",
                     borderRight: "1px solid var(--bg-primary)",
                     touchAction: "manipulation",
                   }}
@@ -1102,7 +1102,7 @@ export default function RunningPage() {
                         className="w-1 rounded-sm"
                         style={{
                           height: "100%",
-                          background: i < weekDone ? "var(--success)" : "rgba(255,255,255,0.12)",
+                          background: i < weekDone ? "var(--success)" : "rgba(0,0,0,0.12)",
                         }}
                       />
                     ))}

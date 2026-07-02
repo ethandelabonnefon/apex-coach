@@ -125,11 +125,13 @@ apex-coach/
     └── icons/                    # Icônes app (régénérées via sharp depuis favicon.svg)
 ```
 
-## Design System (Phase 2 — "Precision Instrument", avril 2026 · brand v1 juin 2026)
+## Design System
+
+> ⚠️ **Brand v2 "Apple Health" (juillet 2026)** : l'app est passée en light mode, copie conforme du langage visuel de l'app Santé iOS — fond `#F2F2F7`, cartes blanches, couleurs système iOS (bleu `#007AFF` accent, orange `#FF9500` muscu, rose `#FF2D55` running, vert `#34C759` nutrition, indigo `#5856D6` diabète), SF Pro via `-apple-system`, `.num`/`.num-hero` en sans bold tabular (plus de mono). Les tokens de `globals.css` gardent les mêmes noms mais de nouvelles valeurs ; tous les hex legacy dark ont été convertis dans le code. **Source de vérité = `BRAND.md`. La section ci-dessous décrit l'ancien système dark v1/v2, conservée uniquement pour l'historique des noms de tokens/composants.**
+
+### (Historique) Phase 2 — "Precision Instrument", avril 2026 · brand v1 juin 2026
 
 Refonte créative après analyse de Linear, Raycast, Arc, Strava, MacroFactor. Identité **Precise. Athletic. Clinical.** — instrument de performance médicale, pas un tracker amateur.
-
-> ⚠️ **Source de vérité identité = `BRAND.md` à la racine** (depuis brand v1, juin 2026). En cas de désaccord entre cette section et BRAND.md, **BRAND.md gagne**. Règle d'or : lime = seul accent primaire ; les 4 hues catégorielles sont strictement des codes de données.
 
 ### Direction créative
 - **Signature typographique** : Geist Mono tabular-nums pour TOUS les chiffres (`.num` / `.num-hero`). Les métriques sont les héros. (JetBrains Mono abandonné en brand v1 — jamais chargé, fallback SF Mono.)

@@ -37,18 +37,18 @@ interface WhoopCardProps {
 }
 
 function recoveryColor(score: number | null): { color: string; bg: string; label: string } {
-  if (score === null) return { color: "var(--text-tertiary)", bg: "rgba(255,255,255,0.04)", label: "—" };
-  if (score >= 67) return { color: "#7AE582", bg: "rgba(122,229,130,0.15)", label: "Vert" };
-  if (score >= 34) return { color: "#FFAE5C", bg: "rgba(255,174,92,0.15)", label: "Jaune" };
-  return { color: "#FF6B6B", bg: "rgba(255,107,107,0.15)", label: "Rouge" };
+  if (score === null) return { color: "var(--text-tertiary)", bg: "rgba(0,0,0,0.04)", label: "—" };
+  if (score >= 67) return { color: "#34c759", bg: "rgba(122,229,130,0.15)", label: "Vert" };
+  if (score >= 34) return { color: "#ff9500", bg: "rgba(255,174,92,0.15)", label: "Jaune" };
+  return { color: "#ff3b30", bg: "rgba(255,107,107,0.15)", label: "Rouge" };
 }
 
 function strainColor(strain: number | null): { color: string; bg: string; label: string } {
-  if (strain === null) return { color: "var(--text-tertiary)", bg: "rgba(255,255,255,0.04)", label: "—" };
-  if (strain >= 18) return { color: "#FF6B6B", bg: "rgba(255,107,107,0.15)", label: "Très dur" };
-  if (strain >= 14) return { color: "#FFAE5C", bg: "rgba(255,174,92,0.15)", label: "Dur" };
-  if (strain >= 10) return { color: "#7AE582", bg: "rgba(122,229,130,0.15)", label: "Modéré" };
-  return { color: "#7FC7FF", bg: "rgba(127,199,255,0.15)", label: "Léger" };
+  if (strain === null) return { color: "var(--text-tertiary)", bg: "rgba(0,0,0,0.04)", label: "—" };
+  if (strain >= 18) return { color: "#ff3b30", bg: "rgba(255,107,107,0.15)", label: "Très dur" };
+  if (strain >= 14) return { color: "#ff9500", bg: "rgba(255,174,92,0.15)", label: "Dur" };
+  if (strain >= 10) return { color: "#34c759", bg: "rgba(122,229,130,0.15)", label: "Modéré" };
+  return { color: "#32ade6", bg: "rgba(127,199,255,0.15)", label: "Léger" };
 }
 
 function formatSleepDuration(min: number | null): string {
@@ -248,7 +248,7 @@ function CompactCard({ snapshot, loading }: { snapshot: WhoopSnapshot; loading: 
           icon={<Moon className="w-3.5 h-3.5" />}
           label="Sommeil"
           value={formatSleepDuration(snapshot.sleepDurationMin)}
-          color="#B4A7FF"
+          color="#5856d6"
           bg="rgba(180,167,255,0.15)"
         />
       </div>
@@ -486,7 +486,7 @@ function Gauge({
           {unit ? unit : `/${max}`}
         </span>
       </div>
-      <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+      <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(0,0,0,0.08)" }}>
         <div
           className="h-full rounded-full transition-all"
           style={{ width: `${pct}%`, background: color }}

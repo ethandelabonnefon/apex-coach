@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { Navigation } from "@/components/navigation";
 import CoachProvider from "@/components/coach/CoachProvider";
@@ -7,23 +6,19 @@ import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { InstallBanner } from "@/components/InstallBanner";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
 
-const inter = Inter({ variable: "--font-inter", subsets: ["latin"], display: "swap" });
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
-
 export const metadata: Metadata = {
   title: "APEX Coach — Fitness, Nutrition & T1D",
   description: "Coach personnel intelligent : musculation, running, nutrition et gestion du diabète T1",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "default",
     title: "APEX Coach",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0A0A0B",
+  themeColor: "#F2F2F7",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -33,13 +28,13 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fr" className={`${inter.variable} ${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="fr" className="h-full antialiased">
       <head>
         <link rel="icon" href="/favicon.ico" sizes="48x48" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="APEX Coach" />
       </head>
       <body className="min-h-full bg-bg-primary text-text-primary">

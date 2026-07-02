@@ -108,20 +108,20 @@ export default function AGPChart({ points, days = 14 }: AGPChartProps) {
           <div style={{ width: "100%", height: 260 }}>
             <ResponsiveContainer>
               <ComposedChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
+                <CartesianGrid stroke="rgba(0,0,0,0.04)" vertical={false} />
                 <XAxis
                   dataKey="label"
                   type="category"
                   ticks={["00:00", "04:00", "08:00", "12:00", "16:00", "20:00"]}
                   interval={0}
-                  tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 10 }}
+                  tick={{ fill: "rgba(0,0,0,0.4)", fontSize: 10 }}
                   axisLine={false}
                   tickLine={false}
                 />
                 <YAxis
                   domain={[40, yMax]}
                   ticks={[70, 140, 180, 250]}
-                  tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 10 }}
+                  tick={{ fill: "rgba(0,0,0,0.4)", fontSize: 10 }}
                   axisLine={false}
                   tickLine={false}
                   width={40}
@@ -131,20 +131,20 @@ export default function AGPChart({ points, days = 14 }: AGPChartProps) {
                 <ReferenceArea
                   y1={70}
                   y2={180}
-                  fill="#7AE582"
+                  fill="#34c759"
                   fillOpacity={0.06}
                   stroke="none"
                 />
                 {/* Seuils 70 et 180 en pointillés */}
                 <ReferenceLine
                   y={70}
-                  stroke="#FF6B6B"
+                  stroke="#ff3b30"
                   strokeDasharray="3 3"
                   strokeWidth={1}
                 />
                 <ReferenceLine
                   y={180}
-                  stroke="#FFAE5C"
+                  stroke="#ff9500"
                   strokeDasharray="3 3"
                   strokeWidth={1}
                 />
@@ -171,7 +171,7 @@ export default function AGPChart({ points, days = 14 }: AGPChartProps) {
                 <Line
                   type="monotone"
                   dataKey="median"
-                  stroke="#D4FF4F"
+                  stroke="#007aff"
                   strokeWidth={2}
                   dot={false}
                   isAnimationActive={false}
@@ -179,7 +179,7 @@ export default function AGPChart({ points, days = 14 }: AGPChartProps) {
                 />
 
                 <Tooltip
-                  cursor={{ stroke: "rgba(255,255,255,0.2)" }}
+                  cursor={{ stroke: "rgba(0,0,0,0.2)" }}
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null;
                     const row = payload[0]?.payload as ChartRow | undefined;

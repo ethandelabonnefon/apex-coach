@@ -59,8 +59,8 @@ export default function BodyAnalysisSection() {
     return (
       <Card>
         <div className="flex items-center gap-3 py-8 justify-center">
-          <div className="w-5 h-5 border-2 border-[#00ff94] border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-white/50">Analyse du corps en cours...</p>
+          <div className="w-5 h-5 border-2 border-[#34c759] border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-black/50">Analyse du corps en cours...</p>
         </div>
       </Card>
     );
@@ -73,7 +73,7 @@ export default function BodyAnalysisSection() {
   return (
     <div className="space-y-6">
       <SectionTitle>Analyse de ton corps</SectionTitle>
-      <p className="text-xs text-white/40 -mt-4">
+      <p className="text-xs text-black/40 -mt-4">
         Clique sur un muscle pour voir les détails et recommandations
       </p>
 
@@ -103,21 +103,21 @@ export default function BodyAnalysisSection() {
               <button
                 key={muscle.id}
                 onClick={() => setSelectedMuscle(muscle)}
-                className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] transition-colors text-left"
+                className="w-full flex items-center gap-3 p-3 rounded-xl bg-black/[0.02] hover:bg-black/[0.05] transition-colors text-left"
               >
-                <span className="text-[#00ff94] font-bold text-sm w-5">{i + 1}.</span>
+                <span className="text-[#34c759] font-bold text-sm w-5">{i + 1}.</span>
                 <span
                   className="w-2.5 h-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: muscle.status === "weak" ? "#ef4444" : "#f97316" }}
+                  style={{ backgroundColor: muscle.status === "weak" ? "#ff3b30" : "#ff9500" }}
                 />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-white/80">{muscle.name}</p>
-                  <p className="text-[10px] text-white/30">
+                  <p className="text-sm font-medium text-black/80">{muscle.name}</p>
+                  <p className="text-[10px] text-black/30">
                     {muscle.recommendedVolume ? `${muscle.recommendedVolume} séries/sem recommandées` : ""}
                     {muscle.priorityExercises?.[0] ? ` · ${muscle.priorityExercises[0]}` : ""}
                   </p>
                 </div>
-                <svg className="w-4 h-4 text-white/20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                <svg className="w-4 h-4 text-black/20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </button>
             ))}
           </div>
@@ -128,15 +128,15 @@ export default function BodyAnalysisSection() {
       <div className="grid grid-cols-3 gap-3">
         <div className="p-3 rounded-xl bg-red-500/5 border border-red-500/10 text-center">
           <p className="text-xl font-bold text-red-400">{weakMuscles.length}</p>
-          <p className="text-[10px] text-white/30 mt-0.5">Points faibles</p>
+          <p className="text-[10px] text-black/30 mt-0.5">Points faibles</p>
         </div>
         <div className="p-3 rounded-xl bg-orange-500/5 border border-orange-500/10 text-center">
           <p className="text-xl font-bold text-orange-400">{improveMuscles.length}</p>
-          <p className="text-[10px] text-white/30 mt-0.5">À améliorer</p>
+          <p className="text-[10px] text-black/30 mt-0.5">À améliorer</p>
         </div>
         <div className="p-3 rounded-xl bg-green-500/5 border border-green-500/10 text-center">
           <p className="text-xl font-bold text-green-400">{strongMuscles.length}</p>
-          <p className="text-[10px] text-white/30 mt-0.5">Points forts</p>
+          <p className="text-[10px] text-black/30 mt-0.5">Points forts</p>
         </div>
       </div>
 

@@ -68,7 +68,7 @@ export default function SportGlucoseCorrelation({
     [summary],
   );
 
-  const accentColor = tab === "muscu" ? "#D4FF4F" : "#7FC7FF";
+  const accentColor = tab === "muscu" ? "#007aff" : "#32ade6";
   const Icon = tab === "muscu" ? Dumbbell : Footprints;
   const sportLabel = tab === "muscu" ? "muscu" : "running";
 
@@ -206,10 +206,10 @@ export default function SportGlucoseCorrelation({
                 data={chartData}
                 margin={{ top: 10, right: 10, left: -16, bottom: 0 }}
               >
-                <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+                <CartesianGrid stroke="rgba(0,0,0,0.05)" vertical={false} />
                 <XAxis
                   dataKey="label"
-                  stroke="#71717A"
+                  stroke="#8e8e93"
                   tick={{ fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
@@ -217,14 +217,14 @@ export default function SportGlucoseCorrelation({
                 <YAxis
                   domain={[60, 260]}
                   ticks={[70, 110, 180, 250]}
-                  tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 10 }}
+                  tick={{ fill: "rgba(0,0,0,0.4)", fontSize: 10 }}
                   axisLine={false}
                   tickLine={false}
                   width={32}
                 />
-                <ReferenceArea y1={70} y2={180} fill="#7AE582" fillOpacity={0.05} />
-                <ReferenceLine y={70} stroke="#FF6B6B" strokeDasharray="3 3" />
-                <ReferenceLine y={180} stroke="#FFAE5C" strokeDasharray="3 3" />
+                <ReferenceArea y1={70} y2={180} fill="#34c759" fillOpacity={0.05} />
+                <ReferenceLine y={70} stroke="#ff3b30" strokeDasharray="3 3" />
+                <ReferenceLine y={180} stroke="#ff9500" strokeDasharray="3 3" />
                 <ReferenceLine x="T+0" stroke={accentColor} strokeDasharray="2 2" strokeOpacity={0.4} />
                 <Line
                   type="monotone"
@@ -236,7 +236,7 @@ export default function SportGlucoseCorrelation({
                   connectNulls
                 />
                 <Tooltip
-                  cursor={{ stroke: "rgba(255,255,255,0.2)" }}
+                  cursor={{ stroke: "rgba(0,0,0,0.2)" }}
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null;
                     const row = payload[0]?.payload as { label: string; avg: number | null; count: number };

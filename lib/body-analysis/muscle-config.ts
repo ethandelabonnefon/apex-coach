@@ -22,9 +22,9 @@ export interface MuscleData {
 export const STATUS_COLORS: Record<MuscleStatus, string> = {
   strong: "#22c55e",
   normal: "#eab308",
-  improve: "#f97316",
-  weak: "#ef4444",
-  unknown: "#3f3f46",
+  improve: "#ff9500",
+  weak: "#ff3b30",
+  unknown: "#c7c7cc",
 };
 
 export const STATUS_LABELS: Record<MuscleStatus, string> = {
@@ -40,7 +40,7 @@ export const STATUS_BG: Record<MuscleStatus, string> = {
   normal: "bg-yellow-500/15 border-yellow-500/30 text-yellow-400",
   improve: "bg-orange-500/15 border-orange-500/30 text-orange-400",
   weak: "bg-red-500/15 border-red-500/30 text-red-400",
-  unknown: "bg-white/5 border-white/10 text-white/40",
+  unknown: "bg-black/5 border-black/10 text-black/40",
 };
 
 export const MUSCLE_NAMES: Record<string, string> = {

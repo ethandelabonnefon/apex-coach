@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Gauge,
-  Dumbbell,
+  Heart,
+  Flame,
   Footprints,
   Apple,
   Droplet,
@@ -18,14 +18,16 @@ type NavItem = {
   label: string;
   Icon: LucideIcon;
   tone: string;
+  /* Icônes remplies façon SF Symbols (app Santé) — false pour celles qui rendent mal en fill */
+  filled?: boolean;
 };
 
 const NAV: NavItem[] = [
-  { href: "/", label: "Overview", Icon: Gauge, tone: "var(--accent)" },
-  { href: "/muscu", label: "Muscu", Icon: Dumbbell, tone: "var(--muscu)" },
+  { href: "/", label: "Overview", Icon: Heart, tone: "var(--accent)", filled: true },
+  { href: "/muscu", label: "Muscu", Icon: Flame, tone: "var(--muscu)", filled: true },
   { href: "/running", label: "Running", Icon: Footprints, tone: "var(--running)" },
-  { href: "/nutrition", label: "Nutrition", Icon: Apple, tone: "var(--nutrition)" },
-  { href: "/diabete", label: "T1D", Icon: Droplet, tone: "var(--diabete)" },
+  { href: "/nutrition", label: "Nutrition", Icon: Apple, tone: "var(--nutrition)", filled: true },
+  { href: "/diabete", label: "T1D", Icon: Droplet, tone: "var(--diabete)", filled: true },
 ];
 
 const SIDEBAR_NAV: NavItem[] = [
@@ -70,6 +72,7 @@ function SidebarLink({ item }: { item: NavItem }) {
       <Icon
         size={18}
         strokeWidth={active ? 2.25 : 1.75}
+        fill={item.filled ? "currentColor" : "none"}
         className="transition-transform group-hover:scale-110"
       />
       <span className={active ? "font-medium" : ""}>{item.label}</span>
@@ -87,7 +90,7 @@ function BottomNavLink({ item }: { item: NavItem }) {
       style={{ color: active ? item.tone : "var(--text-tertiary)" }}
     >
       {active && <ActiveDot color={item.tone} />}
-      <Icon size={22} strokeWidth={active ? 2.25 : 1.75} />
+      <Icon size={22} strokeWidth={active ? 2.25 : 1.75} fill={item.filled ? "currentColor" : "none"} />
       <span
         className="text-[10px] leading-none tracking-wide"
         style={{ fontWeight: active ? 600 : 500 }}

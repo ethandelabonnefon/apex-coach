@@ -27,10 +27,10 @@ const ZONE_CONFIG = [
     key: "z2",
     label: "Z2",
     title: "Endurance fondamentale",
-    color: "border-[#00d4ff]/30 bg-[#00d4ff]/5",
-    textColor: "text-[#00d4ff]",
-    accentBg: "bg-[#00d4ff]",
-    dotColor: "bg-[#00d4ff]",
+    color: "border-[#32ade6]/30 bg-[#32ade6]/5",
+    textColor: "text-[#32ade6]",
+    accentBg: "bg-[#32ade6]",
+    dotColor: "bg-[#32ade6]",
     badgeColor: "blue" as const,
   },
   {
@@ -106,25 +106,25 @@ export default function ZonesPage() {
       <Card glow="blue" className="mb-8">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
-            <p className="text-xs text-white/40 uppercase tracking-wider mb-1">
+            <p className="text-xs text-black/40 uppercase tracking-wider mb-1">
               Vitesse Maximale Aerobie (VMA)
             </p>
-            <p className="text-4xl font-bold text-[#00d4ff]">
-              {vma.toFixed(1)} <span className="text-lg text-white/40 font-normal">km/h</span>
+            <p className="text-4xl font-bold text-[#32ade6]">
+              {vma.toFixed(1)} <span className="text-lg text-black/40 font-normal">km/h</span>
             </p>
-            <p className="text-sm text-white/40 mt-1">
+            <p className="text-sm text-black/40 mt-1">
               VO2max: {VO2MAX.toFixed(0)} ml/kg/min | Formule: VMA = VO2max / 3.5
             </p>
           </div>
           <div className="flex gap-3">
             <div className="text-center">
-              <p className="text-xs text-white/40 mb-1">Allure VMA</p>
-              <p className="text-lg font-bold text-white">
-                {formatPace(60 / vma)} <span className="text-xs text-white/40">/km</span>
+              <p className="text-xs text-black/40 mb-1">Allure VMA</p>
+              <p className="text-lg font-bold text-text-primary">
+                {formatPace(60 / vma)} <span className="text-xs text-black/40">/km</span>
               </p>
             </div>
             <div className="text-center">
-              <p className="text-xs text-white/40 mb-1">Phase actuelle</p>
+              <p className="text-xs text-black/40 mb-1">Phase actuelle</p>
               <Badge color="blue">{getPhase(currentRunningWeek)} (S{currentRunningWeek})</Badge>
             </div>
           </div>
@@ -142,11 +142,11 @@ export default function ZonesPage() {
                 {/* Zone header */}
                 <div className="flex items-center gap-3 md:min-w-[200px]">
                   <div className={`w-12 h-12 rounded-xl ${cfg.accentBg} flex items-center justify-center`}>
-                    <span className="text-black font-black text-lg">{cfg.label}</span>
+                    <span className="text-white font-black text-lg">{cfg.label}</span>
                   </div>
                   <div>
                     <h3 className={`font-bold ${cfg.textColor}`}>{zone.name}</h3>
-                    <p className="text-xs text-white/40">
+                    <p className="text-xs text-black/40">
                       {zone.percentVMA.min}-{zone.percentVMA.max}% VMA
                     </p>
                   </div>
@@ -155,39 +155,39 @@ export default function ZonesPage() {
                 {/* Speed & Pace */}
                 <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
-                    <p className="text-xs text-white/40 mb-0.5">Vitesse</p>
-                    <p className="text-sm font-semibold text-white">
+                    <p className="text-xs text-black/40 mb-0.5">Vitesse</p>
+                    <p className="text-sm font-semibold text-text-primary">
                       {zone.speedKmh.min.toFixed(1)} - {zone.speedKmh.max.toFixed(1)}
-                      <span className="text-white/40 text-xs ml-1">km/h</span>
+                      <span className="text-black/40 text-xs ml-1">km/h</span>
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-white/40 mb-0.5">Allure</p>
-                    <p className="text-sm font-semibold text-white">
+                    <p className="text-xs text-black/40 mb-0.5">Allure</p>
+                    <p className="text-sm font-semibold text-text-primary">
                       {formatPace(zone.paceMinKm.min)} - {formatPace(zone.paceMinKm.max)}
-                      <span className="text-white/40 text-xs ml-1">/km</span>
+                      <span className="text-black/40 text-xs ml-1">/km</span>
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-white/40 mb-0.5">FC</p>
-                    <p className="text-sm font-semibold text-white">
+                    <p className="text-xs text-black/40 mb-0.5">FC</p>
+                    <p className="text-sm font-semibold text-text-primary">
                       {zone.hrPercent.min} - {zone.hrPercent.max}
-                      <span className="text-white/40 text-xs ml-1">% FCmax</span>
+                      <span className="text-black/40 text-xs ml-1">% FCmax</span>
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-white/40 mb-0.5">Sensation</p>
-                    <p className="text-xs text-white/60">{zone.feeling}</p>
+                    <p className="text-xs text-black/40 mb-0.5">Sensation</p>
+                    <p className="text-xs text-black/60">{zone.feeling}</p>
                   </div>
                 </div>
               </div>
 
               {/* Purpose */}
-              <div className="mt-3 pt-3 border-t border-white/[0.06]">
+              <div className="mt-3 pt-3 border-t border-black/[0.06]">
                 <div className="flex items-start gap-2">
                   <div className={`w-1.5 h-1.5 rounded-full ${cfg.dotColor} mt-1.5 shrink-0`} />
-                  <p className="text-sm text-white/50">
-                    <span className="text-white/70 font-medium">Objectif :</span> {zone.purpose}
+                  <p className="text-sm text-black/50">
+                    <span className="text-black/70 font-medium">Objectif :</span> {zone.purpose}
                   </p>
                 </div>
               </div>
@@ -232,9 +232,9 @@ export default function ZonesPage() {
           <Card key={p.phase}>
             <div className="flex items-center gap-2 mb-2">
               <Badge color={p.color}>{p.phase}</Badge>
-              <span className="text-xs text-white/40">{p.weeks}</span>
+              <span className="text-xs text-black/40">{p.weeks}</span>
             </div>
-            <p className="text-sm text-white/60 mb-3">{p.description}</p>
+            <p className="text-sm text-black/60 mb-3">{p.description}</p>
             <div className="flex flex-wrap gap-1">
               {p.zones.map((z) => {
                 const idx = parseInt(z.slice(1)) - 1;
@@ -257,31 +257,31 @@ export default function ZonesPage() {
           const pred = predictRaceTime(VO2MAX, race.dist);
           return (
             <Card key={race.label} glow="blue">
-              <p className="text-xs text-white/40 uppercase tracking-wider mb-1">{race.label}</p>
-              <p className="text-2xl font-bold text-[#00d4ff] mb-2">
+              <p className="text-xs text-black/40 uppercase tracking-wider mb-1">{race.label}</p>
+              <p className="text-2xl font-bold text-[#32ade6] mb-2">
                 {formatTime(pred.predictedTimeMinutes)}
               </p>
               <div className="space-y-1.5">
                 <div className="flex justify-between">
-                  <span className="text-xs text-white/40">Allure</span>
-                  <span className="text-xs text-white/70 font-medium">
+                  <span className="text-xs text-black/40">Allure</span>
+                  <span className="text-xs text-black/70 font-medium">
                     {formatPace(pred.predictedPace)} /km
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-xs text-white/40">Vitesse</span>
-                  <span className="text-xs text-white/70 font-medium">
+                  <span className="text-xs text-black/40">Vitesse</span>
+                  <span className="text-xs text-black/70 font-medium">
                     {pred.predictedSpeed.toFixed(1)} km/h
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-xs text-white/40">% VMA</span>
-                  <span className="text-xs text-white/70 font-medium">
+                  <span className="text-xs text-black/40">% VMA</span>
+                  <span className="text-xs text-black/70 font-medium">
                     {((pred.predictedSpeed / vma) * 100).toFixed(0)}%
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-xs text-white/40">Precision</span>
+                  <span className="text-xs text-black/40">Precision</span>
                   <Badge color="gray">{pred.confidence}</Badge>
                 </div>
               </div>
@@ -296,7 +296,7 @@ export default function ZonesPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-white/40 text-xs uppercase tracking-wider border-b border-white/[0.06]">
+              <tr className="text-black/40 text-xs uppercase tracking-wider border-b border-black/[0.06]">
                 <th className="text-left py-3 pr-4">Zone</th>
                 <th className="text-left py-3 pr-4">% VMA</th>
                 <th className="text-left py-3 pr-4">Vitesse (km/h)</th>
@@ -309,23 +309,23 @@ export default function ZonesPage() {
               {ZONE_CONFIG.map((cfg) => {
                 const zone = zones[cfg.key];
                 return (
-                  <tr key={cfg.key} className="border-b border-white/[0.03] last:border-0">
+                  <tr key={cfg.key} className="border-b border-black/[0.03] last:border-0">
                     <td className="py-3 pr-4">
                       <span className={`font-bold ${cfg.textColor}`}>{cfg.label}</span>
                     </td>
-                    <td className="py-3 pr-4 text-white/70">
+                    <td className="py-3 pr-4 text-black/70">
                       {zone.percentVMA.min}-{zone.percentVMA.max}%
                     </td>
-                    <td className="py-3 pr-4 text-white/70">
+                    <td className="py-3 pr-4 text-black/70">
                       {zone.speedKmh.min.toFixed(1)} - {zone.speedKmh.max.toFixed(1)}
                     </td>
-                    <td className="py-3 pr-4 font-medium text-white">
+                    <td className="py-3 pr-4 font-medium text-text-primary">
                       {formatPace(zone.paceMinKm.min)} - {formatPace(zone.paceMinKm.max)}
                     </td>
-                    <td className="py-3 pr-4 text-white/70">
+                    <td className="py-3 pr-4 text-black/70">
                       {zone.hrPercent.min}-{zone.hrPercent.max}%
                     </td>
-                    <td className="py-3 text-white/50 text-xs">{zone.purpose}</td>
+                    <td className="py-3 text-black/50 text-xs">{zone.purpose}</td>
                   </tr>
                 );
               })}

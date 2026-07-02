@@ -3,78 +3,81 @@
 
 @layer base {
   :root {
-    /* ============ APEX v2 — "Precision Instrument" ============ */
+    /* ============ APEX v3 — "Apple Health" (juillet 2026) ============
+       Copie conforme du langage visuel de l'app Santé iOS :
+       fond gris groupé, cartes blanches, couleurs système Apple. */
 
-    /* Surfaces : noir chaud zinc + 3 niveaux de profondeur */
-    --bg-primary: #0A0A0B;
-    --bg-secondary: #111113;
-    --bg-tertiary: #18181B;
-    --bg-elevated: #1F1F23;
-    --bg-hover: #26262B;
+    /* Surfaces : systemGroupedBackground iOS light */
+    --bg-primary: #F2F2F7;   /* fond de page (gris groupé iOS) */
+    --bg-secondary: #FFFFFF; /* cartes */
+    --bg-tertiary: #F2F2F7;  /* insets dans les cartes */
+    --bg-elevated: #FFFFFF;  /* sheets / modals / tooltips */
+    --bg-hover: #E5E5EA;     /* hover / pressed fill */
 
-    /* Accent primaire : Electric Lime — énergie, performance.
-       v3 (avril 2026) : saturation poussée pour matcher les refs fitness
-       (PulseUp, Antony Thomas, Belly Fat Shredder). Pure neon green. */
-    --accent: #D4FF00;
-    --accent-hover: #C7F000;
-    --accent-pressed: #B8E000;
-    --accent-subtle: rgba(212, 255, 0, 0.10);
-    --accent-glow: rgba(212, 255, 0, 0.38);
-    --accent-ink: #0A0A0B; /* text on accent bg */
+    /* Accent primaire : iOS System Blue — liens, CTA, sélection (comme Santé) */
+    --accent: #007AFF;
+    --accent-hover: #0071EB;
+    --accent-pressed: #0064D0;
+    --accent-subtle: rgba(0, 122, 255, 0.10);
+    --accent-glow: rgba(0, 122, 255, 0.22);
+    --accent-ink: #FFFFFF; /* text on accent bg */
 
-    /* Accent secondaire : Soft Lavender — recovery, T1D, calm data */
-    --accent-2: #B4A7FF;
-    --accent-2-hover: #A090FF;
-    --accent-2-subtle: rgba(180, 167, 255, 0.10);
-    --accent-2-glow: rgba(180, 167, 255, 0.30);
+    /* Accent secondaire : iOS Indigo — sommeil, T1D, données cliniques */
+    --accent-2: #5856D6;
+    --accent-2-hover: #4B49C6;
+    --accent-2-subtle: rgba(88, 86, 214, 0.10);
+    --accent-2-glow: rgba(88, 86, 214, 0.22);
 
-    /* Typography hierarchy */
-    --text-primary: #FAFAFA;
-    --text-secondary: #A1A1AA;
-    --text-tertiary: #71717A;
-    --text-disabled: #3F3F46;
-    --text-ink: #0A0A0B;
+    /* Typography hierarchy — labels iOS light */
+    --text-primary: #000000;
+    --text-secondary: #6D6D72;               /* secondaryLabel */
+    --text-tertiary: #8E8E93;                /* tertiaryLabel */
+    --text-disabled: #C7C7CC;
+    --text-ink: #FFFFFF;
 
-    /* Borders minimalistes */
-    --border-subtle: rgba(255, 255, 255, 0.06);
-    --border-default: rgba(255, 255, 255, 0.10);
-    --border-strong: rgba(255, 255, 255, 0.16);
+    /* Borders : séparateurs iOS (hairlines) */
+    --border-subtle: rgba(60, 60, 67, 0.10);
+    --border-default: rgba(60, 60, 67, 0.18);
+    --border-strong: rgba(60, 60, 67, 0.29);
 
-    /* Semantic states — palette chaude cohérente */
-    --success: #7AE582;
-    --warning: #FFAE5C;
-    --error: #FF6B6B;
-    --info: #7FC7FF;
+    /* Semantic states — couleurs système iOS */
+    --success: #34C759;
+    --warning: #FF9500;
+    --error: #FF3B30;
+    --info: #007AFF;
 
-    /* Catégories (hue par domaine) — alignées sur l'accent saturé */
-    --muscu: #D4FF00;     /* lime = performance */
-    --running: #7FC7FF;   /* sky = cardio */
-    --nutrition: #FFAE5C; /* amber = fuel */
-    --diabete: #B4A7FF;   /* lavender = clinical */
+    /* Catégories (hue par domaine) — palette app Santé */
+    --muscu: #FF9500;     /* orange = activité/effort (flamme Santé) */
+    --running: #FF2D55;   /* rose = cardio / fréquence cardiaque */
+    --nutrition: #34C759; /* vert = alimentation / eau */
+    --diabete: #5856D6;   /* indigo = clinique (comme Sommeil) */
 
     /* Glucose scale — précision médicale */
-    --glucose-low: #FF6B6B;
-    --glucose-normal: #7AE582;
-    --glucose-high: #FFAE5C;
-    --glucose-critical: #FF3B3B;
+    --glucose-low: #FF3B30;
+    --glucose-normal: #34C759;
+    --glucose-high: #FF9500;
+    --glucose-critical: #FF2D55;
 
     /* Data chart accents */
-    --chart-1: #D4FF00;
-    --chart-2: #7FC7FF;
-    --chart-3: #FFAE5C;
-    --chart-4: #B4A7FF;
-    --chart-5: #FF6B6B;
+    --chart-1: #007AFF;
+    --chart-2: #32ADE6;
+    --chart-3: #FF9500;
+    --chart-4: #5856D6;
+    --chart-5: #FF3B30;
 
     /* Safe areas */
     --safe-area-inset-top: env(safe-area-inset-top);
     --safe-area-inset-bottom: env(safe-area-inset-bottom);
 
-    /* Radii système */
+    /* Radii système — cartes Santé bien arrondies */
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 16px;
     --radius-xl: 20px;
     --radius-2xl: 24px;
+
+    /* Ombre carte iOS (quasi imperceptible, la hiérarchie vient du blanc sur gris) */
+    --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
 }
 
@@ -121,9 +124,10 @@
   --color-glucose-high: var(--glucose-high);
   --color-glucose-critical: var(--glucose-critical);
 
-  /* Fonts — Geist Sans pour UI, Geist Mono pour métriques = signature */
-  --font-sans: var(--font-geist-sans), var(--font-inter), system-ui, -apple-system, sans-serif;
-  --font-mono: var(--font-geist-mono), "SF Mono", Consolas, monospace;
+  /* Fonts — 100% système : SF Pro sur Apple (exactement la police de l'app Santé),
+     fallback système natif ailleurs. Aucune webfont chargée. */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 
   /* Aliases techniques utilisés par certains composants Tailwind */
   --color-background: var(--bg-primary);
@@ -141,7 +145,6 @@
     background-color: var(--bg-primary);
     color: var(--text-primary);
     font-family: var(--font-sans);
-    font-feature-settings: "ss01", "ss02", "cv01", "cv11";
     font-weight: 400;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -172,10 +175,10 @@
     background: var(--text-tertiary);
   }
 
-  /* Selection = accent signature */
+  /* Selection = accent système */
   ::selection {
-    background: var(--accent);
-    color: var(--accent-ink);
+    background: rgba(0, 122, 255, 0.25);
+    color: var(--text-primary);
   }
 
   /* Focus ring globale */
@@ -200,59 +203,58 @@
   /* Touch targets 44px mini */
   .touch-target { min-height: 44px; min-width: 44px; }
 
-  /* ============ SIGNATURE : typography tabulaire mono ============ */
+  /* ============ Chiffres : SF Pro bold tabular (style Santé) ============ */
   .num {
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-variant-numeric: tabular-nums;
-    font-feature-settings: "tnum", "ss01";
-    letter-spacing: -0.02em;
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
   .num-hero {
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-variant-numeric: tabular-nums;
-    font-feature-settings: "tnum";
-    letter-spacing: -0.04em;
-    font-weight: 500;
+    font-weight: 700;
+    letter-spacing: -0.02em;
   }
 
-  /* Label système — uppercase micro-tracking, signature cockpit */
+  /* Label système — petites capitales grises (headers de sections iOS) */
   .label {
-    font-size: 10px;
-    font-weight: 500;
+    font-size: 11px;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.05em;
     color: var(--text-tertiary);
   }
 
-  /* Glass effect headers */
+  /* Glass effect headers — barre de navigation iOS translucide */
   .glass {
-    background: rgba(10, 10, 11, 0.72);
+    background: rgba(242, 242, 247, 0.82);
     backdrop-filter: saturate(180%) blur(20px);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
     border-bottom: 1px solid var(--border-subtle);
   }
 
-  /* Glow accent signature */
+  /* Glow accent — ombres douces (plus de néon) */
   .glow-accent {
-    box-shadow: 0 0 32px -8px var(--accent-glow);
+    box-shadow: 0 4px 16px -6px var(--accent-glow);
   }
   .glow-accent-2 {
-    box-shadow: 0 0 32px -8px var(--accent-2-glow);
+    box-shadow: 0 4px 16px -6px var(--accent-2-glow);
   }
   .glow-ring {
-    box-shadow: 0 0 0 1px var(--accent), 0 0 24px -4px var(--accent-glow);
+    box-shadow: 0 0 0 1px var(--accent), 0 4px 16px -6px var(--accent-glow);
   }
 
-  /* Surface levels — hiérarchie par profondeur, pas par border */
-  .surface-1 { background: var(--bg-secondary); border-radius: var(--radius-lg); }
+  /* Surface levels — cartes blanches sur fond gris (hiérarchie Santé) */
+  .surface-1 { background: var(--bg-secondary); border-radius: var(--radius-lg); box-shadow: var(--card-shadow); }
   .surface-2 { background: var(--bg-tertiary); border-radius: var(--radius-lg); }
-  .surface-3 { background: var(--bg-elevated); border-radius: var(--radius-lg); }
+  .surface-3 { background: var(--bg-elevated); border-radius: var(--radius-lg); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08); }
 
   /* Tap feedback iOS */
   .tap-scale { transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1); }
   .tap-scale:active { transform: scale(0.97); }
 
-  /* Dot indicator pulsant (cockpit feel) */
+  /* Dot indicator pulsant */
   .dot-pulse {
     position: relative;
     display: inline-block;
@@ -279,14 +281,23 @@
   }
   .hover-lift:hover {
     transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
   }
 }
 
 /* ============ UTILITAIRES ============ */
+/* Carte legacy (ancien design system ui.tsx) — devient une carte Santé blanche */
+.card {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--card-shadow);
+}
+.glow-green, .glow-blue, .glow-purple, .glow-orange { box-shadow: var(--card-shadow); }
+
 .progress-bar {
   height: 6px;
   border-radius: 3px;
-  background: var(--border-subtle);
+  background: var(--bg-hover);
   overflow: hidden;
 }
 .progress-bar-fill {
@@ -342,9 +353,9 @@
 .skeleton {
   background: linear-gradient(
     90deg,
-    var(--bg-tertiary) 25%,
-    var(--bg-hover) 50%,
-    var(--bg-tertiary) 75%
+    #E5E5EA 25%,
+    #F2F2F7 50%,
+    #E5E5EA 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.6s infinite;

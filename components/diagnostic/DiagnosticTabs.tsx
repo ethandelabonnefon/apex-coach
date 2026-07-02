@@ -40,8 +40,8 @@ export default function DiagnosticTabs({ active, onChange, morphoCompleted, musc
             onClick={() => onChange(tab.id)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all border ${
               isActive
-                ? "bg-[#00ff94]/10 border-[#00ff94]/30 text-[#00ff94]"
-                : "bg-white/[0.03] border-white/[0.06] text-white/50 hover:bg-white/[0.06] hover:text-white/70"
+                ? "bg-[#34c759]/10 border-[#34c759]/30 text-[#34c759]"
+                : "bg-black/[0.03] border-black/[0.06] text-black/50 hover:bg-black/[0.06] hover:text-black/70"
             }`}
           >
             <span>{tab.icon}</span>

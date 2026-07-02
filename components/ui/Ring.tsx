@@ -21,7 +21,7 @@ export function Ring({
   size = 96,
   strokeWidth = 6,
   color = "var(--accent)",
-  trackColor = "rgba(255, 255, 255, 0.06)",
+  trackColor = "rgba(0,0,0, 0.06)",
   label,
   sublabel,
   className,

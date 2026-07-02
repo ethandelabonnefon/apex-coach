@@ -86,9 +86,9 @@ export default function ProgressionPage() {
 
       {!hasAnyData ? (
         <div className="text-center py-20">
-          <span className="text-5xl mb-6 block opacity-40">&#128202;</span>
-          <p className="text-white/60 font-medium text-lg mb-2">Aucune donnee de progression</p>
-          <p className="text-white/35 text-sm mb-6">Complete ta premiere seance pour voir ta progression ici.</p>
+          <span className="text-5xl mb-6 block opacity-40">&#248a3d;</span>
+          <p className="text-black/60 font-medium text-lg mb-2">Aucune donnee de progression</p>
+          <p className="text-black/35 text-sm mb-6">Complete ta premiere seance pour voir ta progression ici.</p>
           <Link href="/muscu">
             <Button variant="secondary">Voir le programme</Button>
           </Link>
@@ -143,7 +143,7 @@ export default function ProgressionPage() {
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <h3 className="font-semibold text-sm">{exerciseName}</h3>
-                      <p className="text-xs text-white/35 mt-0.5">
+                      <p className="text-xs text-black/35 mt-0.5">
                         {entries.length} entree{entries.length > 1 ? "s" : ""}
                         {plateau.isPlateaued && (
                           <span className="text-[#ff9500] ml-2">Plateau</span>
@@ -151,10 +151,10 @@ export default function ProgressionPage() {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-lg font-bold text-[#a855f7]">{currentMax} kg</p>
-                      <p className="text-xs text-white/35">1RM max estime</p>
+                      <p className="text-lg font-bold text-[#af52de]">{currentMax} kg</p>
+                      <p className="text-xs text-black/35">1RM max estime</p>
                       {progression !== 0 && (
-                        <p className={`text-xs font-medium ${progression > 0 ? "text-[#00ff94]" : "text-[#ff4757]"}`}>
+                        <p className={`text-xs font-medium ${progression > 0 ? "text-[#34c759]" : "text-[#ff3b30]"}`}>
                           {progression > 0 ? "+" : ""}{progression} kg
                         </p>
                       )}
@@ -172,7 +172,7 @@ export default function ProgressionPage() {
                           className="flex-1 min-w-[4px] max-w-[20px] rounded-t transition-all group relative"
                           style={{
                             height: `${Math.max(height, 8)}%`,
-                            background: isMax ? "#a855f7" : "rgba(168, 85, 247, 0.3)",
+                            background: isMax ? "#af52de" : "rgba(168, 85, 247, 0.3)",
                           }}
                           title={`${new Date(entry.date).toLocaleDateString("fr-FR")} : ${entry.weight}x${entry.reps} = ${entry.estimated1RM}kg 1RM`}
                         />
@@ -184,7 +184,7 @@ export default function ProgressionPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="text-white/25 border-b border-white/[0.04]">
+                        <tr className="text-black/25 border-b border-black/[0.04]">
                           <th className="text-left py-1.5 pr-3">Date</th>
                           <th className="text-left py-1.5 px-3">Poids x Reps</th>
                           <th className="text-left py-1.5 px-3">1RM estime</th>
@@ -197,23 +197,23 @@ export default function ProgressionPage() {
                           const delta = prev ? entry.estimated1RM - prev.estimated1RM : 0;
                           const isMax = entry.estimated1RM === currentMax;
                           return (
-                            <tr key={i} className="border-t border-white/[0.03]">
-                              <td className="py-1.5 pr-3 text-white/40">
+                            <tr key={i} className="border-t border-black/[0.03]">
+                              <td className="py-1.5 pr-3 text-black/40">
                                 {new Date(entry.date).toLocaleDateString("fr-FR", {
                                   day: "numeric",
                                   month: "short",
                                 })}
                               </td>
-                              <td className="py-1.5 px-3 text-white/60 font-mono">
+                              <td className="py-1.5 px-3 text-black/60 font-mono">
                                 {entry.weight}kg x {entry.reps}
                               </td>
-                              <td className={`py-1.5 px-3 font-mono font-medium ${isMax ? "text-[#a855f7]" : "text-white/60"}`}>
+                              <td className={`py-1.5 px-3 font-mono font-medium ${isMax ? "text-[#af52de]" : "text-black/60"}`}>
                                 {entry.estimated1RM} kg
                                 {isMax && <Badge color="purple">PR</Badge>}
                               </td>
                               <td className="py-1.5 pl-3">
                                 {delta !== 0 && (
-                                  <span className={`font-mono ${delta > 0 ? "text-[#00ff94]" : "text-[#ff4757]"}`}>
+                                  <span className={`font-mono ${delta > 0 ? "text-[#34c759]" : "text-[#ff3b30]"}`}>
                                     {delta > 0 ? "+" : ""}{delta}
                                   </span>
                                 )}
@@ -243,7 +243,7 @@ export default function ProgressionPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium">{session?.name || workout.sessionId}</p>
-                      <p className="text-xs text-white/35">
+                      <p className="text-xs text-black/35">
                         {new Date(workout.date).toLocaleDateString("fr-FR", {
                           weekday: "short",
                           day: "numeric",
@@ -256,10 +256,10 @@ export default function ProgressionPage() {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-bold text-[#a855f7]">{Math.round(totalVolume).toLocaleString()} kg</p>
-                      <p className="text-[10px] text-white/30">volume total</p>
+                      <p className="text-sm font-bold text-[#af52de]">{Math.round(totalVolume).toLocaleString()} kg</p>
+                      <p className="text-[10px] text-black/30">volume total</p>
                       {workout.glucoseBefore !== null && workout.glucoseAfter !== null && (
-                        <p className="text-[10px] text-white/30 mt-0.5">
+                        <p className="text-[10px] text-black/30 mt-0.5">
                           Glyc: {workout.glucoseBefore} &rarr; {workout.glucoseAfter} mg/dL
                         </p>
                       )}

@@ -28,7 +28,7 @@ export function StatCard({
   value,
   unit,
   sub,
-  color = "text-white",
+  color = "text-text-primary",
   icon,
 }: {
   label: string;
@@ -42,12 +42,12 @@ export function StatCard({
     <Card className="!p-3 sm:!p-5">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-[10px] sm:text-xs text-white/40 uppercase tracking-wider mb-1">{label}</p>
+          <p className="text-[10px] sm:text-xs text-black/40 uppercase tracking-wider mb-1">{label}</p>
           <p className={`text-xl sm:text-2xl font-bold ${color}`}>
             {value}
-            {unit && <span className="text-[10px] sm:text-sm font-normal text-white/40 ml-1">{unit}</span>}
+            {unit && <span className="text-[10px] sm:text-sm font-normal text-black/40 ml-1">{unit}</span>}
           </p>
-          {sub && <p className="text-[10px] sm:text-xs text-white/35 mt-1">{sub}</p>}
+          {sub && <p className="text-[10px] sm:text-xs text-black/35 mt-1">{sub}</p>}
         </div>
         {icon && <span className="text-xl sm:text-2xl opacity-60">{icon}</span>}
       </div>
@@ -63,12 +63,12 @@ export function Badge({
   color?: "green" | "blue" | "purple" | "orange" | "red" | "gray";
 }) {
   const colors: Record<string, string> = {
-    green: "bg-[#00ff94]/15 text-[#00ff94]",
-    blue: "bg-[#00d4ff]/15 text-[#00d4ff]",
-    purple: "bg-[#a855f7]/15 text-[#a855f7]",
+    green: "bg-[#34c759]/15 text-[#34c759]",
+    blue: "bg-[#32ade6]/15 text-[#32ade6]",
+    purple: "bg-[#af52de]/15 text-[#af52de]",
     orange: "bg-[#ff9500]/15 text-[#ff9500]",
-    red: "bg-[#ff4757]/15 text-[#ff4757]",
-    gray: "bg-white/10 text-white/60",
+    red: "bg-[#ff3b30]/15 text-[#ff3b30]",
+    gray: "bg-black/10 text-black/60",
   };
   return <span className={`badge ${colors[color]}`}>{children}</span>;
 }
@@ -76,7 +76,7 @@ export function Badge({
 export function ProgressBar({
   value,
   max,
-  color = "#00ff94",
+  color = "#34c759",
   label,
   showValue = true,
 }: {
@@ -90,7 +90,7 @@ export function ProgressBar({
   return (
     <div>
       {(label || showValue) && (
-        <div className="flex justify-between text-xs text-white/40 mb-1">
+        <div className="flex justify-between text-xs text-black/40 mb-1">
           {label && <span>{label}</span>}
           {showValue && (
             <span>
@@ -119,7 +119,7 @@ export function PageHeader({
     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6 sm:mb-8">
       <div>
         <h1 className="text-xl sm:text-2xl font-bold">{title}</h1>
-        {subtitle && <p className="text-white/40 text-xs sm:text-sm mt-1">{subtitle}</p>}
+        {subtitle && <p className="text-black/40 text-xs sm:text-sm mt-1">{subtitle}</p>}
       </div>
       {action}
     </div>
@@ -127,12 +127,12 @@ export function PageHeader({
 }
 
 export function GlucoseIndicator({ value }: { value: number }) {
-  let color = "text-[#00ff94]";
-  let bg = "bg-[#00ff94]/15";
+  let color = "text-[#34c759]";
+  let bg = "bg-[#34c759]/15";
   let label = "Normal";
   if (value < 70) {
-    color = "text-[#ff4757]";
-    bg = "bg-[#ff4757]/15";
+    color = "text-[#ff3b30]";
+    bg = "bg-[#ff3b30]/15";
     label = "Hypo";
   } else if (value > 180) {
     color = "text-[#ff9500]";
@@ -152,8 +152,8 @@ export function EmptyState({ icon, title, description }: { icon: string; title: 
   return (
     <div className="text-center py-12">
       <span className="text-4xl mb-4 block">{icon}</span>
-      <p className="text-white/60 font-medium">{title}</p>
-      <p className="text-white/35 text-sm mt-1">{description}</p>
+      <p className="text-black/60 font-medium">{title}</p>
+      <p className="text-black/35 text-sm mt-1">{description}</p>
     </div>
   );
 }
@@ -176,10 +176,10 @@ export function Button({
   type?: "button" | "submit";
 }) {
   const variants: Record<string, string> = {
-    primary: "bg-[#00ff94] text-black hover:bg-[#00ff94]/90 font-semibold",
-    secondary: "bg-white/[0.06] text-white hover:bg-white/[0.1] border border-white/[0.06]",
-    ghost: "text-white/60 hover:text-white hover:bg-white/[0.05]",
-    danger: "bg-[#ff4757]/15 text-[#ff4757] hover:bg-[#ff4757]/25",
+    primary: "bg-accent text-white hover:bg-accent-hover font-semibold",
+    secondary: "bg-black/[0.06] text-text-primary hover:bg-black/[0.1] border border-black/[0.06]",
+    ghost: "text-black/60 hover:text-text-primary hover:bg-black/[0.05]",
+    danger: "bg-[#ff3b30]/15 text-[#ff3b30] hover:bg-[#ff3b30]/25",
   };
   const sizes: Record<string, string> = {
     sm: "px-3 py-1.5 text-xs rounded-lg",
@@ -213,10 +213,10 @@ export function InfoBox({
   variant?: "info" | "warning" | "success" | "danger";
 }) {
   const styles: Record<string, string> = {
-    info: "bg-[#00d4ff]/10 border-[#00d4ff]/20 text-[#00d4ff]",
+    info: "bg-[#32ade6]/10 border-[#32ade6]/20 text-[#32ade6]",
     warning: "bg-[#ff9500]/10 border-[#ff9500]/20 text-[#ff9500]",
-    success: "bg-[#00ff94]/10 border-[#00ff94]/20 text-[#00ff94]",
-    danger: "bg-[#ff4757]/10 border-[#ff4757]/20 text-[#ff4757]",
+    success: "bg-[#34c759]/10 border-[#34c759]/20 text-[#34c759]",
+    danger: "bg-[#ff3b30]/10 border-[#ff3b30]/20 text-[#ff3b30]",
   };
   return (
     <div className={`p-4 rounded-xl border text-sm ${styles[variant]}`}>

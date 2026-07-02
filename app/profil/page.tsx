@@ -31,7 +31,7 @@ function EditableField({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs text-white/40">{label}</label>
+      <label className="text-xs text-black/40">{label}</label>
       <div className="flex items-center gap-2">
         <input
           type={type}
@@ -40,9 +40,9 @@ function EditableField({
           min={min}
           max={max}
           step={step}
-          className="w-full bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#00ff94]/50 focus:ring-1 focus:ring-[#00ff94]/25 transition-colors"
+          className="w-full bg-black/[0.05] border border-black/[0.08] rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#34c759]/50 focus:ring-1 focus:ring-[#34c759]/25 transition-colors"
         />
-        {unit && <span className="text-xs text-white/35 whitespace-nowrap">{unit}</span>}
+        {unit && <span className="text-xs text-black/35 whitespace-nowrap">{unit}</span>}
       </div>
     </div>
   );
@@ -61,14 +61,14 @@ function EditableSelect({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs text-white/40">{label}</label>
+      <label className="text-xs text-black/40">{label}</label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#00ff94]/50 focus:ring-1 focus:ring-[#00ff94]/25 transition-colors appearance-none"
+        className="w-full bg-black/[0.05] border border-black/[0.08] rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#34c759]/50 focus:ring-1 focus:ring-[#34c759]/25 transition-colors appearance-none"
       >
         {options.map((o) => (
-          <option key={o} value={o} className="bg-[#0a0a0a] text-white">
+          <option key={o} value={o} className="bg-white text-text-primary">
             {o}
           </option>
         ))}
@@ -104,14 +104,14 @@ function TagEditor({
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="text-xs text-white/40">{label}</label>
+      <label className="text-xs text-black/40">{label}</label>
       <div className="flex flex-wrap gap-2">
         {tags.map((tag) => (
           <span key={tag} className="inline-flex items-center gap-1">
             <Badge color={color}>{tag}</Badge>
             <button
               onClick={() => removeTag(tag)}
-              className="text-white/30 hover:text-[#ff4757] text-xs transition-colors -ml-1"
+              className="text-black/30 hover:text-[#ff3b30] text-xs transition-colors -ml-1"
             >
               x
             </button>
@@ -130,7 +130,7 @@ function TagEditor({
             }
           }}
           placeholder="Ajouter..."
-          className="flex-1 bg-white/[0.05] border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-[#00ff94]/50 focus:ring-1 focus:ring-[#00ff94]/25 transition-colors"
+          className="flex-1 bg-black/[0.05] border border-black/[0.08] rounded-lg px-3 py-1.5 text-sm text-text-primary placeholder:text-black/20 focus:outline-none focus:border-[#34c759]/50 focus:ring-1 focus:ring-[#34c759]/25 transition-colors"
         />
         <Button variant="ghost" size="sm" onClick={addTag}>
           +
@@ -155,7 +155,7 @@ const MEASUREMENT_LABELS: Record<string, string> = {
   calf: "Mollet",
 };
 
-const CHART_COLORS = ["#00ff94", "#00d4ff", "#a855f7", "#ff9500", "#ff4757", "#ffd93d", "#6bff6b", "#ff6bea"];
+const CHART_COLORS = ["#34c759", "#32ade6", "#af52de", "#ff9500", "#ff3b30", "#ffcc00", "#34c759", "#af52de"];
 
 function MensurationsSection() {
   const { diagnosticHistory } = useStore();
@@ -187,8 +187,8 @@ function MensurationsSection() {
           <SectionTitle>Mes Mensurations</SectionTitle>
           <div className="text-center py-8">
             <span className="text-3xl mb-3 block">📏</span>
-            <p className="text-white/50 text-sm">Aucune mensuration enregistrée</p>
-            <p className="text-white/30 text-xs mt-1">Complète le diagnostic morphologique pour voir tes mensurations ici</p>
+            <p className="text-black/50 text-sm">Aucune mensuration enregistrée</p>
+            <p className="text-black/30 text-xs mt-1">Complète le diagnostic morphologique pour voir tes mensurations ici</p>
           </div>
         </Card>
       </div>
@@ -220,11 +220,11 @@ function MensurationsSection() {
       <Card glow="blue">
         <div className="flex items-center justify-between mb-4">
           <SectionTitle className="!mb-0">Mes Mensurations</SectionTitle>
-          <a href="/profil/diagnostic" className="text-xs text-[#00d4ff] hover:text-[#00d4ff]/80 transition-colors">
+          <a href="/profil/diagnostic" className="text-xs text-[#32ade6] hover:text-[#32ade6]/80 transition-colors">
             Mettre à jour
           </a>
         </div>
-        <p className="text-xs text-white/35 -mt-2 mb-4">Dernière mesure : {lastDate}</p>
+        <p className="text-xs text-black/35 -mt-2 mb-4">Dernière mesure : {lastDate}</p>
 
         {/* Grid of measurements */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
@@ -232,14 +232,14 @@ function MensurationsSection() {
             const val = (m as Record<string, string>)[key];
             const delta = getDelta(key);
             return (
-              <div key={key} className="p-3 rounded-lg bg-white/[0.03]">
-                <p className="text-[10px] text-white/35 uppercase tracking-wider">{label}</p>
+              <div key={key} className="p-3 rounded-lg bg-black/[0.03]">
+                <p className="text-[10px] text-black/35 uppercase tracking-wider">{label}</p>
                 <p className="text-lg font-semibold mt-0.5">
                   {val || "—"}
-                  {val && <span className="text-xs text-white/30 font-normal ml-1">cm</span>}
+                  {val && <span className="text-xs text-black/30 font-normal ml-1">cm</span>}
                 </p>
                 {delta && (
-                  <p className={`text-[10px] mt-0.5 ${delta.value > 0 ? "text-[#00ff94]" : delta.value < 0 ? "text-[#ff4757]" : "text-white/25"}`}>
+                  <p className={`text-[10px] mt-0.5 ${delta.value > 0 ? "text-[#34c759]" : delta.value < 0 ? "text-[#ff3b30]" : "text-black/25"}`}>
                     {delta.display}
                   </p>
                 )}
@@ -250,12 +250,12 @@ function MensurationsSection() {
 
         {/* Ratios */}
         {latest.analysis?.ratios && latest.analysis.ratios.length > 0 && (
-          <div className="mb-6 pt-4 border-t border-white/[0.06]">
-            <p className="text-xs text-white/40 font-medium mb-3 uppercase tracking-wider">Ratios clés</p>
+          <div className="mb-6 pt-4 border-t border-black/[0.06]">
+            <p className="text-xs text-black/40 font-medium mb-3 uppercase tracking-wider">Ratios clés</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {latest.analysis.ratios.slice(0, 6).map((r, i) => (
-                <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-white/[0.02]">
-                  <span className="text-[10px] text-white/50 truncate mr-2">{r.label.replace("Ratio ", "")}</span>
+                <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-black/[0.02]">
+                  <span className="text-[10px] text-black/50 truncate mr-2">{r.label.replace("Ratio ", "")}</span>
                   <span className="text-xs font-bold">{r.value}</span>
                 </div>
               ))}
@@ -265,9 +265,9 @@ function MensurationsSection() {
 
         {/* Evolution chart */}
         {chartData.length > 1 && (
-          <div className="pt-4 border-t border-white/[0.06]">
+          <div className="pt-4 border-t border-black/[0.06]">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-xs text-white/40 font-medium uppercase tracking-wider">Évolution</p>
+              <p className="text-xs text-black/40 font-medium uppercase tracking-wider">Évolution</p>
             </div>
 
             {/* Metric toggles */}
@@ -278,8 +278,8 @@ function MensurationsSection() {
                   onClick={() => toggleMetric(key)}
                   className={`text-[10px] px-2 py-1 rounded-full border transition-all ${
                     selectedMetrics.includes(key)
-                      ? "border-white/20 text-white"
-                      : "border-white/[0.06] text-white/25 hover:text-white/50"
+                      ? "border-black/20 text-text-primary"
+                      : "border-black/[0.06] text-black/25 hover:text-black/50"
                   }`}
                   style={selectedMetrics.includes(key) ? { borderColor: CHART_COLORS[i % CHART_COLORS.length] + "60", color: CHART_COLORS[i % CHART_COLORS.length] } : undefined}
                 >
@@ -291,11 +291,11 @@ function MensurationsSection() {
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
-                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.3)" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "rgba(255,255,255,0.3)" }} axisLine={false} tickLine={false} width={35} />
+                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: "rgba(0,0,0,0.3)" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: "rgba(0,0,0,0.3)" }} axisLine={false} tickLine={false} width={35} />
                   <Tooltip
-                    contentStyle={{ background: "#1a1a2e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", fontSize: "12px" }}
-                    labelStyle={{ color: "rgba(255,255,255,0.5)" }}
+                    contentStyle={{ background: "#ffffff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "8px", fontSize: "12px" }}
+                    labelStyle={{ color: "rgba(0,0,0,0.5)" }}
                   />
                   {selectedMetrics.map((key, i) => (
                     <Line
@@ -317,16 +317,16 @@ function MensurationsSection() {
 
         {/* History */}
         {diagnosticHistory.length > 1 && (
-          <div className="pt-4 mt-4 border-t border-white/[0.06]">
-            <p className="text-xs text-white/40 font-medium mb-2 uppercase tracking-wider">Historique des mesures</p>
+          <div className="pt-4 mt-4 border-t border-black/[0.06]">
+            <p className="text-xs text-black/40 font-medium mb-2 uppercase tracking-wider">Historique des mesures</p>
             <div className="space-y-1.5">
               {diagnosticHistory.slice(0, 5).map((entry, i) => {
                 const date = new Date(entry.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
                 return (
                   <div key={entry.id} className="flex items-center gap-2 text-xs">
-                    <div className={`w-1.5 h-1.5 rounded-full ${i === 0 ? "bg-[#00ff94]" : "bg-white/20"}`} />
-                    <span className="text-white/50">{date}</span>
-                    <span className="text-white/25">— Mesure complète</span>
+                    <div className={`w-1.5 h-1.5 rounded-full ${i === 0 ? "bg-[#34c759]" : "bg-black/20"}`} />
+                    <span className="text-black/50">{date}</span>
+                    <span className="text-black/25">— Mesure complète</span>
                     {entry.photos?.length > 0 && <Badge color="blue">{entry.photos.length} photos</Badge>}
                   </div>
                 );
@@ -449,7 +449,7 @@ export default function ProfilPage() {
         action={
           <div className="flex items-center gap-3">
             {saved && (
-              <span className="text-xs text-[#00ff94] animate-pulse">Sauvegarde !</span>
+              <span className="text-xs text-[#34c759] animate-pulse">Sauvegarde !</span>
             )}
             <Button onClick={handleSaveAll}>Sauvegarder</Button>
           </div>
@@ -467,16 +467,16 @@ export default function ProfilPage() {
             <Link
               key={item.href}
               href={item.href}
-              className="flex items-center justify-between p-3 rounded-xl hover:bg-white/[0.03] transition-colors"
+              className="flex items-center justify-between p-3 rounded-xl hover:bg-black/[0.03] transition-colors"
             >
               <div className="flex items-center gap-3">
                 <span className="text-xl">{item.icon}</span>
                 <div>
                   <p className="text-sm font-medium">{item.label}</p>
-                  <p className="text-xs text-white/35">{item.desc}</p>
+                  <p className="text-xs text-black/35">{item.desc}</p>
                 </div>
               </div>
-              <span className="text-white/20">→</span>
+              <span className="text-black/20">→</span>
             </Link>
           ))}
         </div>
@@ -539,34 +539,34 @@ export default function ProfilPage() {
           </div>
 
           {/* Morphology display */}
-          <div className="mt-6 pt-4 border-t border-white/[0.06]">
-            <p className="text-xs text-white/40 mb-3">Morphologie</p>
+          <div className="mt-6 pt-4 border-t border-black/[0.06]">
+            <p className="text-xs text-black/40 mb-3">Morphologie</p>
             <div className="grid grid-cols-2 gap-2 text-sm">
-              <div className="flex justify-between p-2 rounded-lg bg-white/[0.03]">
-                <span className="text-white/35">Type</span>
+              <div className="flex justify-between p-2 rounded-lg bg-black/[0.03]">
+                <span className="text-black/35">Type</span>
                 <span>
                   <Badge color="green">{bodyType}</Badge>
                 </span>
               </div>
-              <div className="flex justify-between p-2 rounded-lg bg-white/[0.03]">
-                <span className="text-white/35">Bras</span>
-                <span className="text-white/60">{profile.morphology.armLength ?? "Non mesure"}</span>
+              <div className="flex justify-between p-2 rounded-lg bg-black/[0.03]">
+                <span className="text-black/35">Bras</span>
+                <span className="text-black/60">{profile.morphology.armLength ?? "Non mesure"}</span>
               </div>
-              <div className="flex justify-between p-2 rounded-lg bg-white/[0.03]">
-                <span className="text-white/35">Femur</span>
-                <span className="text-white/60">{profile.morphology.femurLength ?? "Non mesure"}</span>
+              <div className="flex justify-between p-2 rounded-lg bg-black/[0.03]">
+                <span className="text-black/35">Femur</span>
+                <span className="text-black/60">{profile.morphology.femurLength ?? "Non mesure"}</span>
               </div>
-              <div className="flex justify-between p-2 rounded-lg bg-white/[0.03]">
-                <span className="text-white/35">Torse</span>
-                <span className="text-white/60">{profile.morphology.torsoLength ?? "Non mesure"}</span>
+              <div className="flex justify-between p-2 rounded-lg bg-black/[0.03]">
+                <span className="text-black/35">Torse</span>
+                <span className="text-black/60">{profile.morphology.torsoLength ?? "Non mesure"}</span>
               </div>
-              <div className="flex justify-between p-2 rounded-lg bg-white/[0.03]">
-                <span className="text-white/35">Epaules</span>
-                <span className="text-white/60">{profile.morphology.shoulderWidth ?? "Non mesure"}</span>
+              <div className="flex justify-between p-2 rounded-lg bg-black/[0.03]">
+                <span className="text-black/35">Epaules</span>
+                <span className="text-black/60">{profile.morphology.shoulderWidth ?? "Non mesure"}</span>
               </div>
-              <div className="flex justify-between p-2 rounded-lg bg-white/[0.03]">
-                <span className="text-white/35">Hanches</span>
-                <span className="text-white/60">{profile.morphology.hipWidth ?? "Non mesure"}</span>
+              <div className="flex justify-between p-2 rounded-lg bg-black/[0.03]">
+                <span className="text-black/35">Hanches</span>
+                <span className="text-black/60">{profile.morphology.hipWidth ?? "Non mesure"}</span>
               </div>
             </div>
           </div>
@@ -580,10 +580,10 @@ export default function ProfilPage() {
 
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-xs text-white/40">Mon programme d&apos;insuline</p>
+              <p className="text-xs text-black/40">Mon programme d&apos;insuline</p>
               <Link
                 href="/diabete/parametres"
-                className="text-xs text-[#a855f7] hover:text-[#a855f7]/80 transition-colors"
+                className="text-xs text-[#af52de] hover:text-[#af52de]/80 transition-colors"
               >
                 Modifier →
               </Link>
@@ -600,11 +600,11 @@ export default function ProfilPage() {
                 return (
                   <div
                     key={slot.key}
-                    className="p-3 rounded-lg bg-white/[0.03] text-sm text-white/80"
+                    className="p-3 rounded-lg bg-black/[0.03] text-sm text-black/80"
                   >
-                    <span className="text-lg font-bold text-[#a855f7] mr-1">{display}</span>
-                    <span className="text-[#a855f7]/80">{unitWord} pour 10g de glucide</span>{" "}
-                    <span className="text-white">{slot.suffix}</span>
+                    <span className="text-lg font-bold text-[#af52de] mr-1">{display}</span>
+                    <span className="text-[#af52de]/80">{unitWord} pour 10g de glucide</span>{" "}
+                    <span className="text-text-primary">{slot.suffix}</span>
                   </div>
                 );
               })}
@@ -769,7 +769,7 @@ export default function ProfilPage() {
 
             {/* Macro split visual */}
             <div className="pt-3">
-              <p className="text-xs text-white/40 mb-2">Repartition calorique</p>
+              <p className="text-xs text-black/40 mb-2">Repartition calorique</p>
               <div className="flex h-3 rounded-full overflow-hidden">
                 {(() => {
                   const pCal = targetProtein * 4;
@@ -780,7 +780,7 @@ export default function ProfilPage() {
                   return (
                     <>
                       <div
-                        className="bg-[#00d4ff]"
+                        className="bg-[#32ade6]"
                         style={{ width: `${(pCal / total) * 100}%` }}
                         title={`Proteines ${Math.round((pCal / total) * 100)}%`}
                       />
@@ -790,7 +790,7 @@ export default function ProfilPage() {
                         title={`Glucides ${Math.round((cCal / total) * 100)}%`}
                       />
                       <div
-                        className="bg-[#a855f7]"
+                        className="bg-[#af52de]"
                         style={{ width: `${(fCal / total) * 100}%` }}
                         title={`Lipides ${Math.round((fCal / total) * 100)}%`}
                       />
@@ -798,10 +798,10 @@ export default function ProfilPage() {
                   );
                 })()}
               </div>
-              <div className="flex justify-between text-[10px] text-white/35 mt-1">
-                <span className="text-[#00d4ff]">P {Math.round((targetProtein * 4 / (targetProtein * 4 + targetCarbs * 4 + targetFat * 9)) * 100)}%</span>
+              <div className="flex justify-between text-[10px] text-black/35 mt-1">
+                <span className="text-[#32ade6]">P {Math.round((targetProtein * 4 / (targetProtein * 4 + targetCarbs * 4 + targetFat * 9)) * 100)}%</span>
                 <span className="text-[#ff9500]">G {Math.round((targetCarbs * 4 / (targetProtein * 4 + targetCarbs * 4 + targetFat * 9)) * 100)}%</span>
-                <span className="text-[#a855f7]">L {Math.round((targetFat * 9 / (targetProtein * 4 + targetCarbs * 4 + targetFat * 9)) * 100)}%</span>
+                <span className="text-[#af52de]">L {Math.round((targetFat * 9 / (targetProtein * 4 + targetCarbs * 4 + targetFat * 9)) * 100)}%</span>
               </div>
             </div>
           </div>
@@ -863,22 +863,22 @@ export default function ProfilPage() {
               onChange={(v) => setInsulinSystem(v)}
             />
 
-            <div className="p-4 rounded-xl bg-white/[0.03] space-y-2">
+            <div className="p-4 rounded-xl bg-black/[0.03] space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-white/35">CGM actif</span>
+                <span className="text-black/35">CGM actif</span>
                 <span>{profile.hasCGM ? <Badge color="green">Oui</Badge> : <Badge color="red">Non</Badge>}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-white/35">Type diabete</span>
+                <span className="text-black/35">Type diabete</span>
                 <span><Badge color="blue">{profile.diabetesType}</Badge></span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-white/35">Insuline rapide</span>
-                <span className="text-white/70">{insulinRapid}</span>
+                <span className="text-black/35">Insuline rapide</span>
+                <span className="text-black/70">{insulinRapid}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-white/35">Dose basale</span>
-                <span className="text-white/70">{basalDose} U/jour</span>
+                <span className="text-black/35">Dose basale</span>
+                <span className="text-black/70">{basalDose} U/jour</span>
               </div>
             </div>
           </div>
@@ -891,7 +891,7 @@ export default function ProfilPage() {
       <MensurationsSection />
 
       {/* Sticky save bar */}
-      <div className="fixed bottom-16 lg:bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/95 to-transparent pointer-events-none z-40">
+      <div className="fixed bottom-16 lg:bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#ffffff] via-[#ffffff]/95 to-transparent pointer-events-none z-40">
         <div className="max-w-5xl mx-auto lg:ml-64 flex justify-end pointer-events-auto">
           <Button onClick={handleSaveAll} size="lg">
             {saved ? "Sauvegarde !" : "Sauvegarder les modifications"}

@@ -50,7 +50,7 @@ export default function BodyAnalysisResult({ analysis, photos }: BodyAnalysisRes
               key={i}
               src={photo}
               alt={`Photo ${i + 1}`}
-              className="w-20 h-28 object-cover rounded-lg border border-white/10 shrink-0"
+              className="w-20 h-28 object-cover rounded-lg border border-black/10 shrink-0"
             />
           ))}
         </div>
@@ -58,7 +58,7 @@ export default function BodyAnalysisResult({ analysis, photos }: BodyAnalysisRes
 
       {intro && (
         <Card>
-          <p className="text-sm text-white/70 leading-relaxed">{intro}</p>
+          <p className="text-sm text-black/70 leading-relaxed">{intro}</p>
         </Card>
       )}
 
@@ -71,12 +71,12 @@ export default function BodyAnalysisResult({ analysis, photos }: BodyAnalysisRes
                 <span className="text-xl shrink-0">{style.icon}</span>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
-                    <p className="text-sm font-semibold text-white">{section.title}</p>
+                    <p className="text-sm font-semibold text-text-primary">{section.title}</p>
                     <Badge color={style.color as "green" | "blue" | "purple" | "orange"}>
                       {i + 1}/5
                     </Badge>
                   </div>
-                  <div className="text-sm text-white/70 leading-relaxed whitespace-pre-line">
+                  <div className="text-sm text-black/70 leading-relaxed whitespace-pre-line">
                     {section.content}
                   </div>
                 </div>
@@ -86,7 +86,7 @@ export default function BodyAnalysisResult({ analysis, photos }: BodyAnalysisRes
         })
       ) : (
         <Card>
-          <div className="text-sm text-white/70 leading-relaxed whitespace-pre-line">{analysis}</div>
+          <div className="text-sm text-black/70 leading-relaxed whitespace-pre-line">{analysis}</div>
         </Card>
       )}
 

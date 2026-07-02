@@ -296,30 +296,30 @@ export default function RunningSeanceDetailPage({
                   <AreaChart data={elevProfile} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="elevGradDetail" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#7FC7FF" stopOpacity={0.4} />
-                        <stop offset="100%" stopColor="#7FC7FF" stopOpacity={0} />
+                        <stop offset="0%" stopColor="#32ade6" stopOpacity={0.4} />
+                        <stop offset="100%" stopColor="#32ade6" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
+                    <CartesianGrid stroke="rgba(0,0,0,0.04)" vertical={false} />
                     <XAxis
                       dataKey="distM"
                       type="number"
                       domain={["dataMin", "dataMax"]}
                       tickFormatter={(v) => `${(Number(v) / 1000).toFixed(1)}`}
-                      tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 9 }}
+                      tick={{ fill: "rgba(0,0,0,0.4)", fontSize: 9 }}
                       axisLine={false}
                       tickLine={false}
                     />
                     <YAxis
-                      tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 9 }}
+                      tick={{ fill: "rgba(0,0,0,0.4)", fontSize: 9 }}
                       axisLine={false}
                       tickLine={false}
                       width={30}
                     />
                     <Tooltip
                       contentStyle={{
-                        background: "#1F1F23",
-                        border: "1px solid rgba(255,255,255,0.1)",
+                        background: "#ffffff",
+                        border: "1px solid rgba(0,0,0,0.1)",
                         borderRadius: "8px",
                         fontSize: "11px",
                       }}
@@ -329,7 +329,7 @@ export default function RunningSeanceDetailPage({
                     <Area
                       type="monotone"
                       dataKey="alt"
-                      stroke="#7FC7FF"
+                      stroke="#32ade6"
                       strokeWidth={1.5}
                       fill="url(#elevGradDetail)"
                       isAnimationActive={false}
@@ -351,31 +351,31 @@ export default function RunningSeanceDetailPage({
                     data={cps.map((c) => ({ x: c.offsetSec / 60, value: c.value }))}
                     margin={{ top: 5, right: 5, left: -20, bottom: 0 }}
                   >
-                    <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
+                    <CartesianGrid stroke="rgba(0,0,0,0.04)" vertical={false} />
                     <XAxis
                       dataKey="x"
                       type="number"
                       domain={["dataMin", "dataMax"]}
                       tickFormatter={(v) => `${Math.round(Number(v))}'`}
-                      tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 9 }}
+                      tick={{ fill: "rgba(0,0,0,0.4)", fontSize: 9 }}
                       axisLine={false}
                       tickLine={false}
                     />
                     <YAxis
                       domain={[40, 280]}
                       ticks={[70, 110, 180, 250]}
-                      tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 9 }}
+                      tick={{ fill: "rgba(0,0,0,0.4)", fontSize: 9 }}
                       axisLine={false}
                       tickLine={false}
                       width={30}
                     />
-                    <ReferenceArea y1={70} y2={180} fill="#7AE582" fillOpacity={0.06} />
-                    <ReferenceLine y={70} stroke="#FF6B6B" strokeDasharray="3 3" strokeWidth={1} />
-                    <ReferenceLine y={180} stroke="#FFAE5C" strokeDasharray="3 3" strokeWidth={1} />
+                    <ReferenceArea y1={70} y2={180} fill="#34c759" fillOpacity={0.06} />
+                    <ReferenceLine y={70} stroke="#ff3b30" strokeDasharray="3 3" strokeWidth={1} />
+                    <ReferenceLine y={180} stroke="#ff9500" strokeDasharray="3 3" strokeWidth={1} />
                     <Tooltip
                       contentStyle={{
-                        background: "#1F1F23",
-                        border: "1px solid rgba(255,255,255,0.1)",
+                        background: "#ffffff",
+                        border: "1px solid rgba(0,0,0,0.1)",
                         borderRadius: "8px",
                         fontSize: "11px",
                       }}
@@ -385,9 +385,9 @@ export default function RunningSeanceDetailPage({
                     <Line
                       type="monotone"
                       dataKey="value"
-                      stroke="#B4A7FF"
+                      stroke="#5856d6"
                       strokeWidth={2}
-                      dot={{ r: 3, fill: "#B4A7FF" }}
+                      dot={{ r: 3, fill: "#5856d6" }}
                       isAnimationActive={false}
                     />
                   </LineChart>

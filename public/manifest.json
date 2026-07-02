@@ -4,8 +4,8 @@
   "description": "Fitness, Nutrition & Diabète T1 - Ton coach personnel",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0a0a0a",
-  "theme_color": "#00ff94",
+  "background_color": "#F2F2F7",
+  "theme_color": "#F2F2F7",
   "orientation": "portrait",
   "icons": [
     {

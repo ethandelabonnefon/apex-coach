@@ -166,7 +166,7 @@ export default function GlucoseChart() {
             </defs>
 
             <CartesianGrid
-              stroke="rgba(255,255,255,0.04)"
+              stroke="rgba(0,0,0,0.04)"
               vertical={false}
               strokeDasharray="2 4"
             />
@@ -223,12 +223,12 @@ export default function GlucoseChart() {
               tick={{ fill: "var(--text-tertiary)", fontSize: 10 }}
               tickFormatter={formatTick}
               minTickGap={40}
-              stroke="rgba(255,255,255,0.08)"
+              stroke="rgba(0,0,0,0.08)"
             />
             <YAxis
               domain={yDomain}
               tick={{ fill: "var(--text-tertiary)", fontSize: 10 }}
-              stroke="rgba(255,255,255,0.08)"
+              stroke="rgba(0,0,0,0.08)"
               width={32}
               ticks={[70, 180, 250]}
             />
