@@ -83,7 +83,6 @@ export default function DocteurPage() {
   const [error, setError] = useState<string | null>(null);
 
   const threadEndRef = useRef<HTMLDivElement>(null);
-  const analysisRequestedRef = useRef(false);
 
   const activeProfileName =
     diabetesConfig.profiles?.find(
@@ -190,7 +189,9 @@ export default function DocteurPage() {
     [buildContextPayload, days],
   );
 
-  // ─── Hydratation initiale : GET, puis bilan auto si conversation vide ─
+  // ─── Hydratation initiale : GET seul — pas de bilan auto (coût API). ──
+  // C'est à Ethan de cliquer "Lancer le bilan" quand il veut consommer un
+  // appel Claude (tous les 2-3 jours / chaque semaine, pas à chaque ouverture).
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -201,10 +202,6 @@ export default function DocteurPage() {
         const conv: DoctorMessage[] = json.conversation ?? [];
         setConversation(conv);
         setHydrating(false);
-        if (conv.length === 0 && !analysisRequestedRef.current) {
-          analysisRequestedRef.current = true;
-          postDoctor("analysis");
-        }
       } catch {
         if (!cancelled) {
           setHydrating(false);
@@ -283,17 +280,19 @@ export default function DocteurPage() {
         </div>
         <div className="flex gap-2">
           <Button
-            variant="secondary"
+            variant={lastAnalysis ? "secondary" : "primary"}
             size="sm"
             onClick={() => postDoctor("analysis")}
             disabled={loading !== null}
           >
             {loading === "analysis" ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
+            ) : lastAnalysis ? (
               <RefreshCw className="w-3.5 h-3.5" />
+            ) : (
+              <Stethoscope className="w-3.5 h-3.5" />
             )}
-            Relancer une analyse
+            {lastAnalysis ? "Relancer une analyse" : "Lancer le bilan"}
           </Button>
           <Button
             variant="danger"
@@ -323,6 +322,24 @@ export default function DocteurPage() {
             <Loader2 className="w-4 h-4 animate-spin text-[#5856d6]" />
             Le Docteur analyse tes {days} derniers jours (glycémie, injections,
             repas, sport)…
+          </div>
+        </Card>
+      )}
+
+      {!lastAnalysis && !hydrating && loading === null && (
+        <Card className="mb-8 border border-[#5856d6]/20 text-center">
+          <Stethoscope className="w-8 h-8 text-[#5856d6] mx-auto mb-3" />
+          <p className="text-sm text-black/60 leading-relaxed max-w-sm mx-auto">
+            Aucun bilan pour l&apos;instant. Choisis une période puis lance
+            l&apos;analyse — chaque bilan appelle Claude, inutile de le faire
+            tous les jours : tous les 2-3 jours ou une fois par semaine
+            suffit.
+          </p>
+          <div className="mt-4">
+            <Button onClick={() => postDoctor("analysis")}>
+              <Stethoscope className="w-4 h-4" />
+              Lancer le bilan
+            </Button>
           </div>
         </Card>
       )}
