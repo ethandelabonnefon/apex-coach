@@ -120,7 +120,8 @@ GÉNÈRE UN PLAN RUNNING PERSONNALISÉ avec cette structure JSON :
 Réponds UNIQUEMENT avec le JSON, sans texte avant ou après. Sois précis et scientifique. Calcule les paces en min/km basés sur la VMA. Réponds en français.`;
 
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-5",
+      thinking: { type: "disabled" },
       max_tokens: 6000,
       messages: [{ role: "user", content: prompt }],
     });

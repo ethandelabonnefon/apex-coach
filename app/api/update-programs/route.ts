@@ -69,7 +69,8 @@ GÉNÈRE UNE ANALYSE DES MODIFICATIONS À APPORTER AU PROGRAMME avec cette struc
 Réponds UNIQUEMENT avec le JSON, sans texte avant ou après. Sois précis et scientifique dans tes recommandations. Cite des études quand pertinent. Réponds en français.`;
 
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-5",
+      thinking: { type: "disabled" },
       max_tokens: 3000,
       messages: [{ role: "user", content: prompt }],
     });

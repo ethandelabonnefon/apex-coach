@@ -12,7 +12,6 @@ const LEGACY_KEY = "apex-coach-btn-pos";
 const DEFAULT_POS = { x: -1, y: -1 }; // -1 means "use default"
 
 function loadPosition(): { x: number; y: number } {
-  if (typeof window === "undefined") return DEFAULT_POS;
   try {
     // Drop any pre-v2 stored position so users on a stale overlap get reset.
     localStorage.removeItem(LEGACY_KEY);
@@ -29,7 +28,10 @@ function savePosition(pos: { x: number; y: number }) {
 }
 
 export default function CoachButton({ onClick, hasUnread }: CoachButtonProps) {
-  const [pos, setPos] = useState(loadPosition);
+  // Always start at DEFAULT_POS so server and client render the same HTML
+  // (null); the saved position is applied after mount to avoid hydration
+  // mismatches from reading localStorage during the first render.
+  const [pos, setPos] = useState(DEFAULT_POS);
   const isDragging = useRef(false);
   const hasMoved = useRef(false);
   const startTouch = useRef({ x: 0, y: 0 });
@@ -61,24 +63,27 @@ export default function CoachButton({ onClick, hasUnread }: CoachButtonProps) {
     return Math.max(Math.min(y, bottomZoneMin), bottomZoneMin - 60);
   }, []);
 
-  // Initialize position on mount: default to bottom-right, and force-snap any
-  // previously saved position to a safe edge zone.
+  // Initialize position on mount: load the saved position (localStorage is
+  // client-only, so this can't run during SSR/hydration), default to
+  // bottom-right, and force-snap any previously saved position to a safe
+  // edge zone.
   useEffect(() => {
     const size = 56;
     const margin = 16;
-    if (pos.x === -1 && pos.y === -1) {
+    const saved = loadPosition();
+    if (saved.x === -1 && saved.y === -1) {
       const defaultPos = clamp(window.innerWidth - size - margin, window.innerHeight - size - 100);
       setPos(defaultPos);
       savePosition(defaultPos);
       return;
     }
     const rightEdge = window.innerWidth - size - margin;
-    const centerX = pos.x + size / 2;
+    const centerX = saved.x + size / 2;
     const snappedX = centerX < window.innerWidth / 2 ? margin : rightEdge;
-    const snappedY = constrainY(pos.y);
-    if (snappedX !== pos.x || snappedY !== pos.y) {
-      const snapped = clamp(snappedX, snappedY);
-      setPos(snapped);
+    const snappedY = constrainY(saved.y);
+    const snapped = clamp(snappedX, snappedY);
+    setPos(snapped);
+    if (snapped.x !== saved.x || snapped.y !== saved.y) {
       savePosition(snapped);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

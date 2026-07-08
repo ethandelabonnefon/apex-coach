@@ -10,7 +10,7 @@
 - **Styling**: Tailwind CSS 4 + PostCSS, design system premium (tokens via `@theme`)
 - **Design System**: clsx 2.1.1, tailwind-merge 3.5, class-variance-authority 0.7.1
 - **Fonts**: Geist Sans (primary, via `next/font`), Geist Mono (chiffres/métriques via `.num`/`.num-hero`), Inter (fallback). JetBrains Mono abandonné en brand v1.
-- **AI**: Anthropic Claude Sonnet 4 (`@anthropic-ai/sdk` v0.80.0) - toutes les routes API
+- **AI**: Anthropic Claude Sonnet 5 (`claude-sonnet-5`, `@anthropic-ai/sdk` v0.80.0) - toutes les routes API. Migré depuis `claude-sonnet-4-20250514` (retiré le 15 juin 2026) le 3 juillet 2026, avec `thinking: {type: "disabled"}` sur chaque appel (Sonnet 5 active le thinking adaptatif par défaut, ce qui consommait le budget max_tokens avant le JSON)
 - **Charts**: Recharts 3.8.1
 - **Dates**: date-fns 4.1.0
 - **PWA**: Service worker + manifest.json + install banner
@@ -269,7 +269,7 @@ Refonte créative après analyse de Linear, Raycast, Arc, Strava, MacroFactor. I
 - **State** : Zustand avec `useStore()` + selectors, `useStore.setState()` pour resets
 - **Styling** : classes Tailwind inline, pas de CSS modules, theme via globals.css
 - **API routes** : `app/api/*/route.ts`, POST uniquement, JSON in/out
-- **IA** : Claude Sonnet 4 (`claude-sonnet-4-20250514`), max tokens varies (1200-6000)
+- **IA** : Claude Sonnet 5 (`claude-sonnet-5` + `thinking: {type: "disabled"}`), max tokens varies (1200-6000)
 - **Types** : centralises dans `types/index.ts`, interfaces explicites
 - **Formulaires** : multi-etapes avec state local (`useState`) + sauvegarde store a la soumission
 - **Boutons** : `touch-action: manipulation` + `cursor-pointer select-none` pour iOS
@@ -1337,4 +1337,4 @@ Finalisation du module running tracker : navigation vers les séances passées, 
 
 Le profil utilisateur par defaut est configure pour Ethan, 21 ans, 188cm, 85kg, DT1 sous Novorapid + FreeStyle Libre.
 
-Toutes les routes API utilisent Claude Sonnet 4 cote serveur (cle API dans .env.local). La generation de programmes utilise une strategie hybride (AI-first + fallback local) pour la fiabilite.
+Toutes les routes API utilisent Claude Sonnet 5 (`claude-sonnet-5`, thinking désactivé) cote serveur (cle API dans .env.local). La generation de programmes utilise une strategie hybride (AI-first + fallback local) pour la fiabilite.

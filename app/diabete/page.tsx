@@ -100,6 +100,7 @@ import {
   ShieldAlert,
   Shield,
   Sparkle,
+  Stethoscope,
 } from "lucide-react";
 
 // Mapping iconName (lib/meal-tags) → composant lucide-react
@@ -1058,6 +1059,9 @@ export default function DiabetePage() {
             </h1>
           </div>
           <div className="flex gap-1.5">
+            <NavIconLink href="/diabete/docteur" label="Docteur">
+              <Stethoscope className="w-4 h-4" />
+            </NavIconLink>
             <NavIconLink href="/diabete/historique" label="Historique">
               <History className="w-4 h-4" />
             </NavIconLink>

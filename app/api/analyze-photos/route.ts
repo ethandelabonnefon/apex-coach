@@ -68,7 +68,8 @@ Pour chaque section, sois spécifique et donne des détails actionnables.`,
     });
 
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-5",
+      thinking: { type: "disabled" },
       max_tokens: 2000,
       messages: [
         {

@@ -106,7 +106,8 @@ RAPPEL : MAXIMUM 6 exercices et 20 sets par séance. Pas plus.`;
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
           return await anthropic.messages.create({
-            model: "claude-sonnet-4-20250514",
+            model: "claude-sonnet-5",
+            thinking: { type: "disabled" },
             max_tokens: 4000,
             messages: [{ role: "user", content: prompt }],
           });
