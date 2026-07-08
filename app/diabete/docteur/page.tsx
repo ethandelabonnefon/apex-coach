@@ -21,6 +21,7 @@ import {
 } from "@/components/ui";
 import { useStore } from "@/lib/store";
 import { usePatternDetection } from "@/hooks/usePatternDetection";
+import type { InsulinRatio } from "@/types";
 import {
   Stethoscope,
   RefreshCw,
@@ -32,11 +33,19 @@ import {
 
 // ─── Types miroir du contrat API (lib/doctor) ─────────────────────────
 
+interface DoctorAction {
+  currentValue: number;
+  proposedValue: number;
+  unit: string;
+}
+
 interface DoctorSuggestion {
   area: string;
   suggestion: string;
   rationale: string;
   confidence: "low" | "medium" | "high";
+  /** Présent seulement pour ratio-/isf/basal — bouton "Valider" en un clic. */
+  action?: DoctorAction;
 }
 
 interface DoctorReplyMeta {
@@ -65,11 +74,115 @@ const CONFIDENCE_LABEL: Record<
   low: { label: "Confiance faible", color: "gray" },
 };
 
+// ─── Conversion U/10g ↔ g/U (même formule que /diabete/parametres) ────
+
+function gPerUtoUper10g(gPerU: number): number {
+  if (!gPerU || gPerU <= 0) return 1;
+  return 10 / gPerU;
+}
+function uPer10gToGperU(uPer10g: number): number {
+  if (!uPer10g || uPer10g <= 0) return 10;
+  return 10 / uPer10g;
+}
+function formatActionValue(value: number): string {
+  const rounded = Math.round(value * 100) / 100;
+  return (rounded === Math.floor(rounded) ? String(rounded) : rounded.toFixed(1)).replace(
+    ".",
+    ",",
+  );
+}
+
+const AREA_TO_MEAL_KEY: Record<string, "morning" | "lunch" | "snack" | "dinner"> = {
+  "ratio-matin": "morning",
+  "ratio-midi": "lunch",
+  "ratio-snack": "snack",
+  "ratio-soir": "dinner",
+};
+
+const AREA_LABEL: Record<string, string> = {
+  "ratio-matin": "le ratio du matin",
+  "ratio-midi": "le ratio du midi",
+  "ratio-snack": "le ratio du goûter",
+  "ratio-soir": "le ratio du soir",
+  isf: "l'ISF",
+  basal: "la basale (Lantus)",
+};
+
+const MEAL_META: Record<
+  "morning" | "lunch" | "snack" | "dinner",
+  { label: string; timeStart: string; timeEnd: string }
+> = {
+  morning: { label: "Petit-déjeuner", timeStart: "07:00", timeEnd: "10:00" },
+  lunch: { label: "Déjeuner", timeStart: "12:00", timeEnd: "14:00" },
+  snack: { label: "Goûter", timeStart: "16:00", timeEnd: "18:00" },
+  dinner: { label: "Dîner", timeStart: "19:00", timeEnd: "21:00" },
+};
+
+function SuggestionCard({
+  suggestion,
+  applied,
+  onApply,
+}: {
+  suggestion: DoctorSuggestion;
+  applied: boolean;
+  onApply: () => void;
+}) {
+  const conf = CONFIDENCE_LABEL[suggestion.confidence] ?? CONFIDENCE_LABEL.low;
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <span className="text-[11px] uppercase tracking-wider text-[#5856d6] font-semibold">
+          {suggestion.area}
+        </span>
+        <Badge color={conf.color}>{conf.label}</Badge>
+      </div>
+      <p className="text-sm font-medium text-black/75">{suggestion.suggestion}</p>
+      <p className="text-xs text-black/45 mt-1.5">{suggestion.rationale}</p>
+
+      {suggestion.action && (
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-[#5856d6]/[0.07] px-3 py-2.5 flex-wrap">
+          <p className="text-xs text-black/60">
+            Actuel{" "}
+            <span className="font-semibold text-black/80">
+              {formatActionValue(suggestion.action.currentValue)}
+            </span>
+            {" → "}
+            Proposé{" "}
+            <span className="font-semibold text-[#5856d6]">
+              {formatActionValue(suggestion.action.proposedValue)}
+            </span>{" "}
+            {suggestion.action.unit}
+          </p>
+          <Button
+            size="sm"
+            variant={applied ? "secondary" : "primary"}
+            onClick={onApply}
+            disabled={applied}
+          >
+            {applied ? (
+              <>
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Appliqué
+              </>
+            ) : (
+              "Valider"
+            )}
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default function DocteurPage() {
   const insulinLogs = useStore((s) => s.insulinLogs);
   const diabetesConfig = useStore((s) => s.diabetesConfig);
+  const profile = useStore((s) => s.profile);
   const completedWorkouts = useStore((s) => s.completedWorkouts);
   const completedRunningSessions = useStore((s) => s.completedRunningSessions);
+  const updateDiabetesConfig = useStore((s) => s.updateDiabetesConfig);
+  const updateRatioProfile = useStore((s) => s.updateRatioProfile);
+  const updateProfile = useStore((s) => s.updateProfile);
   const { patterns: detectedPatterns } = usePatternDetection({
     insulinLogs,
     diabetesConfig,
@@ -81,6 +194,7 @@ export default function DocteurPage() {
   const [hydrating, setHydrating] = useState(true);
   const [loading, setLoading] = useState<"analysis" | "chat" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [appliedActions, setAppliedActions] = useState<Set<string>>(new Set());
 
   const threadEndRef = useRef<HTMLDivElement>(null);
 
@@ -130,6 +244,25 @@ export default function DocteurPage() {
           glucoseBefore: log.glucoseBefore,
         }));
 
+      // Réglages actuels réels — source de vérité pour les boutons "Valider"
+      // (le serveur clampe toute proposition Claude à ces valeurs ± incrément max).
+      const currentSettings = {
+        "ratio-matin": Number(
+          gPerUtoUper10g(diabetesConfig.ratios.morning).toFixed(2),
+        ),
+        "ratio-midi": Number(
+          gPerUtoUper10g(diabetesConfig.ratios.lunch).toFixed(2),
+        ),
+        "ratio-snack": Number(
+          gPerUtoUper10g(diabetesConfig.ratios.snack).toFixed(2),
+        ),
+        "ratio-soir": Number(
+          gPerUtoUper10g(diabetesConfig.ratios.dinner).toFixed(2),
+        ),
+        isf: diabetesConfig.insulinSensitivityFactor,
+        basal: profile.basalDose,
+      };
+
       return {
         days: windowDays,
         injections: insulinLogs,
@@ -145,6 +278,7 @@ export default function DocteurPage() {
         })),
         workoutSessions,
         mealContext,
+        currentSettings,
       };
     },
     [
@@ -153,6 +287,9 @@ export default function DocteurPage() {
       completedRunningSessions,
       detectedPatterns,
       activeProfileName,
+      diabetesConfig.ratios,
+      diabetesConfig.insulinSensitivityFactor,
+      profile.basalDose,
     ],
   );
 
@@ -214,7 +351,6 @@ export default function DocteurPage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Scroll en bas du fil à chaque nouveau message
@@ -242,9 +378,84 @@ export default function DocteurPage() {
     }
   };
 
-  const lastAnalysis = [...conversation]
-    .reverse()
-    .find((m) => m.kind === "analysis" && m.meta);
+  // ─── Validation d'une action (le SEUL endroit qui écrit une dose) ─────
+  // Le serveur a déjà clampé proposedValue à l'incrément max autorisé
+  // (±1U basal, ±10% ratio, ±10mg/dL ISF) — ici on ne fait qu'écrire la
+  // valeur dans le store, jamais automatiquement, seulement sur ce clic.
+  const handleApplyAction = (
+    key: string,
+    area: string,
+    action: DoctorAction,
+  ) => {
+    const label = AREA_LABEL[area] ?? area;
+    const ok = confirm(
+      `Passer ${label} de ${formatActionValue(action.currentValue)} à ${formatActionValue(action.proposedValue)} ${action.unit} ?\n\nÀ valider avec ton suivi médical.`,
+    );
+    if (!ok) return;
+
+    if (area === "basal") {
+      updateRatioProfile(diabetesConfig.activeProfileId, {
+        basalDose: action.proposedValue,
+      });
+      updateProfile({ basalDose: action.proposedValue });
+    } else if (area === "isf") {
+      updateDiabetesConfig({ insulinSensitivityFactor: action.proposedValue });
+    } else if (area in AREA_TO_MEAL_KEY) {
+      const mealKey = AREA_TO_MEAL_KEY[area];
+      const newGperU = uPer10gToGperU(action.proposedValue);
+      const existingRatios = diabetesConfig.insulinRatios ?? [];
+
+      const newInsulinRatios: InsulinRatio[] = (
+        ["morning", "lunch", "snack", "dinner"] as const
+      ).map((k) => {
+        const existing = existingRatios.find((r) => r.mealKey === k);
+        if (k === mealKey) {
+          return {
+            id: existing?.id ?? `r-${k}`,
+            label: existing?.label ?? MEAL_META[k].label,
+            mealKey: k,
+            timeStart: existing?.timeStart ?? MEAL_META[k].timeStart,
+            timeEnd: existing?.timeEnd ?? MEAL_META[k].timeEnd,
+            ratio: newGperU,
+          };
+        }
+        return (
+          existing ?? {
+            id: `r-${k}`,
+            label: MEAL_META[k].label,
+            mealKey: k,
+            timeStart: MEAL_META[k].timeStart,
+            timeEnd: MEAL_META[k].timeEnd,
+            ratio: diabetesConfig.ratios[k],
+          }
+        );
+      });
+
+      updateDiabetesConfig({
+        insulinRatios: newInsulinRatios,
+        ratios: {
+          morning: newInsulinRatios.find((r) => r.mealKey === "morning")!.ratio,
+          lunch: newInsulinRatios.find((r) => r.mealKey === "lunch")!.ratio,
+          snack: newInsulinRatios.find((r) => r.mealKey === "snack")!.ratio,
+          dinner: newInsulinRatios.find((r) => r.mealKey === "dinner")!.ratio,
+        },
+      });
+    } else {
+      return;
+    }
+
+    setAppliedActions((prev) => new Set(prev).add(key));
+  };
+
+  let lastAnalysisIndex = -1;
+  for (let idx = conversation.length - 1; idx >= 0; idx--) {
+    if (conversation[idx].kind === "analysis" && conversation[idx].meta) {
+      lastAnalysisIndex = idx;
+      break;
+    }
+  }
+  const lastAnalysis =
+    lastAnalysisIndex >= 0 ? conversation[lastAnalysisIndex] : undefined;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
@@ -395,20 +606,16 @@ export default function DocteurPage() {
           {(lastAnalysis.meta.suggestions?.length ?? 0) > 0 && (
             <div className="space-y-3">
               {lastAnalysis.meta.suggestions!.map((s, i) => {
-                const conf = CONFIDENCE_LABEL[s.confidence] ?? CONFIDENCE_LABEL.low;
+                const key = `${lastAnalysisIndex}-${i}-${s.area}`;
                 return (
-                  <Card key={i}>
-                    <div className="flex items-start justify-between gap-3 mb-2">
-                      <span className="text-[11px] uppercase tracking-wider text-[#5856d6] font-semibold">
-                        {s.area}
-                      </span>
-                      <Badge color={conf.color}>{conf.label}</Badge>
-                    </div>
-                    <p className="text-sm font-medium text-black/75">
-                      {s.suggestion}
-                    </p>
-                    <p className="text-xs text-black/45 mt-1.5">{s.rationale}</p>
-                  </Card>
+                  <SuggestionCard
+                    key={key}
+                    suggestion={s}
+                    applied={appliedActions.has(key)}
+                    onApply={() =>
+                      s.action && handleApplyAction(key, s.area, s.action)
+                    }
+                  />
                 );
               })}
             </div>
@@ -443,7 +650,7 @@ export default function DocteurPage() {
                 </div>
               </div>
             ) : (
-              <div key={i} className="flex justify-start">
+              <div key={i} className="flex flex-col items-start gap-2">
                 <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-black/[0.05] px-4 py-2.5">
                   <div className="flex items-center gap-1.5 mb-1">
                     <Stethoscope className="w-3.5 h-3.5 text-[#5856d6]" />
@@ -455,6 +662,29 @@ export default function DocteurPage() {
                     {m.content}
                   </p>
                 </div>
+
+                {/* Suggestions actionnables : déjà affichées plus haut pour
+                    le dernier bilan (section "Bilan du Docteur") — ici on ne
+                    les remontre que pour les autres messages (chat / anciens
+                    bilans), pour éviter la double carte. */}
+                {i !== lastAnalysisIndex &&
+                  (m.meta?.suggestions?.length ?? 0) > 0 && (
+                    <div className="w-full max-w-[85%] space-y-2">
+                      {m.meta!.suggestions!.map((s, si) => {
+                        const key = `${i}-${si}-${s.area}`;
+                        return (
+                          <SuggestionCard
+                            key={key}
+                            suggestion={s}
+                            applied={appliedActions.has(key)}
+                            onApply={() =>
+                              s.action && handleApplyAction(key, s.area, s.action)
+                            }
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
               </div>
             ),
           )}

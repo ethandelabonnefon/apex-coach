@@ -15,6 +15,7 @@
  */
 
 import { kv } from "@vercel/kv";
+import type { ActionableSuggestion } from "./actionable";
 
 export const DOCTOR_USER_ID = "me";
 
@@ -27,12 +28,7 @@ const MAX_STORED_MESSAGES = 200;
 export interface DoctorReplyMeta {
   summary?: string;
   highlights?: string[];
-  suggestions?: {
-    area: string;
-    suggestion: string;
-    rationale: string;
-    confidence: "low" | "medium" | "high";
-  }[];
+  suggestions?: ActionableSuggestion[];
   warnings?: string[];
 }
 

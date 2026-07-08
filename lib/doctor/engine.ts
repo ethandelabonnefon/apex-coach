@@ -9,6 +9,8 @@
  *  - fenêtre < 14j → suggestions vidées (observation seulement) + warning
  *  - CV > 50 → suggestions ratio/isf/basal retirées + warning
  *  - doses numériques non ancrées dans le contexte → retirées (dose-guard)
+ *  - action structurée (bouton "Valider") : currentValue toujours ré-écrasée
+ *    par le vrai réglage, proposedValue clampée aux incréments T1D (actionable.ts)
  */
 
 import {
@@ -22,6 +24,11 @@ import {
   sanitizeDoses,
   DOSE_WARNING,
 } from "./dose-guard";
+import {
+  sanitizeActions,
+  type ActionableSuggestion,
+  type DoctorCurrentSettings,
+} from "./actionable";
 import { T1D_SAFETY_RULES } from "./t1d-safety-rules";
 import {
   truncateForContext,
@@ -44,6 +51,8 @@ export interface DoctorRequestBody {
   workoutSessions?: WorkoutSummary[];
   mealContext?: MealContextEntry[];
   activeProfileName?: string;
+  /** Réglages actuels réels (ratios/ISF/basal) — source de vérité pour les actions "Valider". */
+  currentSettings?: DoctorCurrentSettings;
 }
 
 export interface DoctorReply extends DoctorReplyMeta {
@@ -83,6 +92,12 @@ Tu reçois un RAPPORT déterministe (TIR, patterns horaires, réponses post-repa
 
 Quand une hypothèse implique une chaîne (ex. baisser la lente), tu SIGNALES les répercussions à revoir (bolus matin/midi/soir) sans donner de dose.
 
+Tu reçois aussi un bloc "réglages actuels" (currentSettings) avec les vraies valeurs actuelles pour les zones ratio-matin / ratio-midi / ratio-snack / ratio-soir / isf / basal (quand disponibles). Pour CES zones précises, en plus du texte, tu peux ajouter un champ "action" structuré (voir format JSON ci-dessous) pour qu'Ethan puisse valider le changement en un clic dans l'app :
+  - "currentValue" DOIT être exactement la valeur donnée dans currentSettings pour cette zone (jamais une valeur que tu inventes ou lis dans le rapport).
+  - "proposedValue" DOIT respecter les incréments max de la règle 2 (±1U basal, ±10% ratio, ±10 mg/dL ISF) — un serveur clampe de toute façon si tu dépasses, donc reste réaliste.
+  - N'ajoute JAMAIS d'action sur "timing", "regularite" ou "autre" — ce ne sont pas des réglages numériques uniques.
+  - Si currentSettings ne contient pas la zone concernée, ne mets pas d'action (texte seul).
+
 ${T1D_SAFETY_RULES}
 
 Termine toute suggestion d'ajustement par : "Hypothèse à valider avec ton suivi médical." Réponds en français, clair et non anxiogène.
@@ -101,13 +116,20 @@ Tu réponds UNIQUEMENT avec un objet JSON valide (pas de markdown, pas de prose 
       "area": "ratio-midi" | "ratio-matin" | "ratio-soir" | "ratio-snack" | "isf" | "basal" | "timing" | "regularite" | "autre",
       "suggestion": "Phrase actionnable courte",
       "rationale": "Une phrase qui explique POURQUOI à partir des stats (chiffres précis du rapport)",
-      "confidence": "low" | "medium" | "high"
+      "confidence": "low" | "medium" | "high",
+      "action": {
+        "currentValue": "nombre — copié tel quel depuis currentSettings pour cette zone",
+        "proposedValue": "nombre — dans l'incrément max autorisé",
+        "unit": "U/10g" | "U" | "mg/dL par U"
+      }
     }
   ],
   "warnings": ["Alertes safety — vide si rien"],
   "message": "TOUJOURS rempli : le texte principal affiché à Ethan, en texte brut (PAS de markdown : pas de **, pas de #, tirets simples autorisés). Mode BILAN : synthèse conversationnelle du bilan. Mode CHAT : ta réponse à sa question, en t'appuyant sur le rapport et l'historique de conversation.",
   "generatedAt": "ISO timestamp"
 }
+
+Le champ "action" est OPTIONNEL — omets-le complètement (pas de clé "action") pour toute suggestion sur "timing", "regularite", "autre", ou quand currentSettings n'a pas la zone.
 
 Tu produis MAX 4 suggestions, max 4 highlights, max 3 warnings. Tout en français.`;
 
@@ -197,10 +219,11 @@ export function applyHardGuards(
     days: number;
     cv: number;
     allowedNumbers: Set<number>;
+    currentSettings?: DoctorCurrentSettings;
   },
 ): DoctorReply {
   const warnings = [...(reply.warnings ?? [])];
-  let suggestions = reply.suggestions ?? [];
+  let suggestions: ActionableSuggestion[] = reply.suggestions ?? [];
 
   // Règle héritée de weekly-insight : < 14j → observation seulement
   if (args.days < 14 && suggestions.length > 0) {
@@ -222,6 +245,12 @@ export function applyHardGuards(
       );
     }
   }
+
+  // Actions structurées ("Valider" en un clic) : currentValue toujours
+  // ré-écrasée par le vrai réglage, proposedValue clampée aux incréments T1D.
+  const actionResult = sanitizeActions(suggestions, args.currentSettings);
+  suggestions = actionResult.suggestions;
+  warnings.push(...actionResult.warnings);
 
   // Anti-hallucination : doses non ancrées dans le contexte
   let doseRemoved = false;
@@ -275,9 +304,14 @@ export async function runDoctor(
 
   const history = truncateForContext(await deps.conversation.read(userId));
 
-  const contextBlock = `CONTEXTE (rapport déterministe + patterns + sport + repas — période ${days}j, ${new Date(fromMs).toLocaleDateString("fr-FR")} → ${new Date(now).toLocaleDateString("fr-FR")}) :
+  const contextPayload = {
+    ...payload,
+    currentSettings: body.currentSettings ?? null,
+  };
 
-${JSON.stringify(payload)}
+  const contextBlock = `CONTEXTE (rapport déterministe + patterns + sport + repas + réglages actuels — période ${days}j, ${new Date(fromMs).toLocaleDateString("fr-FR")} → ${new Date(now).toLocaleDateString("fr-FR")}) :
+
+${JSON.stringify(contextPayload)}
 
 Tu t'appuies UNIQUEMENT sur ce contexte et sur la conversation qui suit. Aucun chiffre inventé.`;
 
@@ -300,8 +334,8 @@ Tu t'appuies UNIQUEMENT sur ce contexte et sur la conversation qui suit. Aucun c
   let reply = parseDoctorReply(raw);
   if (!reply.generatedAt) reply.generatedAt = new Date(now).toISOString();
 
-  // Ancres autorisées pour les doses : contexte + historique + message user
-  const allowedNumbers = collectAllowedNumbers(payload, [
+  // Ancres autorisées pour les doses : contexte (+ réglages actuels) + historique + message user
+  const allowedNumbers = collectAllowedNumbers(contextPayload, [
     ...history.map((m) => m.content),
     body.message ?? "",
   ]);
@@ -310,6 +344,7 @@ Tu t'appuies UNIQUEMENT sur ce contexte et sur la conversation qui suit. Aucun c
     days,
     cv: report.overall.cv,
     allowedNumbers,
+    currentSettings: body.currentSettings,
   });
 
   // Persistance
@@ -323,21 +358,28 @@ Tu t'appuies UNIQUEMENT sur ce contexte et sur la conversation qui suit. Aucun c
       kind: "chat",
     });
   }
+  // meta est toujours attachée (pas seulement en mode analysis) : une réponse
+  // de chat peut elle aussi porter des suggestions actionnables ("Valider").
+  const hasMeta =
+    !!reply.summary ||
+    !!reply.highlights?.length ||
+    !!reply.suggestions?.length ||
+    !!reply.warnings?.length;
+
   toAppend.push({
     role: "assistant",
     content:
       body.mode === "analysis" ? formatAnalysisForHistory(reply) : reply.message,
     createdAt: new Date().toISOString(),
     kind: body.mode === "analysis" ? "analysis" : "chat",
-    meta:
-      body.mode === "analysis"
-        ? {
-            summary: reply.summary,
-            highlights: reply.highlights,
-            suggestions: reply.suggestions,
-            warnings: reply.warnings,
-          }
-        : undefined,
+    meta: hasMeta
+      ? {
+          summary: reply.summary,
+          highlights: reply.highlights,
+          suggestions: reply.suggestions,
+          warnings: reply.warnings,
+        }
+      : undefined,
   });
 
   const conversation = await deps.conversation.append(userId, toAppend);
