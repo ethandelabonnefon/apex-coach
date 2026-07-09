@@ -54,6 +54,12 @@ interface NightBrainProps {
   onConfirmSplit?: () => void;
   /** Ajuste les units du split en attente (0 = annuler). */
   onAdjustSplit?: (newUnits: number) => void;
+  /**
+   * Réinitialise la calibration nuit à partir de `sinceMs` (changement de
+   * basale non tamponné, ex. fait avant que l'app le tracke). Les données
+   * antérieures sont ignorées par la calibration.
+   */
+  onResetCalibration?: (sinceMs: number) => void;
 }
 
 // ── Style par tone ──────────────────────────────────────────────────
@@ -99,6 +105,7 @@ export default function NightBrain({
   onLogCorrection,
   onConfirmSplit,
   onAdjustSplit,
+  onResetCalibration,
 }: NightBrainProps) {
   const [open, setOpen] = useState(true);
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -281,18 +288,32 @@ export default function NightBrain({
           )}
 
           {/* Statut de calibration perso */}
-          {calibration && <CalibrationLine c={calibration} />}
+          {calibration && (
+            <CalibrationLine c={calibration} onReset={onResetCalibration} />
+          )}
         </>
       )}
     </section>
   );
 }
 
+/** Options de rétro-datage du reset (jours en arrière). */
+const RESET_CHOICES: { label: string; daysAgo: number }[] = [
+  { label: "Aujourd'hui", daysAgo: 0 },
+  { label: "Il y a 2 j", daysAgo: 2 },
+  { label: "Il y a 4 j", daysAgo: 4 },
+  { label: "Il y a 7 j", daysAgo: 7 },
+];
+
 function CalibrationLine({
   c,
+  onReset,
 }: {
   c: NonNullable<NightBrainProps["calibration"]>;
+  onReset?: (sinceMs: number) => void;
 }) {
+  const [choosing, setChoosing] = useState(false);
+
   const parts: string[] = [];
   if (c.driftNights >= 4) {
     const sign = c.driftPerHour > 0 ? "+" : "";
@@ -304,26 +325,72 @@ function CalibrationLine({
   if (c.verifiedNights > 0) parts.push(`${c.verifiedNights} nuit${c.verifiedNights > 1 ? "s" : ""} vérifiée${c.verifiedNights > 1 ? "s" : ""}`);
   if (c.bias) parts.push(`biais appris ${c.bias > 0 ? "+" : ""}${c.bias}`);
 
-  if (c.recalibratingSince) {
-    const since = new Date(c.recalibratingSince).toLocaleDateString("fr-FR", {
-      day: "2-digit",
-      month: "2-digit",
-    });
-    return (
-      <p className="mt-3 pt-3 border-t border-border-subtle text-[10px] text-text-tertiary leading-snug">
-        {parts.length > 0
-          ? `Recalibrage depuis ton changement de basale du ${since} : ${parts.join(" · ")}.`
-          : `Recalibrage en cours depuis ton changement de basale du ${since} (encore quelques nuits propres avant que la dérive/dawn se réajustent) — prédictions en mode par défaut d'ici là.`}
-      </p>
+  function handleChoice(daysAgo: number, label: string) {
+    if (!onReset) return;
+    const ok = confirm(
+      `Recalibrer le plan de la nuit à partir de « ${label.toLowerCase()} » ?\n\nLes nuits antérieures (ancienne dose de lente) seront ignorées. La calibration se refait sur les nuits suivantes (~2-4 jours pour retrouver la confiance).`,
     );
+    if (!ok) return;
+    onReset(Date.now() - daysAgo * 86_400_000);
+    setChoosing(false);
   }
 
+  const statusText = c.recalibratingSince
+    ? (() => {
+        const since = new Date(c.recalibratingSince).toLocaleDateString("fr-FR", {
+          day: "2-digit",
+          month: "2-digit",
+        });
+        return parts.length > 0
+          ? `Recalibrage depuis ton changement de basale du ${since} : ${parts.join(" · ")}.`
+          : `Recalibrage en cours depuis ton changement de basale du ${since} (encore quelques nuits propres avant que la dérive/dawn se réajustent) — prédictions en mode par défaut d'ici là.`;
+      })()
+    : parts.length > 0
+      ? `Calibré sur tes données : ${parts.join(" · ")}.`
+      : "Calibration en cours — il faut quelques nuits d'archive pour personnaliser.";
+
   return (
-    <p className="mt-3 pt-3 border-t border-border-subtle text-[10px] text-text-tertiary leading-snug">
-      {parts.length > 0
-        ? `Calibré sur tes données : ${parts.join(" · ")}.`
-        : "Calibration en cours — il faut quelques nuits d'archive pour personnaliser."}
-    </p>
+    <div className="mt-3 pt-3 border-t border-border-subtle">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[10px] text-text-tertiary leading-snug min-w-0">{statusText}</p>
+        {onReset && !choosing && (
+          <button
+            type="button"
+            onClick={() => setChoosing(true)}
+            className="shrink-0 text-[10px] font-medium text-text-tertiary underline underline-offset-2 hover:text-text-secondary transition-colors tap-scale"
+          >
+            Recalibrer
+          </button>
+        )}
+      </div>
+      {choosing && (
+        <div className="mt-2 animate-slide-up">
+          <p className="text-[10px] text-text-secondary mb-1.5">
+            Tu as changé ta dose de lente quand ? La calibration ignorera tout ce qui précède.
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {RESET_CHOICES.map((choice) => (
+              <button
+                key={choice.daysAgo}
+                type="button"
+                onClick={() => handleChoice(choice.daysAgo, choice.label)}
+                className="px-2.5 py-1 rounded-lg bg-bg-tertiary border border-border-default text-[10px] font-medium text-text-secondary hover:border-diabete/50 hover:text-diabete transition-colors tap-scale"
+              >
+                {choice.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setChoosing(false)}
+              aria-label="Annuler"
+              className="p-1 rounded-md text-text-tertiary hover:text-text-secondary transition-colors tap-scale"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

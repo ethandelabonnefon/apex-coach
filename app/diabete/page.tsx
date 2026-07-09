@@ -188,6 +188,7 @@ function trendNumberToArrow(trend?: number): string {
 export default function DiabetePage() {
   const {
     profile,
+    updateProfile,
     diabetesConfig,
     glucoseReadings,
     insulinLogs,
@@ -1241,6 +1242,12 @@ export default function DiabetePage() {
             onLogCorrection={handleBedtimeCorrection}
             onConfirmSplit={handleNightConfirmSplit}
             onAdjustSplit={handleAdjustBedtimeSplit}
+            onResetCalibration={(sinceMs) =>
+              // Reset manuel : changement de lente fait AVANT que l'app le
+              // tracke (ou re-saisie de la même valeur → pas de tampon auto).
+              // updateProfile merge le champ tel quel sans toucher basalDose.
+              updateProfile({ basalDoseChangedAt: new Date(sinceMs).toISOString() })
+            }
           />
         </>
       )}
