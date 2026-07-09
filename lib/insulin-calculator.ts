@@ -46,6 +46,22 @@ function getRatioForMeal(config: DiabetesConfig, mealTime: MealTime): number {
   return config.ratios.lunch;
 }
 
+/**
+ * Déduit le repas depuis l'heure locale (juillet 2026) — pour pré-sélectionner
+ * le bon ratio sans que l'utilisateur y pense. Fenêtres calées sur le rythme
+ * réel d'Ethan (goûter ~17h30, dîner ~19h) :
+ *   04h00-10h59 → matin · 11h00-14h59 → midi · 15h00-18h29 → goûter
+ *   18h30-03h59 → soir (un vrai repas nocturne se comporte comme un dîner ;
+ *   une injection sans repas passe par « Autre » de toute façon).
+ */
+export function inferMealTimeFromClock(date: Date): MealTime {
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  if (minutes >= 4 * 60 && minutes < 11 * 60) return 'morning';
+  if (minutes >= 11 * 60 && minutes < 15 * 60) return 'lunch';
+  if (minutes >= 15 * 60 && minutes < 18 * 60 + 30) return 'snack';
+  return 'dinner';
+}
+
 /** Tendance Libre numérique (Abbott) → ajustement insuline en U.
  *  Phase 11 — slide rule publié pour bolus pré-prandial. */
 function trendAdjustmentUnits(trend?: number): number {

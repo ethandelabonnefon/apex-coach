@@ -9,6 +9,7 @@ import {
   getDigestiveComplexity,
   getInjectionTimingAdvice,
   computePreSportBriefing,
+  inferMealTimeFromClock,
 } from "@/lib/insulin-calculator";
 import { DIABETES_CONFIG } from "@/lib/constants";
 import type { MealTime, SplitDoseReminder } from "@/types";
@@ -218,7 +219,11 @@ export default function DiabetePage() {
 
   // ─── Bolus calculator ─────────────────────────
   const [carbsGrams, setCarbsGrams] = useState(60);
+  // Repas auto-déduit de l'heure (juillet 2026) : plus besoin d'y penser, le
+  // bon ratio est pré-sélectionné. Un tap manuel sur un chip reprend la main
+  // (mealTimeTouched) et l'auto-sync s'arrête pour la session.
   const [mealTime, setMealTime] = useState<MealTime>("lunch");
+  const [mealTimeTouched, setMealTimeTouched] = useState(false);
   const [currentGlucose, setCurrentGlucose] = useState(120);
   const [isPreWorkout, setIsPreWorkout] = useState(false);
   const [workoutType, setWorkoutType] = useState<"muscu" | "running" | null>(null);
@@ -295,6 +300,15 @@ export default function DiabetePage() {
     const id = setInterval(() => setNowTick(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
+
+  // ─── Repas auto selon l'heure ─────────────────
+  // Se cale au mount (client uniquement — pas de mismatch SSR) puis suit le
+  // tick 60s : si l'app reste ouverte de 14h55 à 15h05, le chip passe tout
+  // seul de « Déjeuner » à « Goûter ». Un choix manuel gèle l'auto-sync.
+  useEffect(() => {
+    if (mealTimeTouched) return;
+    setMealTime(inferMealTimeFromClock(new Date(nowTick)));
+  }, [nowTick, mealTimeTouched]);
   const iob = useMemo(() => {
     const now = nowTick;
     const recentInjections = insulinLogs
@@ -1812,9 +1826,24 @@ export default function DiabetePage() {
           )}
         </div>
 
-        {/* Meal selector */}
+        {/* Meal selector — auto-sélectionné selon l'heure, override manuel possible */}
         <div className="mb-5">
-          <p className="label mb-2">Repas</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="label">Repas</p>
+            {mealTimeTouched ? (
+              <button
+                type="button"
+                onClick={() => setMealTimeTouched(false)}
+                className="text-[10px] font-medium text-text-tertiary underline underline-offset-2 hover:text-text-secondary transition-colors tap-scale"
+              >
+                Revenir en auto
+              </button>
+            ) : (
+              <span className="text-[10px] text-text-tertiary">
+                auto selon l&apos;heure
+              </span>
+            )}
+          </div>
           <div className="grid grid-cols-5 gap-2">
             {MEAL_OPTIONS.map((m) => (
               <button
@@ -1822,6 +1851,7 @@ export default function DiabetePage() {
                 type="button"
                 onClick={() => {
                   setMealTime(m.value);
+                  setMealTimeTouched(true);
                   if (m.value === "other") setCarbsGrams(0);
                 }}
                 className={`py-2 text-xs font-medium rounded-lg border transition-all tap-scale ${
