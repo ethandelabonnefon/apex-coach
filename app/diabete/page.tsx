@@ -776,23 +776,38 @@ export default function DiabetePage() {
   }, [nowTick]);
 
   // ─── Calibration nuit perso (archive + injections + backtest) ─────
+  // Reset sur changement de basale : la dérive/dawn/biais mesurés avant un
+  // changement de dose Lantus ne reflètent plus la physio actuelle. On ignore
+  // tout ce qui précède `basalDoseChangedAt` pour repartir propre et se
+  // recalibrer sur les nuits post-changement (seuils de confiance existants
+  // = 4 nuits mini, donc ~2-4 jours avant que la calibration reparte).
+  const basalChangeMs = profile.basalDoseChangedAt
+    ? new Date(profile.basalDoseChangedAt).getTime()
+    : null;
   const nightCalibration = useMemo(() => {
-    const pts = archivePoints as ArchivedPoint[];
-    const injections = insulinLogs.map((l) => ({
-      injectedAt: new Date(l.injectedAt).toISOString(),
-      units: l.units,
-    }));
+    const allPts = archivePoints as ArchivedPoint[];
+    const pts = basalChangeMs ? allPts.filter((p) => p.t >= basalChangeMs) : allPts;
+    const injections = insulinLogs
+      .filter((l) => !basalChangeMs || new Date(l.injectedAt).getTime() >= basalChangeMs)
+      .map((l) => ({
+        injectedAt: new Date(l.injectedAt).toISOString(),
+        units: l.units,
+      }));
+    const logsSinceChange = basalChangeMs
+      ? nightPredictionLogs.filter((l) => new Date(l.createdAt).getTime() >= basalChangeMs)
+      : nightPredictionLogs;
     const drift = estimateNightDrift(pts, injections);
     const dawn = estimateDawnCurve(pts);
-    const resolved = resolveNightLogs(nightPredictionLogs, pts, nowTick);
+    const resolved = resolveNightLogs(logsSinceChange, pts, nowTick);
     const bias = estimateWakeupBias(resolved);
     return {
       drift,
       dawn,
       bias,
       verifiedNights: resolved.filter((r) => r.errorMgDl !== undefined).length,
+      recalibratingSince: basalChangeMs ? profile.basalDoseChangedAt : undefined,
     };
-  }, [archivePoints, insulinLogs, nightPredictionLogs, nowTick]);
+  }, [archivePoints, insulinLogs, nightPredictionLogs, nowTick, basalChangeMs, profile.basalDoseChangedAt]);
 
   // Persiste la résolution des prédictions passées (backtest) dès que
   // l'archive permet de remplir de nouvelles nuits.
@@ -1220,6 +1235,7 @@ export default function DiabetePage() {
               dawnDays: nightCalibration.dawn.sampleDays,
               verifiedNights: nightCalibration.verifiedNights,
               bias: nightCalibration.bias.bias,
+              recalibratingSince: nightCalibration.recalibratingSince,
             }}
             onLogHypoCarbs={handleNightHypoCarbs}
             onLogCorrection={handleBedtimeCorrection}

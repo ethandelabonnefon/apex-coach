@@ -11,6 +11,9 @@ export interface UserProfile {
   insulinSystem: string;
   insulinRapid: string;
   basalDose: number;
+  /** ISO de la dernière fois où basalDose a réellement changé de valeur. Sert à
+   * réinitialiser la calibration nuit (dérive/dawn/biais) — cf. lib/night-calibration.ts. */
+  basalDoseChangedAt?: string;
   hasCGM: boolean;
   cgmType: string;
   vo2max: number;

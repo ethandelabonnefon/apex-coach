@@ -43,6 +43,8 @@ interface NightBrainProps {
     dawnDays: number;
     verifiedNights: number;
     bias: number;
+    /** ISO du dernier changement de basale si la calibration a été reset. */
+    recalibratingSince?: string;
   };
   /** Logge une prise de glucides en cas d'hypo (crée un HypoEvent). */
   onLogHypoCarbs?: (grams: number) => void;
@@ -301,6 +303,20 @@ function CalibrationLine({
   if (c.dawnDays >= 4) parts.push(`dawn mesuré sur ${c.dawnDays} j`);
   if (c.verifiedNights > 0) parts.push(`${c.verifiedNights} nuit${c.verifiedNights > 1 ? "s" : ""} vérifiée${c.verifiedNights > 1 ? "s" : ""}`);
   if (c.bias) parts.push(`biais appris ${c.bias > 0 ? "+" : ""}${c.bias}`);
+
+  if (c.recalibratingSince) {
+    const since = new Date(c.recalibratingSince).toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "2-digit",
+    });
+    return (
+      <p className="mt-3 pt-3 border-t border-border-subtle text-[10px] text-text-tertiary leading-snug">
+        {parts.length > 0
+          ? `Recalibrage depuis ton changement de basale du ${since} : ${parts.join(" · ")}.`
+          : `Recalibrage en cours depuis ton changement de basale du ${since} (encore quelques nuits propres avant que la dérive/dawn se réajustent) — prédictions en mode par défaut d'ici là.`}
+      </p>
+    );
+  }
 
   return (
     <p className="mt-3 pt-3 border-t border-border-subtle text-[10px] text-text-tertiary leading-snug">

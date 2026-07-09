@@ -173,7 +173,21 @@ export const useStore = create<AppState>()(
   persist(
     (set) => ({
       profile: USER_PROFILE,
-      updateProfile: (updates) => set((s) => ({ profile: { ...s.profile, ...updates } })),
+      updateProfile: (updates) => set((s) => {
+        // Changement réel de basale → reset du point de départ de la calibration
+        // nuit (dérive/dawn/biais appris) : cf. lib/night-calibration.ts, ces
+        // valeurs mesurées deviennent fausses tant qu'on n'a pas re-mesuré sur
+        // des nuits post-changement.
+        const basalChanged =
+          updates.basalDose !== undefined && updates.basalDose !== s.profile.basalDose;
+        return {
+          profile: {
+            ...s.profile,
+            ...updates,
+            ...(basalChanged ? { basalDoseChangedAt: new Date().toISOString() } : {}),
+          },
+        };
+      }),
 
       diabetesConfig: DIABETES_CONFIG,
       updateDiabetesConfig: (updates) => set((s) => {
@@ -207,6 +221,9 @@ export const useStore = create<AppState>()(
       setActiveRatioProfile: (profileId) => set((s) => {
         const target = s.diabetesConfig.profiles.find((p) => p.id === profileId);
         if (!target) return {};
+        // Changement réel de basale (bascule vers un profil à dose différente)
+        // → reset de la calibration nuit, cf. updateRatioProfile ci-dessous.
+        const basalChanged = target.basalDose !== s.profile.basalDose;
         return {
           diabetesConfig: {
             ...s.diabetesConfig,
@@ -215,7 +232,11 @@ export const useStore = create<AppState>()(
             insulinRatios: target.insulinRatios.map((r) => ({ ...r })),
             insulinSensitivityFactor: target.insulinSensitivityFactor,
           },
-          profile: { ...s.profile, basalDose: target.basalDose },
+          profile: {
+            ...s.profile,
+            basalDose: target.basalDose,
+            ...(basalChanged ? { basalDoseChangedAt: new Date().toISOString() } : {}),
+          },
         };
       }),
       addRatioProfile: (profile) => set((s) => ({
@@ -231,6 +252,13 @@ export const useStore = create<AppState>()(
         const isActive = s.diabetesConfig.activeProfileId === profileId;
         const active = updatedProfiles.find((p) => p.id === profileId);
         if (isActive && active) {
+          // Changement réel de basale → reset du point de départ de la
+          // calibration nuit (dérive/dawn/biais appris, cf.
+          // lib/night-calibration.ts) : comparé à la valeur AVANT cette
+          // mise à jour (s.profile.basalDose), pas après, pour bien détecter
+          // le changement même si ce setter est le seul à toucher le profil.
+          const basalChanged =
+            updates.basalDose !== undefined && updates.basalDose !== s.profile.basalDose;
           // Resync les miroirs pour le profil actif
           return {
             diabetesConfig: {
@@ -240,7 +268,11 @@ export const useStore = create<AppState>()(
               insulinRatios: active.insulinRatios.map((r) => ({ ...r })),
               insulinSensitivityFactor: active.insulinSensitivityFactor,
             },
-            profile: { ...s.profile, basalDose: active.basalDose },
+            profile: {
+              ...s.profile,
+              basalDose: active.basalDose,
+              ...(basalChanged ? { basalDoseChangedAt: new Date().toISOString() } : {}),
+            },
           };
         }
         return {
