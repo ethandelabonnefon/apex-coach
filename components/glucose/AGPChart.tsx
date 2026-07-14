@@ -131,20 +131,20 @@ export default function AGPChart({ points, days = 14 }: AGPChartProps) {
                 <ReferenceArea
                   y1={70}
                   y2={180}
-                  fill="#34c759"
+                  fill="var(--success)"
                   fillOpacity={0.06}
                   stroke="none"
                 />
                 {/* Seuils 70 et 180 en pointillés */}
                 <ReferenceLine
                   y={70}
-                  stroke="#ff3b30"
+                  stroke="var(--error)"
                   strokeDasharray="3 3"
                   strokeWidth={1}
                 />
                 <ReferenceLine
                   y={180}
-                  stroke="#ff9500"
+                  stroke="var(--warning)"
                   strokeDasharray="3 3"
                   strokeWidth={1}
                 />
@@ -171,7 +171,7 @@ export default function AGPChart({ points, days = 14 }: AGPChartProps) {
                 <Line
                   type="monotone"
                   dataKey="median"
-                  stroke="#007aff"
+                  stroke="var(--accent)"
                   strokeWidth={2}
                   dot={false}
                   isAnimationActive={false}

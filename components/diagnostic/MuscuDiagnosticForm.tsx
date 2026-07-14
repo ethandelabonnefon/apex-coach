@@ -11,13 +11,13 @@ interface SelectOption { value: string; label: string; description?: string; rec
 
 function OptionButton({ option, selected, onClick }: { option: SelectOption; selected: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} className={`text-left p-3 rounded-xl border transition-all ${selected ? "bg-accent-subtle border-[#007aff]/30 text-text-primary" : "bg-black/[0.03] border-black/[0.06] text-black/60 hover:bg-black/[0.06]"}`}>
+    <button onClick={onClick} className={`text-left p-3 rounded-xl border transition-all ${selected ? "bg-accent-subtle border-[var(--accent)]/30 text-text-primary" : "bg-bg-hover border-border-subtle text-text-secondary hover:bg-bg-hover"}`}>
       <p className="text-sm font-medium">{option.label}</p>
-      {option.description && <p className="text-xs text-black/35 mt-0.5">{option.description}</p>}
-      {option.recommendation && selected && <p className="text-[10px] text-[#32ade6] mt-1">{option.recommendation}</p>}
-      {option.t1dNote && selected && <p className="text-[10px] text-[#ff9500] mt-1">T1D : {option.t1dNote}</p>}
-      {option.warning && selected && <p className="text-[10px] text-[#ff3b30] mt-1">{option.warning}</p>}
-      {option.note && <p className="text-[10px] text-black/25 mt-0.5">{option.note}</p>}
+      {option.description && <p className="text-xs text-text-tertiary mt-0.5">{option.description}</p>}
+      {option.recommendation && selected && <p className="text-[10px] text-[var(--chart-2)] mt-1">{option.recommendation}</p>}
+      {option.t1dNote && selected && <p className="text-[10px] text-[var(--warning)] mt-1">T1D : {option.t1dNote}</p>}
+      {option.warning && selected && <p className="text-[10px] text-[var(--error)] mt-1">{option.warning}</p>}
+      {option.note && <p className="text-[10px] text-text-disabled mt-0.5">{option.note}</p>}
     </button>
   );
 }
@@ -28,7 +28,7 @@ function MultiSelectGrid({ options, selected, onToggle }: { options: string[]; s
       {options.map((opt) => {
         const isSel = selected.includes(opt);
         return (
-          <button key={opt} onClick={() => onToggle(opt)} className={`p-2.5 rounded-xl text-xs font-medium border transition-all ${isSel ? "bg-[#34c759]/10 border-[#34c759]/30 text-[#34c759]" : "bg-black/[0.03] border-black/[0.06] text-black/50 hover:bg-black/[0.06]"}`}>
+          <button key={opt} onClick={() => onToggle(opt)} className={`p-2.5 rounded-xl text-xs font-medium border transition-all ${isSel ? "bg-[var(--success)]/10 border-[var(--success)]/30 text-[var(--success)]" : "bg-bg-hover border-border-subtle text-text-secondary hover:bg-bg-hover"}`}>
             {isSel && "✓ "}{opt}
           </button>
         );
@@ -113,7 +113,7 @@ export default function MuscuDiagnosticForm() {
         {Boolean((program as Record<string, unknown>).fullAnalysis) && (
           <Card>
             <SectionTitle>Analyse</SectionTitle>
-            <div className="text-sm text-black/70 leading-relaxed whitespace-pre-line">{String((program as Record<string, unknown>).fullAnalysis)}</div>
+            <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-line">{String((program as Record<string, unknown>).fullAnalysis)}</div>
           </Card>
         )}
         {Boolean((program as Record<string, unknown>).summary) && (
@@ -122,8 +122,8 @@ export default function MuscuDiagnosticForm() {
             <div className="space-y-2">
               {((program as Record<string, unknown>).summary as Record<string, string[]>)?.changesDetected?.map((c: string, i: number) => (
                 <div key={i} className="flex gap-2 items-start">
-                  <span className="text-[#34c759] text-xs mt-0.5">•</span>
-                  <p className="text-sm text-black/70">{c}</p>
+                  <span className="text-[var(--success)] text-xs mt-0.5">•</span>
+                  <p className="text-sm text-text-secondary">{c}</p>
                 </div>
               ))}
             </div>
@@ -152,8 +152,8 @@ export default function MuscuDiagnosticForm() {
               { label: "Style", value: String(muscuDiagnosticData.trainingStyle || "—") },
               { label: "Niveau", value: String(muscuDiagnosticData.experienceYears || "—") },
             ].map((item) => (
-              <div key={item.label} className="p-2.5 rounded-lg bg-black/[0.03]">
-                <p className="text-[10px] text-black/35 uppercase">{item.label}</p>
+              <div key={item.label} className="p-2.5 rounded-lg bg-bg-hover">
+                <p className="text-[10px] text-text-tertiary uppercase">{item.label}</p>
                 <p className="text-sm font-medium mt-0.5 capitalize">{item.value.replace(/_/g, " ")}</p>
               </div>
             ))}
@@ -169,14 +169,14 @@ export default function MuscuDiagnosticForm() {
   // ─── Form steps ────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-      <ProgressBar value={step + 1} max={5} color="#34c759" label={`Étape ${step + 1}/5 — ${STEP_LABELS[step]}`} />
+      <ProgressBar value={step + 1} max={5} color="var(--success)" label={`Étape ${step + 1}/5 — ${STEP_LABELS[step]}`} />
 
       {step === 0 && (
         <Card>
           <SectionTitle>Objectifs</SectionTitle>
           <div className="space-y-4">
             <div>
-              <p className="text-xs text-black/50 mb-2">Objectif principal</p>
+              <p className="text-xs text-text-secondary mb-2">Objectif principal</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {[
                   { value: "mass", label: "Prise de masse", description: "Gagner du muscle" },
@@ -188,11 +188,11 @@ export default function MuscuDiagnosticForm() {
               </div>
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-2">Objectifs secondaires (optionnel)</p>
+              <p className="text-xs text-text-secondary mb-2">Objectifs secondaires (optionnel)</p>
               <MultiSelectGrid options={["Améliorer ma posture", "Rattraper mes points faibles", "Augmenter mon 1RM", "Préparer une compétition", "Compléter mon entraînement running"]} selected={data.secondaryGoals as string[]} onToggle={(v) => toggle("secondaryGoals", v)} />
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-2">Timeline</p>
+              <p className="text-xs text-text-secondary mb-2">Timeline</p>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { value: "3months", label: "3 mois" },
@@ -211,7 +211,7 @@ export default function MuscuDiagnosticForm() {
           <SectionTitle>Disponibilité & Équipement</SectionTitle>
           <div className="space-y-4">
             <div>
-              <p className="text-xs text-black/50 mb-2">Jours par semaine</p>
+              <p className="text-xs text-text-secondary mb-2">Jours par semaine</p>
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                 {[
                   { value: "2", label: "2 jours", note: "Full Body" },
@@ -223,19 +223,19 @@ export default function MuscuDiagnosticForm() {
               </div>
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-2">Quels jours ?</p>
+              <p className="text-xs text-text-secondary mb-2">Quels jours ?</p>
               <MultiSelectGrid options={["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]} selected={data.availableDays as string[]} onToggle={(v) => toggle("availableDays", v)} />
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-2">Durée max d'une séance</p>
+              <p className="text-xs text-text-secondary mb-2">Durée max d'une séance</p>
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                 {["45", "60", "75", "90", "120"].map((v) => (
-                  <button key={v} onClick={() => set("sessionDuration", v)} className={`p-2 rounded-xl text-sm border ${data.sessionDuration === v ? "bg-[#34c759]/10 border-[#34c759]/30 text-[#34c759]" : "bg-black/[0.03] border-black/[0.06] text-black/50"}`}>{v} min</button>
+                  <button key={v} onClick={() => set("sessionDuration", v)} className={`p-2 rounded-xl text-sm border ${data.sessionDuration === v ? "bg-[var(--success)]/10 border-[var(--success)]/30 text-[var(--success)]" : "bg-bg-hover border-border-subtle text-text-secondary"}`}>{v} min</button>
                 ))}
               </div>
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-2">Équipement disponible</p>
+              <p className="text-xs text-text-secondary mb-2">Équipement disponible</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {[
                   { value: "full_gym", label: "Salle complète", description: "Tout le matériel" },
@@ -254,7 +254,7 @@ export default function MuscuDiagnosticForm() {
           <SectionTitle>Préférences d'entraînement</SectionTitle>
           <div className="space-y-4">
             <div>
-              <p className="text-xs text-black/50 mb-2">Split préféré</p>
+              <p className="text-xs text-text-secondary mb-2">Split préféré</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {[
                   { value: "auto", label: "🤖 Laisse l'IA décider", description: "Basé sur tes objectifs" },
@@ -266,7 +266,7 @@ export default function MuscuDiagnosticForm() {
               </div>
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-2">Style d'entraînement</p>
+              <p className="text-xs text-text-secondary mb-2">Style d'entraînement</p>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { value: "hypertrophy", label: "Hypertrophie", description: "8-12 reps" },
@@ -277,11 +277,11 @@ export default function MuscuDiagnosticForm() {
               </div>
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-2">Exercices à garder absolument</p>
+              <p className="text-xs text-text-secondary mb-2">Exercices à garder absolument</p>
               <MultiSelectGrid options={["Développé couché", "Squat", "Soulevé de terre", "Tractions", "Rowing", "Développé militaire", "Dips", "Curl biceps"]} selected={data.exercisePreferences as string[]} onToggle={(v) => toggle("exercisePreferences", v)} />
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-2">Exercices à éviter</p>
+              <p className="text-xs text-text-secondary mb-2">Exercices à éviter</p>
               <MultiSelectGrid options={["Squat barre", "Soulevé de terre", "Développé militaire", "Dips", "Exercices derrière la nuque", "Leg extension"]} selected={data.exerciseAvoidance as string[]} onToggle={(v) => toggle("exerciseAvoidance", v)} />
             </div>
           </div>
@@ -293,7 +293,7 @@ export default function MuscuDiagnosticForm() {
           <SectionTitle>Expérience & Historique</SectionTitle>
           <div className="space-y-4">
             <div>
-              <p className="text-xs text-black/50 mb-2">Expérience en muscu</p>
+              <p className="text-xs text-text-secondary mb-2">Expérience en muscu</p>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { value: "beginner", label: "< 1 an", description: "Débutant" },
@@ -304,16 +304,16 @@ export default function MuscuDiagnosticForm() {
               </div>
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-1.5">Programme actuel</p>
-              <input type="text" value={String(data.currentProgram || "")} onChange={(e) => set("currentProgram", e.target.value)} placeholder="Ex: Push/Pull 4 jours, programme maison..." className="w-full bg-black/[0.04] border border-black/[0.08] rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder:text-black/20 focus:outline-none focus:border-[#34c759]/50" />
+              <p className="text-xs text-text-secondary mb-1.5">Programme actuel</p>
+              <input type="text" value={String(data.currentProgram || "")} onChange={(e) => set("currentProgram", e.target.value)} placeholder="Ex: Push/Pull 4 jours, programme maison..." className="w-full bg-bg-hover border border-border-default rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-[var(--success)]/50" />
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-2">Tu stagnes sur quelque chose ?</p>
+              <p className="text-xs text-text-secondary mb-2">Tu stagnes sur quelque chose ?</p>
               <MultiSelectGrid options={["Développé couché", "Squat", "Prise de masse", "Un groupe musculaire", "Motivation", "Non, tout va bien"]} selected={data.stagnation as string[]} onToggle={(v) => toggle("stagnation", v)} />
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-1.5">Blessures / douleurs chroniques</p>
-              <textarea value={String(data.previousInjuries || "")} onChange={(e) => set("previousInjuries", e.target.value)} placeholder="Ex: Tendinite épaule droite..." rows={2} className="w-full bg-black/[0.04] border border-black/[0.08] rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder:text-black/20 focus:outline-none focus:border-[#34c759]/50 resize-none" />
+              <p className="text-xs text-text-secondary mb-1.5">Blessures / douleurs chroniques</p>
+              <textarea value={String(data.previousInjuries || "")} onChange={(e) => set("previousInjuries", e.target.value)} placeholder="Ex: Tendinite épaule droite..." rows={2} className="w-full bg-bg-hover border border-border-default rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-[var(--success)]/50 resize-none" />
             </div>
           </div>
         </Card>
@@ -324,7 +324,7 @@ export default function MuscuDiagnosticForm() {
           <SectionTitle>Contraintes T1D — Musculation</SectionTitle>
           <div className="space-y-4">
             <div>
-              <p className="text-xs text-black/50 mb-2">Moment d'entraînement préféré</p>
+              <p className="text-xs text-text-secondary mb-2">Moment d'entraînement préféré</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {[
                   { value: "morning_fasted", label: "Matin à jeun", t1dNote: "Attention hypo — prévoir collation" },
@@ -335,7 +335,7 @@ export default function MuscuDiagnosticForm() {
               </div>
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-2">Réaction glycémique post-muscu</p>
+              <p className="text-xs text-text-secondary mb-2">Réaction glycémique post-muscu</p>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { value: "rises", label: "Elle monte", description: "+30-60 mg/dL" },
@@ -346,7 +346,7 @@ export default function MuscuDiagnosticForm() {
               </div>
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-2">Hypos pendant la muscu ?</p>
+              <p className="text-xs text-text-secondary mb-2">Hypos pendant la muscu ?</p>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { value: "never", label: "Jamais" },
@@ -357,11 +357,11 @@ export default function MuscuDiagnosticForm() {
               </div>
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-1.5">Glycémie cible avant séance</p>
+              <p className="text-xs text-text-secondary mb-1.5">Glycémie cible avant séance</p>
               <div className="flex items-center gap-2">
-                <input type="number" value={String(data.preWorkoutTarget || "140")} onChange={(e) => set("preWorkoutTarget", e.target.value)} min={100} max={200} className="w-24 bg-black/[0.04] border border-black/[0.08] rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#34c759]/50" />
-                <span className="text-xs text-black/30">mg/dL</span>
-                <span className="text-[10px] text-[#32ade6]/70 ml-2">Recommandé : 120-180</span>
+                <input type="number" value={String(data.preWorkoutTarget || "140")} onChange={(e) => set("preWorkoutTarget", e.target.value)} min={100} max={200} className="w-24 bg-bg-hover border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[var(--success)]/50" />
+                <span className="text-xs text-text-tertiary">mg/dL</span>
+                <span className="text-[10px] text-[var(--chart-2)]/70 ml-2">Recommandé : 120-180</span>
               </div>
             </div>
           </div>

@@ -116,7 +116,7 @@ export default function PhotoCapture({ photos, onPhotosChange }: PhotoCapturePro
   return (
     <Card>
       <SectionTitle>Photos corporelles</SectionTitle>
-      <p className="text-xs text-black/40 mb-4">
+      <p className="text-xs text-text-tertiary mb-4">
         Prends 3 photos en sous-vêtements ou tenue de sport serrée pour une analyse visuelle par IA.
         Les photos restent privées et sont stockées localement.
       </p>
@@ -130,7 +130,7 @@ export default function PhotoCapture({ photos, onPhotosChange }: PhotoCapturePro
             autoPlay
             playsInline
             muted
-            className="max-w-full max-h-[60vh] rounded-xl border border-black/10"
+            className="max-w-full max-h-[60vh] rounded-xl border border-border-default"
           />
           <div className="flex gap-4 mt-6">
             <Button variant="danger" onClick={stopCamera}>
@@ -146,7 +146,7 @@ export default function PhotoCapture({ photos, onPhotosChange }: PhotoCapturePro
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {PHOTO_SLOTS.map((slot, i) => (
           <div key={i} className="flex flex-col items-center">
-            <p className="text-xs text-black/60 mb-2 font-medium">
+            <p className="text-xs text-text-secondary mb-2 font-medium">
               {slot.icon} {slot.label}
             </p>
 
@@ -155,7 +155,7 @@ export default function PhotoCapture({ photos, onPhotosChange }: PhotoCapturePro
                 <img
                   src={photos[i]!}
                   alt={slot.label}
-                  className="w-full h-48 object-cover rounded-xl border border-black/10"
+                  className="w-full h-48 object-cover rounded-xl border border-border-default"
                 />
                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center gap-2">
                   <Button size="sm" variant="secondary" onClick={() => startCamera(i)}>
@@ -166,7 +166,7 @@ export default function PhotoCapture({ photos, onPhotosChange }: PhotoCapturePro
                   </Button>
                 </div>
                 <div className="absolute top-2 right-2">
-                  <div className="w-5 h-5 rounded-full bg-[#34c759] flex items-center justify-center">
+                  <div className="w-5 h-5 rounded-full bg-[var(--success)] flex items-center justify-center">
                     <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
@@ -174,7 +174,7 @@ export default function PhotoCapture({ photos, onPhotosChange }: PhotoCapturePro
                 </div>
               </div>
             ) : (
-              <div className="w-full h-48 rounded-xl border-2 border-dashed border-black/10 flex flex-col items-center justify-center gap-3 hover:border-[#34c759]/30 transition-colors">
+              <div className="w-full h-48 rounded-xl border-2 border-dashed border-border-default flex flex-col items-center justify-center gap-3 hover:border-[var(--success)]/30 transition-colors">
                 <div className="flex gap-2">
                   <Button size="sm" variant="secondary" onClick={() => startCamera(i)}>
                     <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -191,7 +191,7 @@ export default function PhotoCapture({ photos, onPhotosChange }: PhotoCapturePro
                     Fichier
                   </Button>
                 </div>
-                <p className="text-[10px] text-black/25 text-center px-2">{slot.instruction}</p>
+                <p className="text-[10px] text-text-disabled text-center px-2">{slot.instruction}</p>
               </div>
             )}
 
@@ -211,9 +211,9 @@ export default function PhotoCapture({ photos, onPhotosChange }: PhotoCapturePro
       </div>
 
       <div className="mt-4 flex items-center justify-between">
-        <p className="text-xs text-black/30">{photoCount}/3 photos prises</p>
+        <p className="text-xs text-text-tertiary">{photoCount}/3 photos prises</p>
         {photoCount > 0 && photoCount < 3 && (
-          <p className="text-xs text-[#ff9500]/70">Les 3 photos sont recommandées pour une analyse complète</p>
+          <p className="text-xs text-[var(--warning)]/70">Les 3 photos sont recommandées pour une analyse complète</p>
         )}
       </div>
 

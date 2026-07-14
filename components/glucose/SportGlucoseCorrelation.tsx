@@ -68,7 +68,7 @@ export default function SportGlucoseCorrelation({
     [summary],
   );
 
-  const accentColor = tab === "muscu" ? "#007aff" : "#32ade6";
+  const accentColor = tab === "muscu" ? "var(--accent)" : "var(--chart-2)";
   const Icon = tab === "muscu" ? Dumbbell : Footprints;
   const sportLabel = tab === "muscu" ? "muscu" : "running";
 
@@ -209,7 +209,7 @@ export default function SportGlucoseCorrelation({
                 <CartesianGrid stroke="rgba(0,0,0,0.05)" vertical={false} />
                 <XAxis
                   dataKey="label"
-                  stroke="#8e8e93"
+                  stroke="var(--text-tertiary)"
                   tick={{ fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
@@ -222,9 +222,9 @@ export default function SportGlucoseCorrelation({
                   tickLine={false}
                   width={32}
                 />
-                <ReferenceArea y1={70} y2={180} fill="#34c759" fillOpacity={0.05} />
-                <ReferenceLine y={70} stroke="#ff3b30" strokeDasharray="3 3" />
-                <ReferenceLine y={180} stroke="#ff9500" strokeDasharray="3 3" />
+                <ReferenceArea y1={70} y2={180} fill="var(--success)" fillOpacity={0.05} />
+                <ReferenceLine y={70} stroke="var(--error)" strokeDasharray="3 3" />
+                <ReferenceLine y={180} stroke="var(--warning)" strokeDasharray="3 3" />
                 <ReferenceLine x="T+0" stroke={accentColor} strokeDasharray="2 2" strokeOpacity={0.4} />
                 <Line
                   type="monotone"

@@ -15,11 +15,11 @@ function SectionHeader({ title, icon, onEdit }: { title: string; icon: string; o
     <div className="flex items-center justify-between mb-3">
       <div className="flex items-center gap-2">
         <span className="text-base">{icon}</span>
-        <h3 className="text-sm font-semibold text-black/90">{title}</h3>
+        <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
       </div>
       <button
         onClick={onEdit}
-        className="text-xs text-black/30 hover:text-[#34c759] transition-colors px-2 py-1 rounded-lg hover:bg-black/[0.05]"
+        className="text-xs text-text-tertiary hover:text-[var(--success)] transition-colors px-2 py-1 rounded-lg hover:bg-bg-hover"
       >
         Modifier
       </button>
@@ -31,12 +31,12 @@ function MeasurementGrid({ items }: { items: { label: string; value: string; uni
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {items.map((item) => (
-        <div key={item.label} className="p-2.5 rounded-lg bg-black/[0.03]">
-          <p className="text-[10px] text-black/35 uppercase tracking-wider">{item.label}</p>
+        <div key={item.label} className="p-2.5 rounded-lg bg-bg-hover">
+          <p className="text-[10px] text-text-tertiary uppercase tracking-wider">{item.label}</p>
           <p className="text-base font-semibold mt-0.5">
             {item.value || "—"}
             {item.value && item.unit && (
-              <span className="text-xs text-black/30 font-normal ml-1">{item.unit}</span>
+              <span className="text-xs text-text-tertiary font-normal ml-1">{item.unit}</span>
             )}
           </p>
         </div>
@@ -69,7 +69,7 @@ export default function DiagnosticSummary({ entry, onEditAll, onEditSection, onV
           <h2 className="text-lg font-bold flex items-center gap-2">
             Mon Diagnostic Morphologique
           </h2>
-          <p className="text-xs text-black/40 mt-1">Dernière mise à jour : {date}</p>
+          <p className="text-xs text-text-tertiary mt-1">Dernière mise à jour : {date}</p>
         </div>
         <Button variant="secondary" onClick={onEditAll}>
           Modifier tout
@@ -92,19 +92,19 @@ export default function DiagnosticSummary({ entry, onEditAll, onEditSection, onV
           ]}
         />
         {(l.armSpan || l.torsoLength) && (
-          <div className="mt-3 pt-3 border-t border-black/[0.06]">
-            <p className="text-[10px] text-black/35 uppercase tracking-wider mb-2">Longueurs segmentaires</p>
+          <div className="mt-3 pt-3 border-t border-border-subtle">
+            <p className="text-[10px] text-text-tertiary uppercase tracking-wider mb-2">Longueurs segmentaires</p>
             <div className="grid grid-cols-2 gap-3">
               {l.armSpan && (
-                <div className="p-2.5 rounded-lg bg-black/[0.03]">
-                  <p className="text-[10px] text-black/35">Envergure</p>
-                  <p className="text-base font-semibold">{l.armSpan} <span className="text-xs text-black/30 font-normal">cm</span></p>
+                <div className="p-2.5 rounded-lg bg-bg-hover">
+                  <p className="text-[10px] text-text-tertiary">Envergure</p>
+                  <p className="text-base font-semibold">{l.armSpan} <span className="text-xs text-text-tertiary font-normal">cm</span></p>
                 </div>
               )}
               {l.torsoLength && (
-                <div className="p-2.5 rounded-lg bg-black/[0.03]">
-                  <p className="text-[10px] text-black/35">Tronc</p>
-                  <p className="text-base font-semibold">{l.torsoLength} <span className="text-xs text-black/30 font-normal">cm</span></p>
+                <div className="p-2.5 rounded-lg bg-bg-hover">
+                  <p className="text-[10px] text-text-tertiary">Tronc</p>
+                  <p className="text-base font-semibold">{l.torsoLength} <span className="text-xs text-text-tertiary font-normal">cm</span></p>
                 </div>
               )}
             </div>
@@ -118,10 +118,10 @@ export default function DiagnosticSummary({ entry, onEditAll, onEditSection, onV
           <SectionHeader title="Ratios calculés" icon="📐" onEdit={() => onEditSection("mensurations")} />
           <div className="space-y-2">
             {ratios.map((r, i) => (
-              <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-black/[0.02]">
+              <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-bg-hover">
                 <div>
-                  <p className="text-sm text-black/80">{r.label}</p>
-                  <p className="text-[10px] text-black/30">Idéal : {r.ideal}</p>
+                  <p className="text-sm text-text-primary">{r.label}</p>
+                  <p className="text-[10px] text-text-tertiary">Idéal : {r.ideal}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-bold">{r.value}</span>
@@ -149,9 +149,9 @@ export default function DiagnosticSummary({ entry, onEditAll, onEditSection, onV
           ]}
         />
         {h.injuries && (
-          <div className="mt-3 p-2.5 rounded-lg bg-[#ff9500]/5 border border-[#ff9500]/10">
-            <p className="text-[10px] text-[#ff9500]/60 uppercase tracking-wider">Blessures / limitations</p>
-            <p className="text-xs text-black/60 mt-1">{h.injuries}</p>
+          <div className="mt-3 p-2.5 rounded-lg bg-[var(--warning)]/5 border border-[var(--warning)]/10">
+            <p className="text-[10px] text-[var(--warning)]/60 uppercase tracking-wider">Blessures / limitations</p>
+            <p className="text-xs text-text-secondary mt-1">{h.injuries}</p>
           </div>
         )}
       </Card>
@@ -165,8 +165,8 @@ export default function DiagnosticSummary({ entry, onEditAll, onEditSection, onV
             { label: "Hanches (squat complet)", value: mob.hipMobility },
             { label: "Chevilles (genou au mur)", value: mob.ankleMobility },
           ].map((item) => (
-            <div key={item.label} className="flex items-center justify-between p-2 rounded-lg bg-black/[0.02]">
-              <p className="text-sm text-black/70">{item.label}</p>
+            <div key={item.label} className="flex items-center justify-between p-2 rounded-lg bg-bg-hover">
+              <p className="text-sm text-text-secondary">{item.label}</p>
               <MobilityBadge value={item.value} />
             </div>
           ))}
@@ -195,14 +195,14 @@ export default function DiagnosticSummary({ entry, onEditAll, onEditSection, onV
                 key={i}
                 src={photo}
                 alt={`Photo ${i + 1}`}
-                className="w-24 h-32 object-cover rounded-lg border border-black/10"
+                className="w-24 h-32 object-cover rounded-lg border border-border-default"
               />
             ))}
           </div>
           {onViewPhotoHistory && (
             <button
               onClick={onViewPhotoHistory}
-              className="mt-3 text-xs text-[#32ade6] hover:text-[#32ade6]/80 transition-colors"
+              className="mt-3 text-xs text-[var(--chart-2)] hover:text-[var(--chart-2)]/80 transition-colors"
             >
               Voir l'historique photos
             </button>
@@ -214,7 +214,7 @@ export default function DiagnosticSummary({ entry, onEditAll, onEditSection, onV
       {entry.photoAnalysis && (
         <Card>
           <SectionHeader title="Analyse visuelle IA" icon="🤖" onEdit={() => onEditSection("photos")} />
-          <div className="text-sm text-black/70 leading-relaxed whitespace-pre-line max-h-64 overflow-y-auto">
+          <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-line max-h-64 overflow-y-auto">
             {entry.photoAnalysis}
           </div>
         </Card>
@@ -226,11 +226,11 @@ export default function DiagnosticSummary({ entry, onEditAll, onEditSection, onV
           <SectionTitle>Recommandations</SectionTitle>
           <div className="space-y-2">
             {recommendations.map((rec, i) => (
-              <div key={i} className="flex gap-3 p-2 rounded-lg bg-black/[0.02]">
-                <div className="w-5 h-5 rounded-full bg-[#34c759]/15 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-[#34c759] text-[10px] font-bold">{i + 1}</span>
+              <div key={i} className="flex gap-3 p-2 rounded-lg bg-bg-hover">
+                <div className="w-5 h-5 rounded-full bg-[var(--success)]/15 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-[var(--success)] text-[10px] font-bold">{i + 1}</span>
                 </div>
-                <p className="text-xs text-black/70 leading-relaxed">{rec}</p>
+                <p className="text-xs text-text-secondary leading-relaxed">{rec}</p>
               </div>
             ))}
           </div>

@@ -3,81 +3,241 @@
 
 @layer base {
   :root {
-    /* ============ APEX v3 — "Apple Health" (juillet 2026) ============
-       Copie conforme du langage visuel de l'app Santé iOS :
-       fond gris groupé, cartes blanches, couleurs système Apple. */
+    /* ============ APEX v4 — "Apple" (juillet 2026) ============
+       Couche de tokens extraite de DESIGN.md (langage visuel Apple).
+       LIGHT = valeurs par défaut ci-dessous · DARK = overrides plus bas.
+       Tous les composants consomment ces variables via @theme inline,
+       donc redéfinir un token bascule tout ce qui en dépend. */
 
-    /* Surfaces : systemGroupedBackground iOS light */
-    --bg-primary: #F2F2F7;   /* fond de page (gris groupé iOS) */
-    --bg-secondary: #FFFFFF; /* cartes */
-    --bg-tertiary: #F2F2F7;  /* insets dans les cartes */
-    --bg-elevated: #FFFFFF;  /* sheets / modals / tooltips */
-    --bg-hover: #E5E5EA;     /* hover / pressed fill */
+    color-scheme: light;
 
-    /* Accent primaire : iOS System Blue — liens, CTA, sélection (comme Santé) */
-    --accent: #007AFF;
-    --accent-hover: #0071EB;
-    --accent-pressed: #0064D0;
-    --accent-subtle: rgba(0, 122, 255, 0.10);
-    --accent-glow: rgba(0, 122, 255, 0.22);
-    --accent-ink: #FFFFFF; /* text on accent bg */
+    /* Surfaces — parchemin Apple + cartes blanches (DESIGN canvas/parchment) */
+    --bg-primary: #f5f5f7;   /* fond de page (Parchment) */
+    --bg-secondary: #ffffff; /* cartes (Canvas) */
+    --bg-tertiary: #f5f5f7;  /* insets dans les cartes blanches */
+    --bg-elevated: #ffffff;  /* sheets / modals / tooltips */
+    --bg-hover: rgba(0, 0, 0, 0.04); /* hover / pressed fill */
 
-    /* Accent secondaire : iOS Indigo — sommeil, T1D, données cliniques */
-    --accent-2: #5856D6;
-    --accent-2-hover: #4B49C6;
+    /* Accent primaire : Action Blue — seul accent interactif (DESIGN) */
+    --accent: #0066cc;
+    --accent-hover: #0071e3;         /* DESIGN Focus Blue */
+    --accent-pressed: #0058b0;
+    --accent-subtle: rgba(0, 102, 204, 0.10);
+    --accent-glow: rgba(0, 102, 204, 0.22);
+    --accent-ink: #ffffff; /* texte sur accent */
+
+    /* Accent secondaire : Indigo — données cliniques T1D (data hue, pas CTA) */
+    --accent-2: #5856d6;
+    --accent-2-hover: #4b49c6;
     --accent-2-subtle: rgba(88, 86, 214, 0.10);
     --accent-2-glow: rgba(88, 86, 214, 0.22);
 
-    /* Typography hierarchy — labels iOS light */
-    --text-primary: #000000;
-    --text-secondary: #6D6D72;               /* secondaryLabel */
-    --text-tertiary: #8E8E93;                /* tertiaryLabel */
-    --text-disabled: #C7C7CC;
-    --text-ink: #FFFFFF;
+    /* Texte — ink Apple (pas de noir pur, cf. DESIGN) */
+    --text-primary: #1d1d1f;
+    --text-secondary: #6e6e73;
+    --text-tertiary: #86868b;
+    --text-disabled: #b0b0b5;
+    --text-ink: #ffffff;
 
-    /* Borders : séparateurs iOS (hairlines) */
-    --border-subtle: rgba(60, 60, 67, 0.10);
-    --border-default: rgba(60, 60, 67, 0.18);
-    --border-strong: rgba(60, 60, 67, 0.29);
+    /* Bordures — hairlines */
+    --border-subtle: rgba(0, 0, 0, 0.06);
+    --border-default: rgba(0, 0, 0, 0.10);
+    --border-strong: rgba(0, 0, 0, 0.16);
 
-    /* Semantic states — couleurs système iOS */
-    --success: #34C759;
-    --warning: #FF9500;
-    --error: #FF3B30;
-    --info: #007AFF;
+    /* États sémantiques (couleurs système iOS) */
+    --success: #34c759;
+    --warning: #ff9500;
+    --error: #ff3b30;
+    --info: #0066cc;
 
-    /* Catégories (hue par domaine) — palette app Santé */
-    --muscu: #FF9500;     /* orange = activité/effort (flamme Santé) */
-    --running: #FF2D55;   /* rose = cardio / fréquence cardiaque */
-    --nutrition: #34C759; /* vert = alimentation / eau */
-    --diabete: #5856D6;   /* indigo = clinique (comme Sommeil) */
+    /* Catégories (data hues par domaine) */
+    --muscu: #ff9500;
+    --running: #ff2d55;
+    --nutrition: #34c759;
+    --diabete: #5856d6;
 
     /* Glucose scale — précision médicale */
-    --glucose-low: #FF3B30;
-    --glucose-normal: #34C759;
-    --glucose-high: #FF9500;
-    --glucose-critical: #FF2D55;
+    --glucose-low: #ff3b30;
+    --glucose-normal: #34c759;
+    --glucose-high: #ff9500;
+    --glucose-critical: #ff2d55;
 
     /* Data chart accents */
-    --chart-1: #007AFF;
-    --chart-2: #32ADE6;
-    --chart-3: #FF9500;
-    --chart-4: #5856D6;
-    --chart-5: #FF3B30;
+    --chart-1: #0066cc;
+    --chart-2: #32ade6;
+    --chart-3: #ff9500;
+    --chart-4: #5856d6;
+    --chart-5: #ff3b30;
+
+    /* Glass — barre nav translucide (tokenisé pour bascule light/dark) */
+    --glass-bg: rgba(245, 245, 247, 0.82);
+    --glass-border: rgba(0, 0, 0, 0.06);
+
+    /* Skeleton shimmer */
+    --skeleton-base: #e5e5ea;
+    --skeleton-shine: #f2f2f7;
+
+    /* Sélection texte */
+    --selection-bg: rgba(0, 102, 204, 0.20);
 
     /* Safe areas */
     --safe-area-inset-top: env(safe-area-inset-top);
     --safe-area-inset-bottom: env(safe-area-inset-bottom);
 
-    /* Radii système — cartes Santé bien arrondies */
+    /* Radii — DESIGN + carte app arrondie, avec pill signature */
     --radius-sm: 8px;
     --radius-md: 12px;
-    --radius-lg: 16px;
-    --radius-xl: 20px;
-    --radius-2xl: 24px;
+    --radius-lg: 18px;
+    --radius-xl: 22px;
+    --radius-2xl: 28px;
+    --radius-pill: 9999px;
 
-    /* Ombre carte iOS (quasi imperceptible, la hiérarchie vient du blanc sur gris) */
+    /* Ombres — élévation par la couleur de surface, pas par le drop-shadow.
+       card = quasi imperceptible · elevated = sheets/modals ·
+       product = signature DESIGN, réservée à l'imagerie/anneaux. */
     --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-elevated: 0 8px 30px rgba(0, 0, 0, 0.12);
+    --shadow-product: 0 5px 30px rgba(0, 0, 0, 0.22);
+  }
+
+  /* ============ DARK — palette délibérée ============
+     Échelle Apple sombre (true-black → cartes qui montent en clarté) +
+     Sky Link Blue #2997ff de DESIGN (Action Blue disparaîtrait sur noir),
+     texte off-white (jamais #fff sur #000), hues data éclaircies (AA).
+
+     Deux déclencheurs, mêmes valeurs :
+       (a) override explicite      → :root[data-theme="dark"]
+       (b) préférence système dark → sauf si l'utilisateur a forcé "light". */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --bg-primary: #000000;
+    --bg-secondary: #1c1c1e;
+    --bg-tertiary: #2c2c2e;
+    --bg-elevated: #2c2c2e;
+    --bg-hover: rgba(255, 255, 255, 0.08);
+
+    --accent: #2997ff;
+    --accent-hover: #47a6ff;
+    --accent-pressed: #1f7fe0;
+    --accent-subtle: rgba(41, 151, 255, 0.14);
+    --accent-glow: rgba(41, 151, 255, 0.28);
+    --accent-ink: #ffffff;
+
+    --accent-2: #7d7aff;
+    --accent-2-hover: #9491ff;
+    --accent-2-subtle: rgba(125, 122, 255, 0.16);
+    --accent-2-glow: rgba(125, 122, 255, 0.30);
+
+    --text-primary: #f5f5f7;
+    --text-secondary: #a1a1a6;
+    --text-tertiary: #8a8a8f;
+    --text-disabled: #48484a;
+    --text-ink: #ffffff;
+
+    --border-subtle: rgba(255, 255, 255, 0.07);
+    --border-default: rgba(255, 255, 255, 0.13);
+    --border-strong: rgba(255, 255, 255, 0.22);
+
+    --success: #30d158;
+    --warning: #ff9f0a;
+    --error: #ff453a;
+    --info: #2997ff;
+
+    --muscu: #ff9f0a;
+    --running: #ff375f;
+    --nutrition: #30d158;
+    --diabete: #7d7aff;
+
+    --glucose-low: #ff453a;
+    --glucose-normal: #30d158;
+    --glucose-high: #ff9f0a;
+    --glucose-critical: #ff375f;
+
+    --chart-1: #2997ff;
+    --chart-2: #64d2ff;
+    --chart-3: #ff9f0a;
+    --chart-4: #7d7aff;
+    --chart-5: #ff453a;
+
+    --glass-bg: rgba(28, 28, 30, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.08);
+
+    --skeleton-base: #1c1c1e;
+    --skeleton-shine: #2c2c2e;
+
+    --selection-bg: rgba(41, 151, 255, 0.30);
+
+    --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-elevated: 0 10px 40px rgba(0, 0, 0, 0.6);
+    --shadow-product: 0 5px 30px rgba(0, 0, 0, 0.5);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+
+      --bg-primary: #000000;
+      --bg-secondary: #1c1c1e;
+      --bg-tertiary: #2c2c2e;
+      --bg-elevated: #2c2c2e;
+      --bg-hover: rgba(255, 255, 255, 0.08);
+
+      --accent: #2997ff;
+      --accent-hover: #47a6ff;
+      --accent-pressed: #1f7fe0;
+      --accent-subtle: rgba(41, 151, 255, 0.14);
+      --accent-glow: rgba(41, 151, 255, 0.28);
+      --accent-ink: #ffffff;
+
+      --accent-2: #7d7aff;
+      --accent-2-hover: #9491ff;
+      --accent-2-subtle: rgba(125, 122, 255, 0.16);
+      --accent-2-glow: rgba(125, 122, 255, 0.30);
+
+      --text-primary: #f5f5f7;
+      --text-secondary: #a1a1a6;
+      --text-tertiary: #8a8a8f;
+      --text-disabled: #48484a;
+      --text-ink: #ffffff;
+
+      --border-subtle: rgba(255, 255, 255, 0.07);
+      --border-default: rgba(255, 255, 255, 0.13);
+      --border-strong: rgba(255, 255, 255, 0.22);
+
+      --success: #30d158;
+      --warning: #ff9f0a;
+      --error: #ff453a;
+      --info: #2997ff;
+
+      --muscu: #ff9f0a;
+      --running: #ff375f;
+      --nutrition: #30d158;
+      --diabete: #7d7aff;
+
+      --glucose-low: #ff453a;
+      --glucose-normal: #30d158;
+      --glucose-high: #ff9f0a;
+      --glucose-critical: #ff375f;
+
+      --chart-1: #2997ff;
+      --chart-2: #64d2ff;
+      --chart-3: #ff9f0a;
+      --chart-4: #7d7aff;
+      --chart-5: #ff453a;
+
+      --glass-bg: rgba(28, 28, 30, 0.72);
+      --glass-border: rgba(255, 255, 255, 0.08);
+
+      --skeleton-base: #1c1c1e;
+      --skeleton-shine: #2c2c2e;
+
+      --selection-bg: rgba(41, 151, 255, 0.30);
+
+      --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+      --shadow-elevated: 0 10px 40px rgba(0, 0, 0, 0.6);
+      --shadow-product: 0 5px 30px rgba(0, 0, 0, 0.5);
+    }
   }
 }
 
@@ -124,8 +284,8 @@
   --color-glucose-high: var(--glucose-high);
   --color-glucose-critical: var(--glucose-critical);
 
-  /* Fonts — 100% système : SF Pro sur Apple (exactement la police de l'app Santé),
-     fallback système natif ailleurs. Aucune webfont chargée. */
+  /* Fonts — 100% système : SF Pro sur Apple via -apple-system (aucune webfont).
+     Satisfait la contrainte "pas d'embed SF Pro". */
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 
@@ -175,9 +335,9 @@
     background: var(--text-tertiary);
   }
 
-  /* Selection = accent système */
+  /* Selection = accent système (tokenisé pour bascule) */
   ::selection {
-    background: rgba(0, 122, 255, 0.25);
+    background: var(--selection-bg);
     color: var(--text-primary);
   }
 
@@ -203,6 +363,40 @@
   /* Touch targets 44px mini */
   .touch-target { min-height: 44px; min-width: 44px; }
 
+  /* Radius pill signature DESIGN (CTA, search, chips) */
+  .rounded-pill { border-radius: var(--radius-pill); }
+
+  /* ============ Échelle typographique DESIGN.md ============
+     SF Pro via -apple-system. Tracking négatif aux tailles display
+     ("Apple tight"). Body à 17px (rythme de lecture Apple). */
+  .t-hero {
+    font-size: 56px; font-weight: 600; line-height: 1.07; letter-spacing: -0.28px;
+  }
+  .t-display-lg {
+    font-size: 40px; font-weight: 600; line-height: 1.1; letter-spacing: 0;
+  }
+  .t-display-md {
+    font-size: 34px; font-weight: 600; line-height: 1.12; letter-spacing: -0.374px;
+  }
+  .t-lead {
+    font-size: 28px; font-weight: 400; line-height: 1.14; letter-spacing: 0.196px;
+  }
+  .t-tagline {
+    font-size: 21px; font-weight: 600; line-height: 1.19; letter-spacing: 0.231px;
+  }
+  .t-body-strong {
+    font-size: 17px; font-weight: 600; line-height: 1.24; letter-spacing: -0.374px;
+  }
+  .t-body {
+    font-size: 17px; font-weight: 400; line-height: 1.47; letter-spacing: -0.374px;
+  }
+  .t-caption {
+    font-size: 14px; font-weight: 400; line-height: 1.43; letter-spacing: -0.224px;
+  }
+  .t-fine {
+    font-size: 12px; font-weight: 400; line-height: 1.33; letter-spacing: -0.12px;
+  }
+
   /* ============ Chiffres : SF Pro bold tabular (style Santé) ============ */
   .num {
     font-family: var(--font-sans);
@@ -226,15 +420,15 @@
     color: var(--text-tertiary);
   }
 
-  /* Glass effect headers — barre de navigation iOS translucide */
+  /* Glass effect headers — barre de navigation translucide (tokenisé) */
   .glass {
-    background: rgba(242, 242, 247, 0.82);
+    background: var(--glass-bg);
     backdrop-filter: saturate(180%) blur(20px);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
-    border-bottom: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--glass-border);
   }
 
-  /* Glow accent — ombres douces (plus de néon) */
+  /* Glow accent — ombres douces */
   .glow-accent {
     box-shadow: 0 4px 16px -6px var(--accent-glow);
   }
@@ -245,10 +439,10 @@
     box-shadow: 0 0 0 1px var(--accent), 0 4px 16px -6px var(--accent-glow);
   }
 
-  /* Surface levels — cartes blanches sur fond gris (hiérarchie Santé) */
+  /* Surface levels — cartes sur fond (hiérarchie par profondeur) */
   .surface-1 { background: var(--bg-secondary); border-radius: var(--radius-lg); box-shadow: var(--card-shadow); }
   .surface-2 { background: var(--bg-tertiary); border-radius: var(--radius-lg); }
-  .surface-3 { background: var(--bg-elevated); border-radius: var(--radius-lg); box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08); }
+  .surface-3 { background: var(--bg-elevated); border-radius: var(--radius-lg); box-shadow: var(--shadow-elevated); }
 
   /* Tap feedback iOS */
   .tap-scale { transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1); }
@@ -281,12 +475,12 @@
   }
   .hover-lift:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-elevated);
   }
 }
 
 /* ============ UTILITAIRES ============ */
-/* Carte legacy (ancien design system ui.tsx) — devient une carte Santé blanche */
+/* Carte legacy (ancien design system ui.tsx) — carte blanche/sombre selon thème */
 .card {
   background: var(--bg-secondary);
   border-radius: var(--radius-lg);
@@ -353,9 +547,9 @@
 .skeleton {
   background: linear-gradient(
     90deg,
-    #E5E5EA 25%,
-    #F2F2F7 50%,
-    #E5E5EA 75%
+    var(--skeleton-base) 25%,
+    var(--skeleton-shine) 50%,
+    var(--skeleton-base) 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.6s infinite;

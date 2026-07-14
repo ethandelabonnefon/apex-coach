@@ -10,7 +10,7 @@ interface MuscleTooltipProps {
 export default function MuscleTooltip({ muscle }: MuscleTooltipProps) {
   return (
     <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full mt-2 z-20 pointer-events-none">
-      <div className="bg-[#ffffff] border border-black/10 rounded-xl px-3 py-2 shadow-xl min-w-[160px]">
+      <div className="bg-bg-elevated border border-border-default rounded-xl px-3 py-2 shadow-xl min-w-[160px]">
         <div className="flex items-center gap-2 mb-1">
           <span
             className="w-2.5 h-2.5 rounded-full shrink-0"
@@ -22,7 +22,7 @@ export default function MuscleTooltip({ muscle }: MuscleTooltipProps) {
           {STATUS_LABELS[muscle.status]}
         </p>
         {muscle.measurement && (
-          <p className="text-[10px] text-black/40 mt-0.5">
+          <p className="text-[10px] text-text-tertiary mt-0.5">
             {muscle.measurement} {muscle.measurementUnit || "cm"}
           </p>
         )}

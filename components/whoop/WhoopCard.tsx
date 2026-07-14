@@ -38,17 +38,17 @@ interface WhoopCardProps {
 
 function recoveryColor(score: number | null): { color: string; bg: string; label: string } {
   if (score === null) return { color: "var(--text-tertiary)", bg: "rgba(0,0,0,0.04)", label: "—" };
-  if (score >= 67) return { color: "#34c759", bg: "rgba(122,229,130,0.15)", label: "Vert" };
-  if (score >= 34) return { color: "#ff9500", bg: "rgba(255,174,92,0.15)", label: "Jaune" };
-  return { color: "#ff3b30", bg: "rgba(255,107,107,0.15)", label: "Rouge" };
+  if (score >= 67) return { color: "var(--success)", bg: "rgba(122,229,130,0.15)", label: "Vert" };
+  if (score >= 34) return { color: "var(--warning)", bg: "rgba(255,174,92,0.15)", label: "Jaune" };
+  return { color: "var(--error)", bg: "rgba(255,107,107,0.15)", label: "Rouge" };
 }
 
 function strainColor(strain: number | null): { color: string; bg: string; label: string } {
   if (strain === null) return { color: "var(--text-tertiary)", bg: "rgba(0,0,0,0.04)", label: "—" };
-  if (strain >= 18) return { color: "#ff3b30", bg: "rgba(255,107,107,0.15)", label: "Très dur" };
-  if (strain >= 14) return { color: "#ff9500", bg: "rgba(255,174,92,0.15)", label: "Dur" };
-  if (strain >= 10) return { color: "#34c759", bg: "rgba(122,229,130,0.15)", label: "Modéré" };
-  return { color: "#32ade6", bg: "rgba(127,199,255,0.15)", label: "Léger" };
+  if (strain >= 18) return { color: "var(--error)", bg: "rgba(255,107,107,0.15)", label: "Très dur" };
+  if (strain >= 14) return { color: "var(--warning)", bg: "rgba(255,174,92,0.15)", label: "Dur" };
+  if (strain >= 10) return { color: "var(--success)", bg: "rgba(122,229,130,0.15)", label: "Modéré" };
+  return { color: "var(--chart-2)", bg: "rgba(127,199,255,0.15)", label: "Léger" };
 }
 
 function formatSleepDuration(min: number | null): string {
@@ -248,7 +248,7 @@ function CompactCard({ snapshot, loading }: { snapshot: WhoopSnapshot; loading: 
           icon={<Moon className="w-3.5 h-3.5" />}
           label="Sommeil"
           value={formatSleepDuration(snapshot.sleepDurationMin)}
-          color="#5856d6"
+          color="var(--diabete)"
           bg="rgba(180,167,255,0.15)"
         />
       </div>

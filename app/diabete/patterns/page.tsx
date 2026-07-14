@@ -161,8 +161,8 @@ export default function PatternsPage() {
       <Card className="mb-8">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3">
-            <span className="text-2xl font-bold text-[#34c759]">{PATTERN_DETAILS.length}</span>
-            <span className="text-sm text-black/50">patterns identifies et documentes</span>
+            <span className="text-2xl font-bold text-[var(--success)]">{PATTERN_DETAILS.length}</span>
+            <span className="text-sm text-text-secondary">patterns identifies et documentes</span>
           </div>
           <div className="flex gap-2 flex-wrap">
             <Badge color="orange">
@@ -187,10 +187,10 @@ export default function PatternsPage() {
         {PATTERN_DETAILS.map((pattern) => {
           const borderColor =
             pattern.severity === "danger"
-              ? "border-[#ff3b30]/30"
+              ? "border-[var(--error)]/30"
               : pattern.severity === "warning"
-                ? "border-[#ff9500]/30"
-                : "border-[#32ade6]/30";
+                ? "border-[var(--warning)]/30"
+                : "border-[var(--chart-2)]/30";
           const glowColor =
             pattern.severity === "danger"
               ? "orange"
@@ -206,16 +206,16 @@ export default function PatternsPage() {
                   <div
                     className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${
                       pattern.severity === "danger"
-                        ? "bg-[#ff3b30]/15 text-[#ff3b30]"
+                        ? "bg-[var(--error)]/15 text-[var(--error)]"
                         : pattern.severity === "warning"
-                          ? "bg-[#ff9500]/15 text-[#ff9500]"
-                          : "bg-[#32ade6]/15 text-[#32ade6]"
+                          ? "bg-[var(--warning)]/15 text-[var(--warning)]"
+                          : "bg-[var(--chart-2)]/15 text-[var(--chart-2)]"
                     }`}
                     dangerouslySetInnerHTML={{ __html: pattern.icon }}
                   />
                   <div>
                     <h3 className="text-lg font-semibold">{pattern.name}</h3>
-                    <p className="text-sm text-black/40">{pattern.description}</p>
+                    <p className="text-sm text-text-tertiary">{pattern.description}</p>
                   </div>
                 </div>
                 <Badge
@@ -227,36 +227,36 @@ export default function PatternsPage() {
 
               {/* Impact & timing summary */}
               <div className="grid grid-cols-2 gap-3 mb-5">
-                <div className="p-3 rounded-xl bg-black/[0.03]">
-                  <p className="text-xs text-black/35 mb-1">Impact glycemique</p>
+                <div className="p-3 rounded-xl bg-bg-hover">
+                  <p className="text-xs text-text-tertiary mb-1">Impact glycemique</p>
                   <p
                     className={`text-sm font-semibold ${
-                      pattern.glucoseImpact.startsWith("-") ? "text-[#32ade6]" : "text-[#ff9500]"
+                      pattern.glucoseImpact.startsWith("-") ? "text-[var(--chart-2)]" : "text-[var(--warning)]"
                     }`}
                   >
                     {pattern.glucoseImpact}
                   </p>
                 </div>
-                <div className="p-3 rounded-xl bg-black/[0.03]">
-                  <p className="text-xs text-black/35 mb-1">Fenetre temporelle</p>
-                  <p className="text-sm font-medium text-black/70">{pattern.timing}</p>
+                <div className="p-3 rounded-xl bg-bg-hover">
+                  <p className="text-xs text-text-tertiary mb-1">Fenetre temporelle</p>
+                  <p className="text-sm font-medium text-text-secondary">{pattern.timing}</p>
                 </div>
               </div>
 
               {/* Detailed explanation */}
               <div className="mb-5">
-                <p className="text-xs text-black/40 font-medium mb-2 uppercase tracking-wider">Explication detaillee</p>
-                <p className="text-sm text-black/55 leading-relaxed">{pattern.detailedExplanation}</p>
+                <p className="text-xs text-text-tertiary font-medium mb-2 uppercase tracking-wider">Explication detaillee</p>
+                <p className="text-sm text-text-secondary leading-relaxed">{pattern.detailedExplanation}</p>
               </div>
 
               {/* Triggers */}
               <div className="mb-5">
-                <p className="text-xs text-black/40 font-medium mb-2 uppercase tracking-wider">Declencheurs</p>
+                <p className="text-xs text-text-tertiary font-medium mb-2 uppercase tracking-wider">Declencheurs</p>
                 <div className="space-y-1.5">
                   {pattern.triggers.map((trigger, i) => (
                     <div key={i} className="flex items-start gap-2 text-sm">
-                      <span className="text-[#ff9500] mt-0.5 shrink-0">&#9679;</span>
-                      <span className="text-black/50">{trigger}</span>
+                      <span className="text-[var(--warning)] mt-0.5 shrink-0">&#9679;</span>
+                      <span className="text-text-secondary">{trigger}</span>
                     </div>
                   ))}
                 </div>
@@ -264,12 +264,12 @@ export default function PatternsPage() {
 
               {/* Actions */}
               <div>
-                <p className="text-xs text-black/40 font-medium mb-2 uppercase tracking-wider">Actions recommandees</p>
+                <p className="text-xs text-text-tertiary font-medium mb-2 uppercase tracking-wider">Actions recommandees</p>
                 <div className="space-y-1.5">
                   {pattern.actions.map((action, i) => (
                     <div key={i} className="flex items-start gap-2 text-sm">
-                      <span className="text-[#34c759] mt-0.5 shrink-0">&#10003;</span>
-                      <span className="text-black/60">{action}</span>
+                      <span className="text-[var(--success)] mt-0.5 shrink-0">&#10003;</span>
+                      <span className="text-text-secondary">{action}</span>
                     </div>
                   ))}
                 </div>

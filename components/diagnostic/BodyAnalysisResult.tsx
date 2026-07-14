@@ -50,7 +50,7 @@ export default function BodyAnalysisResult({ analysis, photos }: BodyAnalysisRes
               key={i}
               src={photo}
               alt={`Photo ${i + 1}`}
-              className="w-20 h-28 object-cover rounded-lg border border-black/10 shrink-0"
+              className="w-20 h-28 object-cover rounded-lg border border-border-default shrink-0"
             />
           ))}
         </div>
@@ -58,7 +58,7 @@ export default function BodyAnalysisResult({ analysis, photos }: BodyAnalysisRes
 
       {intro && (
         <Card>
-          <p className="text-sm text-black/70 leading-relaxed">{intro}</p>
+          <p className="text-sm text-text-secondary leading-relaxed">{intro}</p>
         </Card>
       )}
 
@@ -76,7 +76,7 @@ export default function BodyAnalysisResult({ analysis, photos }: BodyAnalysisRes
                       {i + 1}/5
                     </Badge>
                   </div>
-                  <div className="text-sm text-black/70 leading-relaxed whitespace-pre-line">
+                  <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-line">
                     {section.content}
                   </div>
                 </div>
@@ -86,7 +86,7 @@ export default function BodyAnalysisResult({ analysis, photos }: BodyAnalysisRes
         })
       ) : (
         <Card>
-          <div className="text-sm text-black/70 leading-relaxed whitespace-pre-line">{analysis}</div>
+          <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-line">{analysis}</div>
         </Card>
       )}
 

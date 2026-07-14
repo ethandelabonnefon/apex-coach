@@ -46,7 +46,7 @@ function RestTimer({ duration, onDone }: { duration: number; onDone: () => void 
   const pct = (remaining / duration) * 100;
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-xl bg-[#af52de]/10 border border-[#af52de]/20">
+    <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--accent-2)]/10 border border-[var(--accent-2)]/20">
       <div className="relative w-12 h-12">
         <svg className="w-12 h-12 -rotate-90" viewBox="0 0 48 48">
           <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth="3" />
@@ -55,7 +55,7 @@ function RestTimer({ duration, onDone }: { duration: number; onDone: () => void 
             cy="24"
             r="20"
             fill="none"
-            stroke="#af52de"
+            stroke="var(--accent-2)"
             strokeWidth="3"
             strokeDasharray={`${2 * Math.PI * 20}`}
             strokeDashoffset={`${2 * Math.PI * 20 * (1 - pct / 100)}`}
@@ -65,10 +65,10 @@ function RestTimer({ duration, onDone }: { duration: number; onDone: () => void 
         </svg>
       </div>
       <div>
-        <p className="text-lg font-bold text-[#af52de] font-mono">
+        <p className="text-lg font-bold text-[var(--accent-2)] font-mono">
           {mins}:{secs.toString().padStart(2, "0")}
         </p>
-        <p className="text-xs text-black/35">Repos en cours</p>
+        <p className="text-xs text-text-tertiary">Repos en cours</p>
       </div>
       <Button variant="ghost" size="sm" onClick={onDone}>
         Passer
@@ -115,30 +115,30 @@ function ExerciseCard({
     <Card className="mb-4">
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
-          <span className="flex items-center justify-center w-8 h-8 rounded-full bg-[#af52de]/20 text-[#af52de] text-sm font-bold">
+          <span className="flex items-center justify-center w-8 h-8 rounded-full bg-[var(--accent-2)]/20 text-[var(--accent-2)] text-sm font-bold">
             {exerciseIndex + 1}
           </span>
           <div>
             <h3 className="font-semibold text-sm">{exercise.name}</h3>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-              <span className="font-mono text-[#af52de] font-semibold">
+              <span className="font-mono text-[var(--accent-2)] font-semibold">
                 {exercise.sets} séries × {exercise.reps} reps
               </span>
-              <span className="text-black/35">RIR {exercise.rir}</span>
-              <span className="text-black/35">Repos {exercise.rest}s</span>
+              <span className="text-text-tertiary">RIR {exercise.rir}</span>
+              <span className="text-text-tertiary">Repos {exercise.rest}s</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* RIR explainer — visible une fois par exo, discret */}
-      <div className="mb-3 flex items-start gap-2 p-2.5 rounded-lg bg-black/[0.02] border border-black/[0.04]">
-        <span className="text-[10px] font-mono text-[#af52de]/70 mt-0.5">i</span>
-        <p className="text-[11px] leading-snug text-black/50">
-          <span className="text-black/70 font-medium">Objectif :</span>{" "}
-          fais <span className="text-black/90 font-semibold font-mono">{exercise.reps} répétitions</span>{" "}
+      <div className="mb-3 flex items-start gap-2 p-2.5 rounded-lg bg-bg-hover border border-border-subtle">
+        <span className="text-[10px] font-mono text-[var(--accent-2)]/70 mt-0.5">i</span>
+        <p className="text-[11px] leading-snug text-text-secondary">
+          <span className="text-text-secondary font-medium">Objectif :</span>{" "}
+          fais <span className="text-text-primary font-semibold font-mono">{exercise.reps} répétitions</span>{" "}
           par série, en gardant{" "}
-          <span className="text-black/90 font-semibold font-mono">{exercise.rir} rep{exercise.rir > 1 ? "s" : ""} en réserve</span>{" "}
+          <span className="text-text-primary font-semibold font-mono">{exercise.rir} rep{exercise.rir > 1 ? "s" : ""} en réserve</span>{" "}
           (RIR = Reps In Reserve : ce qu&apos;il te reste dans le réservoir à la fin du set).
         </p>
       </div>
@@ -146,7 +146,7 @@ function ExerciseCard({
       {/* Cues */}
       <div className="mb-3 flex flex-wrap gap-1.5">
         {(exercise.cues || []).map((cue, i) => (
-          <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-black/[0.05] text-black/50">
+          <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-bg-hover text-text-secondary">
             {cue}
           </span>
         ))}
@@ -154,29 +154,29 @@ function ExerciseCard({
 
       {/* Last session + weight suggestion */}
       {lastSets && lastSets.length > 0 && (
-        <div className="mb-3 p-2.5 rounded-lg bg-black/[0.03] border border-black/[0.06]">
-          <p className="text-[10px] text-black/40 mb-1">Derniere seance</p>
+        <div className="mb-3 p-2.5 rounded-lg bg-bg-hover border border-border-subtle">
+          <p className="text-[10px] text-text-tertiary mb-1">Derniere seance</p>
           <div className="flex flex-wrap gap-2">
             {lastSets.map((s, i) => (
-              <span key={i} className="text-xs text-black/60 font-mono">
+              <span key={i} className="text-xs text-text-secondary font-mono">
                 S{i + 1}: {s.weight}kg x {s.reps}
               </span>
             ))}
           </div>
           {suggestion && (
-            <p className="text-xs text-[#af52de] mt-1.5">
+            <p className="text-xs text-[var(--accent-2)] mt-1.5">
               Suggestion: <span className="font-semibold">{suggestion.suggestedWeight} kg</span>
-              <span className="text-black/30 ml-1">— {suggestion.reasoning}</span>
+              <span className="text-text-tertiary ml-1">— {suggestion.reasoning}</span>
             </p>
           )}
         </div>
       )}
       {!lastSets && suggestion && (
-        <div className="mb-3 p-2.5 rounded-lg bg-[#af52de]/5 border border-[#af52de]/10">
-          <p className="text-xs text-[#af52de]">
+        <div className="mb-3 p-2.5 rounded-lg bg-[var(--accent-2)]/5 border border-[var(--accent-2)]/10">
+          <p className="text-xs text-[var(--accent-2)]">
             Suggestion: <span className="font-semibold">{suggestion.suggestedWeight} kg</span>
           </p>
-          <p className="text-[10px] text-black/40 mt-0.5">{suggestion.reasoning}</p>
+          <p className="text-[10px] text-text-tertiary mt-0.5">{suggestion.reasoning}</p>
         </div>
       )}
 
@@ -184,25 +184,25 @@ function ExerciseCard({
       <div className="overflow-x-auto">
         <table className="w-full text-sm mb-3">
           <thead>
-            <tr className="text-xs text-black/30">
+            <tr className="text-xs text-text-tertiary">
               <th className="text-left py-1 pr-2 w-12">Set</th>
               <th className="text-left py-1 px-2">Poids (kg)</th>
               <th className="text-left py-1 px-2">
-                Reps <span className="text-black/20 font-mono normal-case">({exercise.reps})</span>
+                Reps <span className="text-text-disabled font-mono normal-case">({exercise.reps})</span>
               </th>
               <th
                 className="text-left py-1 px-2 cursor-help"
                 title="RIR (Reps In Reserve) : nombre de reps qu'il te reste dans le réservoir à la fin du set. RIR 2 = tu pouvais en faire 2 de plus."
               >
-                RIR <span className="text-black/20">ⓘ</span>
+                RIR <span className="text-text-disabled">ⓘ</span>
               </th>
               <th className="text-left py-1 pl-2 w-20">Repos</th>
             </tr>
           </thead>
           <tbody>
             {log.sets.map((set, setIdx) => (
-              <tr key={setIdx} className="border-t border-black/[0.04]">
-                <td className="py-2 pr-2 text-black/40 font-mono text-xs">{setIdx + 1}</td>
+              <tr key={setIdx} className="border-t border-border-subtle">
+                <td className="py-2 pr-2 text-text-tertiary font-mono text-xs">{setIdx + 1}</td>
                 <td className="py-2 px-2">
                   <input
                     type="number"
@@ -236,7 +236,7 @@ function ExerciseCard({
                 </td>
                 <td className="py-2 pl-2">
                   {activeTimer === setIdx ? (
-                    <span className="text-xs text-[#af52de]">...</span>
+                    <span className="text-xs text-[var(--accent-2)]">...</span>
                   ) : (
                     <Button
                       variant="ghost"
@@ -261,7 +261,7 @@ function ExerciseCard({
       {/* Difficulty + Pump rating */}
       <div className="flex gap-4 mt-2 mb-3">
         <div>
-          <p className="text-[10px] text-black/30 mb-1">Difficulte (1-10)</p>
+          <p className="text-[10px] text-text-tertiary mb-1">Difficulte (1-10)</p>
           <div className="flex gap-1">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((v) => (
               <button
@@ -269,8 +269,8 @@ function ExerciseCard({
                 onClick={() => onUpdateDifficulty(v)}
                 className={`w-6 h-6 rounded text-[10px] transition-colors ${
                   v <= log.difficulty
-                    ? "bg-[#af52de] text-white"
-                    : "bg-black/[0.05] text-black/30"
+                    ? "bg-[var(--accent-2)] text-white"
+                    : "bg-bg-hover text-text-tertiary"
                 }`}
               >
                 {v}
@@ -279,7 +279,7 @@ function ExerciseCard({
           </div>
         </div>
         <div>
-          <p className="text-[10px] text-black/30 mb-1">Pump (1-5)</p>
+          <p className="text-[10px] text-text-tertiary mb-1">Pump (1-5)</p>
           <div className="flex gap-1">
             {[1, 2, 3, 4, 5].map((v) => (
               <button
@@ -287,8 +287,8 @@ function ExerciseCard({
                 onClick={() => onUpdatePump(v)}
                 className={`w-6 h-6 rounded text-[10px] transition-colors ${
                   v <= log.pumpRating
-                    ? "bg-[#af52de] text-white"
-                    : "bg-black/[0.05] text-black/30"
+                    ? "bg-[var(--accent-2)] text-white"
+                    : "bg-bg-hover text-text-tertiary"
                 }`}
               >
                 {v}
@@ -301,12 +301,12 @@ function ExerciseCard({
       {/* Reasoning expandable */}
       <button
         onClick={() => setShowReasoning(!showReasoning)}
-        className="text-xs text-[#af52de]/70 hover:text-[#af52de] transition-colors mb-1"
+        className="text-xs text-[var(--accent-2)]/70 hover:text-[var(--accent-2)] transition-colors mb-1"
       >
         {showReasoning ? "Masquer" : "Afficher"} le raisonnement
       </button>
       {showReasoning && (
-        <div className="p-3 rounded-lg bg-black/[0.02] text-xs text-black/50 mt-1 mb-2 animate-slide-up">
+        <div className="p-3 rounded-lg bg-bg-hover text-xs text-text-secondary mt-1 mb-2 animate-slide-up">
           {exercise.reasoning}
         </div>
       )}
@@ -314,7 +314,7 @@ function ExerciseCard({
       {/* Alternatives */}
       <button
         onClick={() => setShowAlternatives(!showAlternatives)}
-        className="text-xs text-black/30 hover:text-black/50 transition-colors block"
+        className="text-xs text-text-tertiary hover:text-text-secondary transition-colors block"
       >
         {showAlternatives ? "Masquer" : "Voir"} les alternatives
       </button>
@@ -323,9 +323,9 @@ function ExerciseCard({
           {(exercise.alternatives || []).map((alt, altIdx) => {
             const altObj = typeof alt === "string" ? { name: alt, reason: "" } : alt;
             return (
-              <div key={altObj.name || altIdx} className="flex items-center gap-2 text-xs p-2 rounded-lg bg-black/[0.02]">
-                <span className="text-black/60">{altObj.name}</span>
-                {altObj.reason && <><span className="text-black/25">--</span><span className="text-black/35">{altObj.reason}</span></>}
+              <div key={altObj.name || altIdx} className="flex items-center gap-2 text-xs p-2 rounded-lg bg-bg-hover">
+                <span className="text-text-secondary">{altObj.name}</span>
+                {altObj.reason && <><span className="text-text-disabled">--</span><span className="text-text-tertiary">{altObj.reason}</span></>}
               </div>
             );
           })}
@@ -382,7 +382,7 @@ export function SessionClient({ sessionId }: { sessionId: string }) {
     return (
       <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold mb-4">Seance introuvable</h1>
-        <p className="text-black/40">Aucune seance ne correspond a cet identifiant.</p>
+        <p className="text-text-tertiary">Aucune seance ne correspond a cet identifiant.</p>
       </div>
     );
   }
@@ -445,7 +445,7 @@ export function SessionClient({ sessionId }: { sessionId: string }) {
       <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto text-center py-20">
         <span className="text-5xl mb-6 block">&#10003;</span>
         <h1 className="text-2xl font-bold mb-2">Seance enregistree !</h1>
-        <p className="text-black/40 mb-6">Bonne seance, les donnees sont sauvegardees.</p>
+        <p className="text-text-tertiary mb-6">Bonne seance, les donnees sont sauvegardees.</p>
         <div className="flex gap-3 justify-center">
           <Link href="/muscu">
             <Button variant="secondary">Retour au programme</Button>
@@ -495,10 +495,10 @@ export function SessionClient({ sessionId }: { sessionId: string }) {
             <span
               className={`text-sm font-medium ${
                 parseFloat(glucoseBefore) < 70
-                  ? "text-[#ff3b30]"
+                  ? "text-[var(--error)]"
                   : parseFloat(glucoseBefore) > 250
-                    ? "text-[#ff9500]"
-                    : "text-[#34c759]"
+                    ? "text-[var(--warning)]"
+                    : "text-[var(--success)]"
               }`}
             >
               {parseFloat(glucoseBefore) < 70
@@ -509,7 +509,7 @@ export function SessionClient({ sessionId }: { sessionId: string }) {
             </span>
           )}
         </div>
-        <p className="text-[10px] text-black/30 mt-2">{(session.notes as { glycemia?: string } | undefined)?.glycemia || ""}</p>
+        <p className="text-[10px] text-text-tertiary mt-2">{(session.notes as { glycemia?: string } | undefined)?.glycemia || ""}</p>
       </Card>
 
       {/* Exercises */}
@@ -539,7 +539,7 @@ export function SessionClient({ sessionId }: { sessionId: string }) {
             className="w-32"
           />
           {glucoseBefore && glucoseAfter && (
-            <span className="text-xs text-black/40">
+            <span className="text-xs text-text-tertiary">
               Delta: {(parseFloat(glucoseAfter) - parseFloat(glucoseBefore)).toFixed(0)} mg/dL
             </span>
           )}
@@ -557,11 +557,11 @@ export function SessionClient({ sessionId }: { sessionId: string }) {
           className="w-full"
         />
         <div className="mt-3 space-y-1">
-          <p className="text-xs text-black/30">
-            <span className="text-black/50">Recuperation:</span> {(session.notes as { recovery?: string } | undefined)?.recovery || ""}
+          <p className="text-xs text-text-tertiary">
+            <span className="text-text-secondary">Recuperation:</span> {(session.notes as { recovery?: string } | undefined)?.recovery || ""}
           </p>
-          <p className="text-xs text-black/30">
-            <span className="text-black/50">Progression:</span> {(session.notes as { progression?: string } | undefined)?.progression || ""}
+          <p className="text-xs text-text-tertiary">
+            <span className="text-text-secondary">Progression:</span> {(session.notes as { progression?: string } | undefined)?.progression || ""}
           </p>
         </div>
       </Card>
@@ -573,7 +573,7 @@ export function SessionClient({ sessionId }: { sessionId: string }) {
       <div className="mt-4 flex justify-end">
         <Button
           onClick={handleSubmit}
-          className="!bg-[#af52de] hover:!bg-[#af52de]/90 text-white"
+          className="!bg-[var(--accent-2)] hover:!bg-[var(--accent-2)]/90 text-white"
           size="lg"
         >
           Valider la seance

@@ -43,7 +43,7 @@ export default function BodyMapLegend({ muscles, onMuscleSelect }: BodyMapLegend
               <span className="text-xs font-semibold" style={{ color: STATUS_COLORS[status] }}>
                 {STATUS_LABELS[status]}
               </span>
-              <span className="text-[10px] text-black/25">— {STATUS_ICONS[status]}</span>
+              <span className="text-[10px] text-text-disabled">— {STATUS_ICONS[status]}</span>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {group.map((muscle) => (
@@ -70,13 +70,13 @@ export default function BodyMapLegend({ muscles, onMuscleSelect }: BodyMapLegend
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className="w-2.5 h-2.5 rounded-full bg-black/20" />
-            <span className="text-xs text-black/30">Non évalués</span>
+            <span className="text-xs text-text-tertiary">Non évalués</span>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {muscles
               .filter((m) => m.status === "unknown")
               .map((muscle) => (
-                <span key={muscle.id} className="px-2.5 py-1 rounded-lg text-xs text-black/25 bg-black/[0.03] border border-black/[0.06]">
+                <span key={muscle.id} className="px-2.5 py-1 rounded-lg text-xs text-text-disabled bg-bg-hover border border-border-subtle">
                   {muscle.name}
                 </span>
               ))}

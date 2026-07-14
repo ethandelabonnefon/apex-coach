@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Logo from "@/components/Logo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 type NavItem = {
   href: string;
@@ -119,6 +120,12 @@ export function Navigation() {
           ))}
         </nav>
 
+        {/* Theme toggle */}
+        <div className="mx-3 mb-2 flex items-center justify-between px-1">
+          <span className="label">Thème</span>
+          <ThemeToggle />
+        </div>
+
         {/* User block */}
         <Link
           href="/profil"
@@ -143,13 +150,16 @@ export function Navigation() {
           <Link href="/" className="flex items-center gap-2">
             <Logo size={24} withWordmark />
           </Link>
-          <Link
-            href="/profil"
-            className="h-9 w-9 rounded-full flex items-center justify-center bg-bg-secondary touch-target"
-            aria-label="Profil"
-          >
-            <UserRound size={16} className="text-text-secondary" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Link
+              href="/profil"
+              className="h-9 w-9 rounded-full flex items-center justify-center bg-bg-secondary touch-target"
+              aria-label="Profil"
+            >
+              <UserRound size={16} className="text-text-secondary" />
+            </Link>
+          </div>
         </div>
       </header>
 

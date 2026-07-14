@@ -131,24 +131,24 @@ function SuggestionCard({
   return (
     <Card>
       <div className="flex items-start justify-between gap-3 mb-2">
-        <span className="text-[11px] uppercase tracking-wider text-[#5856d6] font-semibold">
+        <span className="text-[11px] uppercase tracking-wider text-[var(--diabete)] font-semibold">
           {suggestion.area}
         </span>
         <Badge color={conf.color}>{conf.label}</Badge>
       </div>
-      <p className="text-sm font-medium text-black/75">{suggestion.suggestion}</p>
-      <p className="text-xs text-black/45 mt-1.5">{suggestion.rationale}</p>
+      <p className="text-sm font-medium text-text-secondary">{suggestion.suggestion}</p>
+      <p className="text-xs text-text-tertiary mt-1.5">{suggestion.rationale}</p>
 
       {suggestion.action && (
-        <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-[#5856d6]/[0.07] px-3 py-2.5 flex-wrap">
-          <p className="text-xs text-black/60">
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-[var(--diabete)]/[0.07] px-3 py-2.5 flex-wrap">
+          <p className="text-xs text-text-secondary">
             Actuel{" "}
-            <span className="font-semibold text-black/80">
+            <span className="font-semibold text-text-primary">
               {formatActionValue(suggestion.action.currentValue)}
             </span>
             {" → "}
             Proposé{" "}
-            <span className="font-semibold text-[#5856d6]">
+            <span className="font-semibold text-[var(--diabete)]">
               {formatActionValue(suggestion.action.proposedValue)}
             </span>{" "}
             {suggestion.action.unit}
@@ -481,8 +481,8 @@ export default function DocteurPage() {
               style={{ touchAction: "manipulation" }}
               className={`px-3 py-1.5 text-xs rounded-lg cursor-pointer select-none transition-all ${
                 days === d
-                  ? "bg-[#5856d6]/15 text-[#5856d6] font-semibold"
-                  : "bg-black/[0.05] text-black/50 hover:bg-black/[0.08]"
+                  ? "bg-[var(--diabete)]/15 text-[var(--diabete)] font-semibold"
+                  : "bg-bg-hover text-text-secondary hover:bg-bg-hover"
               }`}
             >
               {d} jours
@@ -529,8 +529,8 @@ export default function DocteurPage() {
       {/* ── Bilan (dernière analyse) ── */}
       {loading === "analysis" && (
         <Card className="mb-6">
-          <div className="flex items-center gap-3 text-black/50 text-sm">
-            <Loader2 className="w-4 h-4 animate-spin text-[#5856d6]" />
+          <div className="flex items-center gap-3 text-text-secondary text-sm">
+            <Loader2 className="w-4 h-4 animate-spin text-[var(--diabete)]" />
             Le Docteur analyse tes {days} derniers jours (glycémie, injections,
             repas, sport)…
           </div>
@@ -538,9 +538,9 @@ export default function DocteurPage() {
       )}
 
       {!lastAnalysis && !hydrating && loading === null && (
-        <Card className="mb-8 border border-[#5856d6]/20 text-center">
-          <Stethoscope className="w-8 h-8 text-[#5856d6] mx-auto mb-3" />
-          <p className="text-sm text-black/60 leading-relaxed max-w-sm mx-auto">
+        <Card className="mb-8 border border-[var(--diabete)]/20 text-center">
+          <Stethoscope className="w-8 h-8 text-[var(--diabete)] mx-auto mb-3" />
+          <p className="text-sm text-text-secondary leading-relaxed max-w-sm mx-auto">
             Aucun bilan pour l&apos;instant. Choisis une période puis lance
             l&apos;analyse — chaque bilan appelle Claude, inutile de le faire
             tous les jours : tous les 2-3 jours ou une fois par semaine
@@ -559,17 +559,17 @@ export default function DocteurPage() {
         <div className="mb-8">
           <SectionTitle>
             <span className="inline-flex items-center gap-2">
-              <Stethoscope className="w-5 h-5 text-[#5856d6]" />
+              <Stethoscope className="w-5 h-5 text-[var(--diabete)]" />
               Bilan du Docteur
             </span>
           </SectionTitle>
 
           {lastAnalysis.meta.summary && (
-            <Card className="mb-4 border border-[#5856d6]/20">
-              <p className="text-sm text-black/70 leading-relaxed">
+            <Card className="mb-4 border border-[var(--diabete)]/20">
+              <p className="text-sm text-text-secondary leading-relaxed">
                 {lastAnalysis.meta.summary}
               </p>
-              <p className="text-[11px] text-black/35 mt-3">
+              <p className="text-[11px] text-text-tertiary mt-3">
                 Généré le{" "}
                 {new Date(lastAnalysis.createdAt).toLocaleString("fr-FR")} · à
                 valider avec ton suivi médical
@@ -589,14 +589,14 @@ export default function DocteurPage() {
 
           {(lastAnalysis.meta.highlights?.length ?? 0) > 0 && (
             <Card className="mb-4">
-              <p className="text-xs text-black/40 font-medium mb-3 uppercase tracking-wider">
+              <p className="text-xs text-text-tertiary font-medium mb-3 uppercase tracking-wider">
                 Points clés
               </p>
               <div className="space-y-2">
                 {lastAnalysis.meta.highlights!.map((h, i) => (
                   <div key={i} className="flex items-start gap-2 text-sm">
-                    <CheckCircle2 className="w-4 h-4 text-[#34c759] mt-0.5 shrink-0" />
-                    <span className="text-black/60">{h}</span>
+                    <CheckCircle2 className="w-4 h-4 text-[var(--success)] mt-0.5 shrink-0" />
+                    <span className="text-text-secondary">{h}</span>
                   </div>
                 ))}
               </div>
@@ -629,14 +629,14 @@ export default function DocteurPage() {
       <Card className="!p-0 overflow-hidden">
         <div className="max-h-[50vh] overflow-y-auto p-4 space-y-3">
           {hydrating && (
-            <div className="flex items-center gap-2 text-sm text-black/40 py-6 justify-center">
+            <div className="flex items-center gap-2 text-sm text-text-tertiary py-6 justify-center">
               <Loader2 className="w-4 h-4 animate-spin" />
               Chargement de l&apos;historique…
             </div>
           )}
 
           {!hydrating && conversation.length === 0 && loading === null && (
-            <p className="text-sm text-black/40 text-center py-6">
+            <p className="text-sm text-text-tertiary text-center py-6">
               Aucune conversation. Lance une analyse ou pose une question pour
               commencer.
             </p>
@@ -645,20 +645,20 @@ export default function DocteurPage() {
           {conversation.map((m, i) =>
             m.role === "user" ? (
               <div key={i} className="flex justify-end">
-                <div className="max-w-[85%] rounded-2xl rounded-br-md bg-[#007aff] text-white px-4 py-2.5 text-sm whitespace-pre-wrap">
+                <div className="max-w-[85%] rounded-2xl rounded-br-md bg-[var(--accent)] text-white px-4 py-2.5 text-sm whitespace-pre-wrap">
                   {m.content}
                 </div>
               </div>
             ) : (
               <div key={i} className="flex flex-col items-start gap-2">
-                <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-black/[0.05] px-4 py-2.5">
+                <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-bg-hover px-4 py-2.5">
                   <div className="flex items-center gap-1.5 mb-1">
-                    <Stethoscope className="w-3.5 h-3.5 text-[#5856d6]" />
-                    <span className="text-[10px] uppercase tracking-wider text-[#5856d6] font-semibold">
+                    <Stethoscope className="w-3.5 h-3.5 text-[var(--diabete)]" />
+                    <span className="text-[10px] uppercase tracking-wider text-[var(--diabete)] font-semibold">
                       {m.kind === "analysis" ? "Bilan" : "Le Docteur"}
                     </span>
                   </div>
-                  <p className="text-sm text-black/70 whitespace-pre-wrap leading-relaxed">
+                  <p className="text-sm text-text-secondary whitespace-pre-wrap leading-relaxed">
                     {m.content}
                   </p>
                 </div>
@@ -691,8 +691,8 @@ export default function DocteurPage() {
 
           {loading === "chat" && (
             <div className="flex justify-start">
-              <div className="rounded-2xl rounded-bl-md bg-black/[0.05] px-4 py-2.5 flex items-center gap-2 text-sm text-black/40">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-[#5856d6]" />
+              <div className="rounded-2xl rounded-bl-md bg-bg-hover px-4 py-2.5 flex items-center gap-2 text-sm text-text-tertiary">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--diabete)]" />
                 Le Docteur réfléchit…
               </div>
             </div>
@@ -702,7 +702,7 @@ export default function DocteurPage() {
         </div>
 
         {/* Saisie */}
-        <div className="border-t border-black/[0.06] p-3 flex gap-2">
+        <div className="border-t border-border-subtle p-3 flex gap-2">
           <input
             type="text"
             value={input}
@@ -712,7 +712,7 @@ export default function DocteurPage() {
             }}
             placeholder='Ex : "Pourquoi je fais des hypos la nuit ?"'
             disabled={loading !== null}
-            className="flex-1 bg-black/[0.04] rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#5856d6]/30 placeholder:text-black/30 disabled:opacity-50"
+            className="flex-1 bg-bg-hover rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[var(--diabete)]/30 placeholder:text-text-tertiary disabled:opacity-50"
           />
           <Button
             onClick={handleSend}

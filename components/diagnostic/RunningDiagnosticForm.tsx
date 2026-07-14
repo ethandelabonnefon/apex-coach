@@ -10,14 +10,14 @@ interface SelectOption { value: string; label: string; description?: string; not
 
 function OptionButton({ option, selected, onClick }: { option: SelectOption; selected: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} className={`text-left p-3 rounded-xl border transition-all ${selected ? "bg-accent-subtle border-[#007aff]/30 text-text-primary" : "bg-black/[0.03] border-black/[0.06] text-black/60 hover:bg-black/[0.06]"}`}>
+    <button onClick={onClick} className={`text-left p-3 rounded-xl border transition-all ${selected ? "bg-accent-subtle border-[var(--accent)]/30 text-text-primary" : "bg-bg-hover border-border-subtle text-text-secondary hover:bg-bg-hover"}`}>
       <p className="text-sm font-medium">{option.label}</p>
-      {option.description && <p className="text-xs text-black/35 mt-0.5">{option.description}</p>}
-      {option.note && <p className="text-[10px] text-black/25 mt-0.5">{option.note}</p>}
-      {option.t1dAdvice && selected && <p className="text-[10px] text-[#ff9500] mt-1">T1D : {option.t1dAdvice}</p>}
-      {option.t1dWarning && selected && <p className="text-[10px] text-[#ff3b30] mt-1">{option.t1dWarning}</p>}
-      {option.warning && selected && <p className="text-[10px] text-[#ff3b30] mt-1">{option.warning}</p>}
-      {option.alert && selected && <p className="text-[10px] text-[#ff3b30] mt-1 font-medium">On va adapter ton protocole</p>}
+      {option.description && <p className="text-xs text-text-tertiary mt-0.5">{option.description}</p>}
+      {option.note && <p className="text-[10px] text-text-disabled mt-0.5">{option.note}</p>}
+      {option.t1dAdvice && selected && <p className="text-[10px] text-[var(--warning)] mt-1">T1D : {option.t1dAdvice}</p>}
+      {option.t1dWarning && selected && <p className="text-[10px] text-[var(--error)] mt-1">{option.t1dWarning}</p>}
+      {option.warning && selected && <p className="text-[10px] text-[var(--error)] mt-1">{option.warning}</p>}
+      {option.alert && selected && <p className="text-[10px] text-[var(--error)] mt-1 font-medium">On va adapter ton protocole</p>}
     </button>
   );
 }
@@ -28,7 +28,7 @@ function MultiSelectGrid({ options, selected, onToggle }: { options: string[]; s
       {options.map((opt) => {
         const isSel = selected.includes(opt);
         return (
-          <button key={opt} onClick={() => onToggle(opt)} className={`p-2.5 rounded-xl text-xs font-medium border transition-all ${isSel ? "bg-[#34c759]/10 border-[#34c759]/30 text-[#34c759]" : "bg-black/[0.03] border-black/[0.06] text-black/50 hover:bg-black/[0.06]"}`}>
+          <button key={opt} onClick={() => onToggle(opt)} className={`p-2.5 rounded-xl text-xs font-medium border transition-all ${isSel ? "bg-[var(--success)]/10 border-[var(--success)]/30 text-[var(--success)]" : "bg-bg-hover border-border-subtle text-text-secondary hover:bg-bg-hover"}`}>
             {isSel && "✓ "}{opt}
           </button>
         );
@@ -141,15 +141,15 @@ export default function RunningDiagnosticForm() {
             <SectionTitle>Zones d'entraînement</SectionTitle>
             <div className="space-y-2">
               {(p.zones as { name: string; paceMin: string; paceMax: string; hrMin: number; hrMax: number; description: string }[]).map((zone, i) => (
-                <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg bg-black/[0.03]">
+                <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg bg-bg-hover">
                   <Badge color={i < 2 ? "green" : i < 4 ? "orange" : "red"}>Z{i + 1}</Badge>
                   <div className="flex-1">
                     <p className="text-sm font-medium">{zone.name}</p>
-                    <p className="text-[10px] text-black/35">{zone.description}</p>
+                    <p className="text-[10px] text-text-tertiary">{zone.description}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-black/70">{zone.paceMin} - {zone.paceMax}</p>
-                    <p className="text-[10px] text-black/30">{zone.hrMin}-{zone.hrMax} bpm</p>
+                    <p className="text-xs text-text-secondary">{zone.paceMin} - {zone.paceMax}</p>
+                    <p className="text-[10px] text-text-tertiary">{zone.hrMin}-{zone.hrMax} bpm</p>
                   </div>
                 </div>
               ))}
@@ -163,8 +163,8 @@ export default function RunningDiagnosticForm() {
             <SectionTitle>Prédictions de temps</SectionTitle>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {Object.entries(p.predictions as Record<string, unknown>).map(([dist, time]) => (
-                <div key={dist} className="p-3 rounded-xl bg-black/[0.03] text-center">
-                  <p className="text-[10px] text-black/35 uppercase">{dist}</p>
+                <div key={dist} className="p-3 rounded-xl bg-bg-hover text-center">
+                  <p className="text-[10px] text-text-tertiary uppercase">{dist}</p>
                   <p className="text-sm font-medium mt-1">{String(time)}</p>
                 </div>
               ))}
@@ -175,7 +175,7 @@ export default function RunningDiagnosticForm() {
         {Boolean(p.fullAnalysis) && (
           <Card>
             <SectionTitle>Analyse</SectionTitle>
-            <div className="text-sm text-black/70 leading-relaxed whitespace-pre-line">{String(p.fullAnalysis)}</div>
+            <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-line">{String(p.fullAnalysis)}</div>
           </Card>
         )}
       </div>
@@ -205,8 +205,8 @@ export default function RunningDiagnosticForm() {
               { label: "Sorties/sem", value: String(runningDiagnosticData.maxRunsPerWeek || "—") },
               { label: "VO2max", value: runningDiagnosticData.vo2maxUnknown ? "Non connue" : `${runningDiagnosticData.vo2max || "—"}` },
             ].map((item) => (
-              <div key={item.label} className="p-2.5 rounded-lg bg-black/[0.03]">
-                <p className="text-[10px] text-black/35 uppercase">{item.label}</p>
+              <div key={item.label} className="p-2.5 rounded-lg bg-bg-hover">
+                <p className="text-[10px] text-text-tertiary uppercase">{item.label}</p>
                 <p className="text-sm font-medium mt-0.5 capitalize">{item.value}</p>
               </div>
             ))}
@@ -222,7 +222,7 @@ export default function RunningDiagnosticForm() {
   // ─── Form steps ────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-      <ProgressBar value={step + 1} max={5} color="#34c759" label={`Étape ${step + 1}/5 — ${STEP_LABELS[step]}`} />
+      <ProgressBar value={step + 1} max={5} color="var(--success)" label={`Étape ${step + 1}/5 — ${STEP_LABELS[step]}`} />
 
       {/* Step 0: Profil Running */}
       {step === 0 && (
@@ -230,7 +230,7 @@ export default function RunningDiagnosticForm() {
           <SectionTitle>Profil Running Actuel</SectionTitle>
           <div className="space-y-4">
             <div>
-              <p className="text-xs text-black/50 mb-2">Depuis combien de temps tu cours ?</p>
+              <p className="text-xs text-text-secondary mb-2">Depuis combien de temps tu cours ?</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {[
                   { value: "never", label: "Jamais couru régulièrement", description: "Débutant complet" },
@@ -242,7 +242,7 @@ export default function RunningDiagnosticForm() {
               </div>
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-2">Fréquence actuelle ?</p>
+              <p className="text-xs text-text-secondary mb-2">Fréquence actuelle ?</p>
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                 {[
                   { value: "0", label: "0x/sem", note: "Pas actuellement" },
@@ -254,7 +254,7 @@ export default function RunningDiagnosticForm() {
               </div>
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-2">Distance max courue récemment (3 derniers mois) ?</p>
+              <p className="text-xs text-text-secondary mb-2">Distance max courue récemment (3 derniers mois) ?</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {[
                   { value: "0", label: "Jamais couru" },
@@ -267,23 +267,23 @@ export default function RunningDiagnosticForm() {
               </div>
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-2">Courses officielles ?</p>
+              <p className="text-xs text-text-secondary mb-2">Courses officielles ?</p>
               <MultiSelectGrid options={["Aucune", "5K", "10K", "Semi-marathon", "Marathon", "Trail"]} selected={data.officialRaces as string[]} onToggle={(v) => toggle("officialRaces", v)} />
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-2">Meilleurs temps (optionnel)</p>
+              <p className="text-xs text-text-secondary mb-2">Meilleurs temps (optionnel)</p>
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="text-[10px] text-black/30 block mb-1">5K</label>
-                  <input type="text" value={String(data.best5k || "")} onChange={(e) => set("best5k", e.target.value)} placeholder="MM:SS" className="w-full bg-black/[0.04] border border-black/[0.08] rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-black/20 focus:outline-none focus:border-[#34c759]/50" />
+                  <label className="text-[10px] text-text-tertiary block mb-1">5K</label>
+                  <input type="text" value={String(data.best5k || "")} onChange={(e) => set("best5k", e.target.value)} placeholder="MM:SS" className="w-full bg-bg-hover border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-[var(--success)]/50" />
                 </div>
                 <div>
-                  <label className="text-[10px] text-black/30 block mb-1">10K</label>
-                  <input type="text" value={String(data.best10k || "")} onChange={(e) => set("best10k", e.target.value)} placeholder="MM:SS" className="w-full bg-black/[0.04] border border-black/[0.08] rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-black/20 focus:outline-none focus:border-[#34c759]/50" />
+                  <label className="text-[10px] text-text-tertiary block mb-1">10K</label>
+                  <input type="text" value={String(data.best10k || "")} onChange={(e) => set("best10k", e.target.value)} placeholder="MM:SS" className="w-full bg-bg-hover border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-[var(--success)]/50" />
                 </div>
                 <div>
-                  <label className="text-[10px] text-black/30 block mb-1">Semi</label>
-                  <input type="text" value={String(data.bestSemi || "")} onChange={(e) => set("bestSemi", e.target.value)} placeholder="HH:MM:SS" className="w-full bg-black/[0.04] border border-black/[0.08] rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-black/20 focus:outline-none focus:border-[#34c759]/50" />
+                  <label className="text-[10px] text-text-tertiary block mb-1">Semi</label>
+                  <input type="text" value={String(data.bestSemi || "")} onChange={(e) => set("bestSemi", e.target.value)} placeholder="HH:MM:SS" className="w-full bg-bg-hover border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-[var(--success)]/50" />
                 </div>
               </div>
             </div>
@@ -297,52 +297,52 @@ export default function RunningDiagnosticForm() {
           <SectionTitle>Données Physiologiques</SectionTitle>
           <div className="space-y-4">
             <div>
-              <p className="text-xs text-black/50 mb-1.5">VO2max connue ?</p>
-              <p className="text-[10px] text-black/25 mb-2">Disponible sur Garmin, Apple Watch, ou Whoop</p>
+              <p className="text-xs text-text-secondary mb-1.5">VO2max connue ?</p>
+              <p className="text-[10px] text-text-disabled mb-2">Disponible sur Garmin, Apple Watch, ou Whoop</p>
               {data.vo2maxUnknown ? (
-                <button onClick={() => set("vo2maxUnknown", false)} className="text-sm text-[#34c759] underline">Je connais ma VO2max</button>
+                <button onClick={() => set("vo2maxUnknown", false)} className="text-sm text-[var(--success)] underline">Je connais ma VO2max</button>
               ) : (
                 <div className="flex items-center gap-2">
-                  <input type="number" value={String(data.vo2max || "")} onChange={(e) => set("vo2max", e.target.value)} placeholder="Ex: 49" className="w-24 bg-black/[0.04] border border-black/[0.08] rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-black/20 focus:outline-none focus:border-[#34c759]/50" />
-                  <span className="text-xs text-black/30">ml/kg/min</span>
-                  <button onClick={() => { set("vo2maxUnknown", true); set("vo2max", ""); }} className="text-[10px] text-black/30 underline ml-2">Je ne sais pas</button>
+                  <input type="number" value={String(data.vo2max || "")} onChange={(e) => set("vo2max", e.target.value)} placeholder="Ex: 49" className="w-24 bg-bg-hover border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-[var(--success)]/50" />
+                  <span className="text-xs text-text-tertiary">ml/kg/min</span>
+                  <button onClick={() => { set("vo2maxUnknown", true); set("vo2max", ""); }} className="text-[10px] text-text-tertiary underline ml-2">Je ne sais pas</button>
                 </div>
               )}
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-1.5">Fréquence cardiaque au repos</p>
-              <p className="text-[10px] text-black/25 mb-2">Mesurée au réveil, allongé</p>
+              <p className="text-xs text-text-secondary mb-1.5">Fréquence cardiaque au repos</p>
+              <p className="text-[10px] text-text-disabled mb-2">Mesurée au réveil, allongé</p>
               {data.restingHRUnknown ? (
-                <button onClick={() => set("restingHRUnknown", false)} className="text-sm text-[#34c759] underline">Je connais ma FC repos</button>
+                <button onClick={() => set("restingHRUnknown", false)} className="text-sm text-[var(--success)] underline">Je connais ma FC repos</button>
               ) : (
                 <div className="flex items-center gap-2">
-                  <input type="number" value={String(data.restingHR || "")} onChange={(e) => set("restingHR", e.target.value)} placeholder="Ex: 55" className="w-24 bg-black/[0.04] border border-black/[0.08] rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-black/20 focus:outline-none focus:border-[#34c759]/50" />
-                  <span className="text-xs text-black/30">bpm</span>
-                  <button onClick={() => { set("restingHRUnknown", true); set("restingHR", ""); }} className="text-[10px] text-black/30 underline ml-2">Je ne sais pas</button>
+                  <input type="number" value={String(data.restingHR || "")} onChange={(e) => set("restingHR", e.target.value)} placeholder="Ex: 55" className="w-24 bg-bg-hover border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-[var(--success)]/50" />
+                  <span className="text-xs text-text-tertiary">bpm</span>
+                  <button onClick={() => { set("restingHRUnknown", true); set("restingHR", ""); }} className="text-[10px] text-text-tertiary underline ml-2">Je ne sais pas</button>
                 </div>
               )}
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-1.5">Fréquence cardiaque max</p>
-              <p className="text-[10px] text-black/25 mb-2">Le max atteint en effort intense</p>
+              <p className="text-xs text-text-secondary mb-1.5">Fréquence cardiaque max</p>
+              <p className="text-[10px] text-text-disabled mb-2">Le max atteint en effort intense</p>
               {data.maxHRUnknown ? (
                 <div className="flex items-center gap-2">
-                  <p className="text-sm text-black/50">Estimation : <span className="text-[#34c759]">{220 - (profile.age || 21)} bpm</span> (220 - âge)</p>
-                  <button onClick={() => set("maxHRUnknown", false)} className="text-[10px] text-black/30 underline ml-2">Je la connais</button>
+                  <p className="text-sm text-text-secondary">Estimation : <span className="text-[var(--success)]">{220 - (profile.age || 21)} bpm</span> (220 - âge)</p>
+                  <button onClick={() => set("maxHRUnknown", false)} className="text-[10px] text-text-tertiary underline ml-2">Je la connais</button>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <input type="number" value={String(data.maxHR || "")} onChange={(e) => set("maxHR", e.target.value)} placeholder="Ex: 190" className="w-24 bg-black/[0.04] border border-black/[0.08] rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-black/20 focus:outline-none focus:border-[#34c759]/50" />
-                  <span className="text-xs text-black/30">bpm</span>
-                  <button onClick={() => { set("maxHRUnknown", true); set("maxHR", ""); }} className="text-[10px] text-black/30 underline ml-2">Je ne sais pas</button>
+                  <input type="number" value={String(data.maxHR || "")} onChange={(e) => set("maxHR", e.target.value)} placeholder="Ex: 190" className="w-24 bg-bg-hover border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-[var(--success)]/50" />
+                  <span className="text-xs text-text-tertiary">bpm</span>
+                  <button onClick={() => { set("maxHRUnknown", true); set("maxHR", ""); }} className="text-[10px] text-text-tertiary underline ml-2">Je ne sais pas</button>
                 </div>
               )}
             </div>
             <div>
-              <p className="text-xs text-black/50 mb-1.5">Poids actuel</p>
+              <p className="text-xs text-text-secondary mb-1.5">Poids actuel</p>
               <div className="flex items-center gap-2">
-                <input type="number" value={String(data.currentWeight || "")} onChange={(e) => set("currentWeight", e.target.value)} placeholder="Ex: 85" className="w-24 bg-black/[0.04] border border-black/[0.08] rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-black/20 focus:outline-none focus:border-[#34c759]/50" />
-                <span className="text-xs text-black/30">kg</span>
+                <input type="number" value={String(data.currentWeight || "")} onChange={(e) => set("currentWeight", e.target.value)} placeholder="Ex: 85" className="w-24 bg-bg-hover border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-[var(--success)]/50" />
+                <span className="text-xs text-text-tertiary">kg</span>
               </div>
             </div>
           </div>
@@ -358,7 +358,7 @@ export default function RunningDiagnosticForm() {
             {!data.skipTest ? (
               <>
                 <div>
-                  <p className="text-xs text-black/50 mb-2">Choisis un test</p>
+                  <p className="text-xs text-text-secondary mb-2">Choisis un test</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {[
                       { value: "test_6min", label: "Test des 6 minutes", description: "Cours le plus loin possible en 6 min" },
@@ -369,42 +369,42 @@ export default function RunningDiagnosticForm() {
 
                 {data.selectedTest && (
                   <div>
-                    <p className="text-xs text-black/50 mb-1.5">Instructions :</p>
-                    <ol className="list-decimal list-inside text-xs text-black/40 space-y-1 mb-3">
+                    <p className="text-xs text-text-secondary mb-1.5">Instructions :</p>
+                    <ol className="list-decimal list-inside text-xs text-text-tertiary space-y-1 mb-3">
                       <li>Échauffe-toi 10 minutes en trottinant</li>
                       <li>Lance un chrono de {data.selectedTest === "test_6min" ? "6" : "12"} minutes</li>
                       <li>Cours le plus loin possible à allure constante</li>
                       <li>Note la distance parcourue</li>
                     </ol>
                     <div className="flex items-center gap-2">
-                      <input type="number" value={String(data.testResult || "")} onChange={(e) => set("testResult", e.target.value)} placeholder="Ex: 1350" className="w-32 bg-black/[0.04] border border-black/[0.08] rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-black/20 focus:outline-none focus:border-[#34c759]/50" />
-                      <span className="text-xs text-black/30">mètres</span>
+                      <input type="number" value={String(data.testResult || "")} onChange={(e) => set("testResult", e.target.value)} placeholder="Ex: 1350" className="w-32 bg-bg-hover border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-[var(--success)]/50" />
+                      <span className="text-xs text-text-tertiary">mètres</span>
                     </div>
                     {calculatedVMA && (
-                      <div className="mt-3 p-3 rounded-xl bg-[#34c759]/5 border border-[#34c759]/20">
-                        <p className="text-sm font-medium text-[#34c759]">
+                      <div className="mt-3 p-3 rounded-xl bg-[var(--success)]/5 border border-[var(--success)]/20">
+                        <p className="text-sm font-medium text-[var(--success)]">
                           {data.selectedTest === "test_6min" ? `VMA estimée : ${calculatedVMA} km/h` : `VO2max estimée : ${calculatedVMA} ml/kg/min`}
                         </p>
                         {data.selectedTest === "test_6min" && (
-                          <p className="text-[10px] text-black/35 mt-0.5">Formule : distance (m) / 100</p>
+                          <p className="text-[10px] text-text-tertiary mt-0.5">Formule : distance (m) / 100</p>
                         )}
                         {data.selectedTest === "test_cooper" && (
-                          <p className="text-[10px] text-black/35 mt-0.5">Formule : (distance - 504) / 45</p>
+                          <p className="text-[10px] text-text-tertiary mt-0.5">Formule : (distance - 504) / 45</p>
                         )}
                       </div>
                     )}
                   </div>
                 )}
 
-                <button onClick={() => { set("skipTest", true); set("selectedTest", ""); set("testResult", ""); }} className="text-sm text-black/30 underline">
+                <button onClick={() => { set("skipTest", true); set("selectedTest", ""); set("testResult", ""); }} className="text-sm text-text-tertiary underline">
                   Passer cette étape — on estimera depuis VO2max ou temps de course
                 </button>
               </>
             ) : (
               <div className="text-center py-4">
-                <p className="text-sm text-black/50 mb-2">Test terrain passé</p>
-                <p className="text-[10px] text-black/30">La VMA sera estimée depuis ta VO2max ou tes temps de course</p>
-                <button onClick={() => set("skipTest", false)} className="text-sm text-[#34c759] underline mt-3">Faire un test quand même</button>
+                <p className="text-sm text-text-secondary mb-2">Test terrain passé</p>
+                <p className="text-[10px] text-text-tertiary">La VMA sera estimée depuis ta VO2max ou tes temps de course</p>
+                <button onClick={() => set("skipTest", false)} className="text-sm text-[var(--success)] underline mt-3">Faire un test quand même</button>
               </div>
             )}
           </div>
@@ -417,7 +417,7 @@ export default function RunningDiagnosticForm() {
           <SectionTitle>Objectifs Running</SectionTitle>
           <div className="space-y-4">
             <div>
-              <p className="text-xs text-black/50 mb-2">Objectif principal</p>
+              <p className="text-xs text-text-secondary mb-2">Objectif principal</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {[
                   { value: "run_5k", label: "Courir 5km sans m'arrêter", description: "Débutant" },
@@ -432,7 +432,7 @@ export default function RunningDiagnosticForm() {
 
             {Boolean(data.primaryGoal) && data.primaryGoal !== "fitness" && (
               <div>
-                <p className="text-xs text-black/50 mb-2">Objectif de temps ?</p>
+                <p className="text-xs text-text-secondary mb-2">Objectif de temps ?</p>
                 <div className="grid grid-cols-2 gap-2 mb-2">
                   {[
                     { value: "just_finish", label: "Juste finir" },
@@ -440,24 +440,24 @@ export default function RunningDiagnosticForm() {
                   ].map((opt) => <OptionButton key={opt.value} option={opt} selected={data.targetTime === opt.value} onClick={() => set("targetTime", opt.value)} />)}
                 </div>
                 {data.targetTime === "target" && (
-                  <input type="text" value={String(data.targetTimeValue || "")} onChange={(e) => set("targetTimeValue", e.target.value)} placeholder="Ex: 1:55:00" className="w-full bg-black/[0.04] border border-black/[0.08] rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder:text-black/20 focus:outline-none focus:border-[#34c759]/50" />
+                  <input type="text" value={String(data.targetTimeValue || "")} onChange={(e) => set("targetTimeValue", e.target.value)} placeholder="Ex: 1:55:00" className="w-full bg-bg-hover border border-border-default rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-[var(--success)]/50" />
                 )}
               </div>
             )}
 
             <div>
-              <p className="text-xs text-black/50 mb-1.5">Date de la course / objectif (optionnel)</p>
-              <input type="date" value={String(data.raceDate || "")} onChange={(e) => set("raceDate", e.target.value)} className="w-full bg-black/[0.04] border border-black/[0.08] rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-[#34c759]/50 [color-scheme:light]" />
+              <p className="text-xs text-text-secondary mb-1.5">Date de la course / objectif (optionnel)</p>
+              <input type="date" value={String(data.raceDate || "")} onChange={(e) => set("raceDate", e.target.value)} className="w-full bg-bg-hover border border-border-default rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-[var(--success)]/50 [color-scheme:light]" />
             </div>
 
             <div>
-              <p className="text-xs text-black/50 mb-2">Jours disponibles pour courir</p>
-              <p className="text-[10px] text-black/25 mb-2">Idéalement 3 jours avec 1-2 jours de repos entre chaque</p>
+              <p className="text-xs text-text-secondary mb-2">Jours disponibles pour courir</p>
+              <p className="text-[10px] text-text-disabled mb-2">Idéalement 3 jours avec 1-2 jours de repos entre chaque</p>
               <MultiSelectGrid options={["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]} selected={data.availableDays as string[]} onToggle={(v) => toggle("availableDays", v)} />
             </div>
 
             <div>
-              <p className="text-xs text-black/50 mb-2">Nombre max de sorties par semaine</p>
+              <p className="text-xs text-text-secondary mb-2">Nombre max de sorties par semaine</p>
               <div className="grid grid-cols-4 gap-2">
                 {[
                   { value: "2", label: "2", note: "Minimum" },
@@ -477,7 +477,7 @@ export default function RunningDiagnosticForm() {
           <SectionTitle>Contraintes T1D — Running</SectionTitle>
           <div className="space-y-4">
             <div>
-              <p className="text-xs text-black/50 mb-2">Moment préféré pour courir</p>
+              <p className="text-xs text-text-secondary mb-2">Moment préféré pour courir</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {[
                   { value: "morning_fasted", label: "Matin à jeun", t1dWarning: "Risque hypo élevé", t1dAdvice: "Prévoir 15-20g glucides avant + réduire basale" },
@@ -489,7 +489,7 @@ export default function RunningDiagnosticForm() {
             </div>
 
             <div>
-              <p className="text-xs text-black/50 mb-2">Hypos en courant ?</p>
+              <p className="text-xs text-text-secondary mb-2">Hypos en courant ?</p>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { value: "never", label: "Jamais" },
@@ -501,16 +501,16 @@ export default function RunningDiagnosticForm() {
             </div>
 
             <div>
-              <p className="text-xs text-black/50 mb-1.5">Glycémie cible avant de courir</p>
+              <p className="text-xs text-text-secondary mb-1.5">Glycémie cible avant de courir</p>
               <div className="flex items-center gap-2">
-                <input type="number" value={String(data.preRunTargetGlucose || "150")} onChange={(e) => set("preRunTargetGlucose", e.target.value)} min={120} max={200} className="w-24 bg-black/[0.04] border border-black/[0.08] rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#34c759]/50" />
-                <span className="text-xs text-black/30">mg/dL</span>
-                <span className="text-[10px] text-[#32ade6]/70 ml-2">Recommandé : 140-180</span>
+                <input type="number" value={String(data.preRunTargetGlucose || "150")} onChange={(e) => set("preRunTargetGlucose", e.target.value)} min={120} max={200} className="w-24 bg-bg-hover border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[var(--success)]/50" />
+                <span className="text-xs text-text-tertiary">mg/dL</span>
+                <span className="text-[10px] text-[var(--chart-2)]/70 ml-2">Recommandé : 140-180</span>
               </div>
             </div>
 
             <div>
-              <p className="text-xs text-black/50 mb-2">Chute de glycémie en courant</p>
+              <p className="text-xs text-text-secondary mb-2">Chute de glycémie en courant</p>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { value: "low", label: "Peu", description: "-20 à -40 mg/dL/h" },
@@ -522,7 +522,7 @@ export default function RunningDiagnosticForm() {
             </div>
 
             <div>
-              <p className="text-xs text-black/50 mb-2">Glucides pendant les sorties longues ?</p>
+              <p className="text-xs text-text-secondary mb-2">Glucides pendant les sorties longues ?</p>
               <div className="grid grid-cols-2 gap-2 mb-2">
                 {[
                   { value: "no", label: "Non" },
@@ -531,15 +531,15 @@ export default function RunningDiagnosticForm() {
               </div>
               {data.carbsDuringRun === "yes" && (
                 <div className="flex items-center gap-2">
-                  <input type="number" value={String(data.carbsAmount || "30")} onChange={(e) => set("carbsAmount", e.target.value)} className="w-20 bg-black/[0.04] border border-black/[0.08] rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[#34c759]/50" />
-                  <span className="text-xs text-black/30">g/heure</span>
-                  <span className="text-[10px] text-[#32ade6]/70 ml-2">Recommandé : 30-60g/h pour +1h</span>
+                  <input type="number" value={String(data.carbsAmount || "30")} onChange={(e) => set("carbsAmount", e.target.value)} className="w-20 bg-bg-hover border border-border-default rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-[var(--success)]/50" />
+                  <span className="text-xs text-text-tertiary">g/heure</span>
+                  <span className="text-[10px] text-[var(--chart-2)]/70 ml-2">Recommandé : 30-60g/h pour +1h</span>
                 </div>
               )}
             </div>
 
             <div>
-              <p className="text-xs text-black/50 mb-2">Ajustements insuline avant de courir</p>
+              <p className="text-xs text-text-secondary mb-2">Ajustements insuline avant de courir</p>
               <MultiSelectGrid options={["Je réduis mon bolus", "Je réduis ma basale (pompe)", "Je n'ajuste pas", "Je ne sais pas quoi faire"]} selected={data.insulinAdjustments as string[]} onToggle={(v) => toggle("insulinAdjustments", v)} />
             </div>
           </div>

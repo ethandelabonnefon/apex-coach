@@ -42,12 +42,12 @@ export function StatCard({
     <Card className="!p-3 sm:!p-5">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-[10px] sm:text-xs text-black/40 uppercase tracking-wider mb-1">{label}</p>
+          <p className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider mb-1">{label}</p>
           <p className={`text-xl sm:text-2xl font-bold ${color}`}>
             {value}
-            {unit && <span className="text-[10px] sm:text-sm font-normal text-black/40 ml-1">{unit}</span>}
+            {unit && <span className="text-[10px] sm:text-sm font-normal text-text-tertiary ml-1">{unit}</span>}
           </p>
-          {sub && <p className="text-[10px] sm:text-xs text-black/35 mt-1">{sub}</p>}
+          {sub && <p className="text-[10px] sm:text-xs text-text-tertiary mt-1">{sub}</p>}
         </div>
         {icon && <span className="text-xl sm:text-2xl opacity-60">{icon}</span>}
       </div>
@@ -63,12 +63,12 @@ export function Badge({
   color?: "green" | "blue" | "purple" | "orange" | "red" | "gray";
 }) {
   const colors: Record<string, string> = {
-    green: "bg-[#34c759]/15 text-[#34c759]",
-    blue: "bg-[#32ade6]/15 text-[#32ade6]",
-    purple: "bg-[#af52de]/15 text-[#af52de]",
-    orange: "bg-[#ff9500]/15 text-[#ff9500]",
-    red: "bg-[#ff3b30]/15 text-[#ff3b30]",
-    gray: "bg-black/10 text-black/60",
+    green: "bg-[var(--success)]/15 text-[var(--success)]",
+    blue: "bg-[var(--chart-2)]/15 text-[var(--chart-2)]",
+    purple: "bg-[var(--accent-2)]/15 text-[var(--accent-2)]",
+    orange: "bg-[var(--warning)]/15 text-[var(--warning)]",
+    red: "bg-[var(--error)]/15 text-[var(--error)]",
+    gray: "bg-bg-hover text-text-secondary",
   };
   return <span className={`badge ${colors[color]}`}>{children}</span>;
 }
@@ -76,7 +76,7 @@ export function Badge({
 export function ProgressBar({
   value,
   max,
-  color = "#34c759",
+  color = "var(--success)",
   label,
   showValue = true,
 }: {
@@ -90,7 +90,7 @@ export function ProgressBar({
   return (
     <div>
       {(label || showValue) && (
-        <div className="flex justify-between text-xs text-black/40 mb-1">
+        <div className="flex justify-between text-xs text-text-tertiary mb-1">
           {label && <span>{label}</span>}
           {showValue && (
             <span>
@@ -119,7 +119,7 @@ export function PageHeader({
     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6 sm:mb-8">
       <div>
         <h1 className="text-xl sm:text-2xl font-bold">{title}</h1>
-        {subtitle && <p className="text-black/40 text-xs sm:text-sm mt-1">{subtitle}</p>}
+        {subtitle && <p className="text-text-tertiary text-xs sm:text-sm mt-1">{subtitle}</p>}
       </div>
       {action}
     </div>
@@ -127,16 +127,16 @@ export function PageHeader({
 }
 
 export function GlucoseIndicator({ value }: { value: number }) {
-  let color = "text-[#34c759]";
-  let bg = "bg-[#34c759]/15";
+  let color = "text-[var(--success)]";
+  let bg = "bg-[var(--success)]/15";
   let label = "Normal";
   if (value < 70) {
-    color = "text-[#ff3b30]";
-    bg = "bg-[#ff3b30]/15";
+    color = "text-[var(--error)]";
+    bg = "bg-[var(--error)]/15";
     label = "Hypo";
   } else if (value > 180) {
-    color = "text-[#ff9500]";
-    bg = "bg-[#ff9500]/15";
+    color = "text-[var(--warning)]";
+    bg = "bg-[var(--warning)]/15";
     label = value > 250 ? "Très élevé" : "Élevé";
   }
   return (
@@ -152,8 +152,8 @@ export function EmptyState({ icon, title, description }: { icon: string; title: 
   return (
     <div className="text-center py-12">
       <span className="text-4xl mb-4 block">{icon}</span>
-      <p className="text-black/60 font-medium">{title}</p>
-      <p className="text-black/35 text-sm mt-1">{description}</p>
+      <p className="text-text-secondary font-medium">{title}</p>
+      <p className="text-text-tertiary text-sm mt-1">{description}</p>
     </div>
   );
 }
@@ -177,9 +177,9 @@ export function Button({
 }) {
   const variants: Record<string, string> = {
     primary: "bg-accent text-white hover:bg-accent-hover font-semibold",
-    secondary: "bg-black/[0.06] text-text-primary hover:bg-black/[0.1] border border-black/[0.06]",
-    ghost: "text-black/60 hover:text-text-primary hover:bg-black/[0.05]",
-    danger: "bg-[#ff3b30]/15 text-[#ff3b30] hover:bg-[#ff3b30]/25",
+    secondary: "bg-bg-hover text-text-primary hover:bg-bg-hover border border-border-subtle",
+    ghost: "text-text-secondary hover:text-text-primary hover:bg-bg-hover",
+    danger: "bg-[var(--error)]/15 text-[var(--error)] hover:bg-[var(--error)]/25",
   };
   const sizes: Record<string, string> = {
     sm: "px-3 py-1.5 text-xs rounded-lg",
@@ -213,10 +213,10 @@ export function InfoBox({
   variant?: "info" | "warning" | "success" | "danger";
 }) {
   const styles: Record<string, string> = {
-    info: "bg-[#32ade6]/10 border-[#32ade6]/20 text-[#32ade6]",
-    warning: "bg-[#ff9500]/10 border-[#ff9500]/20 text-[#ff9500]",
-    success: "bg-[#34c759]/10 border-[#34c759]/20 text-[#34c759]",
-    danger: "bg-[#ff3b30]/10 border-[#ff3b30]/20 text-[#ff3b30]",
+    info: "bg-[var(--chart-2)]/10 border-[var(--chart-2)]/20 text-[var(--chart-2)]",
+    warning: "bg-[var(--warning)]/10 border-[var(--warning)]/20 text-[var(--warning)]",
+    success: "bg-[var(--success)]/10 border-[var(--success)]/20 text-[var(--success)]",
+    danger: "bg-[var(--error)]/10 border-[var(--error)]/20 text-[var(--error)]",
   };
   return (
     <div className={`p-4 rounded-xl border text-sm ${styles[variant]}`}>

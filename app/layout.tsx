@@ -18,7 +18,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#F2F2F7",
+  // Couleur de base (light) ; corrigée pré-paint par le script inline
+  // et maintenue à jour par useTheme selon le thème résolu.
+  themeColor: "#f5f5f7",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -26,10 +28,24 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+// Pose data-theme + theme-color AVANT le premier paint pour éviter tout flash.
+const THEME_INIT_SCRIPT = `
+(function(){try{var c=localStorage.getItem('apex-theme');var d=document.documentElement;var dark;
+if(c==='dark'){d.setAttribute('data-theme','dark');dark=true;}
+else if(c==='light'){d.setAttribute('data-theme','light');dark=false;}
+else{dark=window.matchMedia('(prefers-color-scheme: dark)').matches;}
+var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',dark?'#000000':'#f5f5f7');
+}catch(e){}})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fr" className="h-full antialiased">
+    <html lang="fr" className="h-full antialiased" suppressHydrationWarning>
       <head>
+        {/* Pose data-theme + theme-color avant le premier paint (anti-FOUC).
+            <html suppressHydrationWarning> car ce script mute l'attribut
+            data-theme avant l'hydratation React (pattern standard). */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <link rel="icon" href="/favicon.ico" sizes="48x48" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />

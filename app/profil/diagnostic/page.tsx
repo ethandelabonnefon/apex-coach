@@ -187,10 +187,10 @@ function computeAnalysis(
 function NumberInput({ label, value, onChange, unit = "cm", placeholder }: { label: string; value: string; onChange: (v: string) => void; unit?: string; placeholder?: string }) {
   return (
     <div>
-      <label className="block text-xs text-black/50 mb-1.5">{label}</label>
+      <label className="block text-xs text-text-secondary mb-1.5">{label}</label>
       <div className="relative">
-        <input type="number" inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder || "0"} className="w-full bg-black/[0.04] border border-black/[0.08] rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder:text-black/20 focus:outline-none focus:border-[#34c759]/50 focus:ring-1 focus:ring-[#34c759]/20 transition-colors" />
-        {unit && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-black/30">{unit}</span>}
+        <input type="number" inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder || "0"} className="w-full bg-bg-hover border border-border-default rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-[var(--success)]/50 focus:ring-1 focus:ring-[var(--success)]/20 transition-colors" />
+        {unit && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-tertiary">{unit}</span>}
       </div>
     </div>
   );
@@ -199,10 +199,10 @@ function NumberInput({ label, value, onChange, unit = "cm", placeholder }: { lab
 function SelectInput({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: string[] }) {
   return (
     <div>
-      <label className="block text-xs text-black/50 mb-1.5">{label}</label>
-      <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-black/[0.04] border border-black/[0.08] rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-[#34c759]/50 focus:ring-1 focus:ring-[#34c759]/20 transition-colors appearance-none">
-        <option value="" className="bg-[#ffffff]">Sélectionner...</option>
-        {options.map((opt) => <option key={opt} value={opt} className="bg-[#ffffff]">{opt}</option>)}
+      <label className="block text-xs text-text-secondary mb-1.5">{label}</label>
+      <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-bg-hover border border-border-default rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-[var(--success)]/50 focus:ring-1 focus:ring-[var(--success)]/20 transition-colors appearance-none">
+        <option value="" className="bg-bg-elevated">Sélectionner...</option>
+        {options.map((opt) => <option key={opt} value={opt} className="bg-bg-elevated">{opt}</option>)}
       </select>
     </div>
   );
@@ -211,8 +211,8 @@ function SelectInput({ label, value, onChange, options }: { label: string; value
 function TextAreaInput({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <div>
-      <label className="block text-xs text-black/50 mb-1.5">{label}</label>
-      <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={3} className="w-full bg-black/[0.04] border border-black/[0.08] rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder:text-black/20 focus:outline-none focus:border-[#34c759]/50 focus:ring-1 focus:ring-[#34c759]/20 transition-colors resize-none" />
+      <label className="block text-xs text-text-secondary mb-1.5">{label}</label>
+      <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={3} className="w-full bg-bg-hover border border-border-default rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-[var(--success)]/50 focus:ring-1 focus:ring-[var(--success)]/20 transition-colors resize-none" />
     </div>
   );
 }
@@ -223,14 +223,14 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
     <div className="flex items-center gap-2 mb-6">
       {Array.from({ length: total }, (_, i) => (
         <div key={i} className="flex items-center gap-2">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${i < current ? "bg-[#34c759] text-black" : i === current ? "bg-[#34c759]/20 text-[#34c759] border border-[#34c759]/50" : "bg-black/[0.06] text-black/30"}`}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${i < current ? "bg-[var(--success)] text-text-primary" : i === current ? "bg-[var(--success)]/20 text-[var(--success)] border border-[var(--success)]/50" : "bg-bg-hover text-text-tertiary"}`}>
             {i < current ? (
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
             ) : (
               i + 1
             )}
           </div>
-          {i < total - 1 && <div className={`w-8 h-0.5 rounded-full transition-all ${i < current ? "bg-[#34c759]" : "bg-black/[0.08]"}`} />}
+          {i < total - 1 && <div className={`w-8 h-0.5 rounded-full transition-all ${i < current ? "bg-[var(--success)]" : "bg-bg-hover"}`} />}
         </div>
       ))}
     </div>
@@ -597,7 +597,7 @@ export default function DiagnosticPage() {
           <div className="mb-6">
             <InfoBox variant="info">
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-[#32ade6] border-t-transparent rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-[var(--chart-2)] border-t-transparent rounded-full animate-spin" />
                 <span className="text-xs">Mise à jour du programme en cours...</span>
               </div>
             </InfoBox>
@@ -631,10 +631,10 @@ export default function DiagnosticPage() {
                       style={{ touchAction: "manipulation" }}
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${i === 0 ? "bg-[#34c759]" : "bg-black/20"}`} />
+                        <div className={`w-2 h-2 rounded-full ${i === 0 ? "bg-[var(--success)]" : "bg-black/20"}`} />
                         <div className="text-left">
-                          <p className="text-sm text-black/80">{date}</p>
-                          <p className="text-xs text-black/35">
+                          <p className="text-sm text-text-primary">{date}</p>
+                          <p className="text-xs text-text-tertiary">
                             {entry.photos?.length ? `${entry.photos.length} photos` : "Sans photos"}
                             {entry.weakPoints?.length ? ` · ${entry.weakPoints.length} points faibles` : ""}
                             {entry.photoAnalysis ? " · Analyse IA" : ""}
@@ -643,11 +643,11 @@ export default function DiagnosticPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         {i === 0 && <Badge color="green">Actuel</Badge>}
-                        <span className={`text-black/30 text-xs transition-transform ${isExpanded ? "rotate-180" : ""}`}>▼</span>
+                        <span className={`text-text-tertiary text-xs transition-transform ${isExpanded ? "rotate-180" : ""}`}>▼</span>
                       </div>
                     </button>
                     {isExpanded && (
-                      <div className="mt-4 pt-4 border-t border-black/[0.06] space-y-4">
+                      <div className="mt-4 pt-4 border-t border-border-subtle space-y-4">
                         {/* Photos thumbnails */}
                         {entry.photos && entry.photos.length > 0 && (
                           <div className="flex gap-3 overflow-x-auto pb-2">
@@ -656,7 +656,7 @@ export default function DiagnosticPage() {
                                 key={pi}
                                 src={photo}
                                 alt={`Photo ${pi + 1}`}
-                                className="w-20 h-28 object-cover rounded-lg border border-black/10 shrink-0"
+                                className="w-20 h-28 object-cover rounded-lg border border-border-default shrink-0"
                               />
                             ))}
                           </div>
@@ -664,8 +664,8 @@ export default function DiagnosticPage() {
                         {/* Photo analysis */}
                         {entry.photoAnalysis && (
                           <div>
-                            <p className="text-xs text-black/40 font-semibold mb-2">Analyse visuelle IA</p>
-                            <div className="text-xs text-black/60 leading-relaxed whitespace-pre-line bg-black/[0.02] rounded-lg p-3 max-h-64 overflow-y-auto">
+                            <p className="text-xs text-text-tertiary font-semibold mb-2">Analyse visuelle IA</p>
+                            <div className="text-xs text-text-secondary leading-relaxed whitespace-pre-line bg-bg-hover rounded-lg p-3 max-h-64 overflow-y-auto">
                               {entry.photoAnalysis}
                             </div>
                           </div>
@@ -673,7 +673,7 @@ export default function DiagnosticPage() {
                         {/* Weak points */}
                         {entry.weakPoints && entry.weakPoints.length > 0 && (
                           <div>
-                            <p className="text-xs text-black/40 font-semibold mb-2">Points faibles</p>
+                            <p className="text-xs text-text-tertiary font-semibold mb-2">Points faibles</p>
                             <div className="flex flex-wrap gap-1.5">
                               {entry.weakPoints.map((wp) => <Badge key={wp} color="orange">{wp}</Badge>)}
                             </div>
@@ -682,15 +682,15 @@ export default function DiagnosticPage() {
                         {/* Key measurements */}
                         {entry.mensurations && (
                           <div>
-                            <p className="text-xs text-black/40 font-semibold mb-2">Mensurations</p>
+                            <p className="text-xs text-text-tertiary font-semibold mb-2">Mensurations</p>
                             <div className="grid grid-cols-4 gap-2">
                               {Object.entries(entry.mensurations)
                                 .filter(([, v]) => v)
                                 .slice(0, 8)
                                 .map(([k, v]) => (
-                                  <div key={k} className="text-center p-1.5 rounded bg-black/[0.03]">
-                                    <p className="text-[10px] text-black/30">{k}</p>
-                                    <p className="text-xs text-black/70 font-mono">{v} cm</p>
+                                  <div key={k} className="text-center p-1.5 rounded bg-bg-hover">
+                                    <p className="text-[10px] text-text-tertiary">{k}</p>
+                                    <p className="text-xs text-text-secondary font-mono">{v} cm</p>
                                   </div>
                                 ))}
                             </div>
@@ -734,7 +734,7 @@ export default function DiagnosticPage() {
           <div className="mb-6">
             <InfoBox variant="info">
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-[#32ade6] border-t-transparent rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-[var(--chart-2)] border-t-transparent rounded-full animate-spin" />
                 <span className="text-xs">Analyse des modifications et mise à jour du programme en cours...</span>
               </div>
             </InfoBox>
@@ -767,8 +767,8 @@ export default function DiagnosticPage() {
               <Card key={i}>
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-black/90">{r.label}</p>
-                    <p className="text-xs text-black/40 mt-0.5">Idéal : {r.ideal}</p>
+                    <p className="text-sm font-medium text-text-primary">{r.label}</p>
+                    <p className="text-xs text-text-tertiary mt-0.5">Idéal : {r.ideal}</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xl font-bold text-text-primary">{r.value}</span>
@@ -787,15 +787,15 @@ export default function DiagnosticPage() {
           <SectionTitle>Recommandations biomécaniques</SectionTitle>
           <div className="space-y-3">
             {analysis.recommendations.length === 0 ? (
-              <Card><p className="text-sm text-black/50">Aucune recommandation spécifique. Tes proportions sont équilibrées !</p></Card>
+              <Card><p className="text-sm text-text-secondary">Aucune recommandation spécifique. Tes proportions sont équilibrées !</p></Card>
             ) : (
               analysis.recommendations.map((rec, i) => (
                 <Card key={i}>
                   <div className="flex gap-3">
-                    <div className="w-6 h-6 rounded-full bg-[#34c759]/15 flex items-center justify-center shrink-0 mt-0.5">
-                      <span className="text-[#34c759] text-xs font-bold">{i + 1}</span>
+                    <div className="w-6 h-6 rounded-full bg-[var(--success)]/15 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="text-[var(--success)] text-xs font-bold">{i + 1}</span>
                     </div>
-                    <p className="text-sm text-black/80 leading-relaxed">{rec}</p>
+                    <p className="text-sm text-text-primary leading-relaxed">{rec}</p>
                   </div>
                 </Card>
               ))
@@ -825,8 +825,8 @@ export default function DiagnosticPage() {
             {analyzingPhotos && (
               <Card>
                 <div className="flex items-center gap-3 py-4">
-                  <div className="w-5 h-5 border-2 border-[#34c759] border-t-transparent rounded-full animate-spin" />
-                  <p className="text-sm text-black/60">Analyse visuelle en cours...</p>
+                  <div className="w-5 h-5 border-2 border-[var(--success)] border-t-transparent rounded-full animate-spin" />
+                  <p className="text-sm text-text-secondary">Analyse visuelle en cours...</p>
                 </div>
               </Card>
             )}
@@ -851,8 +851,8 @@ export default function DiagnosticPage() {
                 { label: "Mollet", val: mensurations.calf },
               ].map((item) => (
                 <div key={item.label}>
-                  <p className="text-xs text-black/40">{item.label}</p>
-                  <p className="text-lg font-semibold">{item.val || "—"} <span className="text-xs text-black/30 font-normal">cm</span></p>
+                  <p className="text-xs text-text-tertiary">{item.label}</p>
+                  <p className="text-lg font-semibold">{item.val || "—"} <span className="text-xs text-text-tertiary font-normal">cm</span></p>
                 </div>
               ))}
             </div>
@@ -890,14 +890,14 @@ export default function DiagnosticPage() {
 
       {/* Progress */}
       <StepIndicator current={step} total={6} />
-      <ProgressBar value={step + 1} max={6} color="#34c759" label={`Étape ${step + 1}/6 — ${STEP_LABELS[step]}`} />
+      <ProgressBar value={step + 1} max={6} color="var(--success)" label={`Étape ${step + 1}/6 — ${STEP_LABELS[step]}`} />
 
       {/* Step content */}
       <div className="mt-8">
         {step === 0 && (
           <Card>
             <SectionTitle>Mensurations (cm)</SectionTitle>
-            <p className="text-xs text-black/40 mb-6">Mesure chaque zone en position détendue sauf indication contraire. Utilise un mètre ruban souple.</p>
+            <p className="text-xs text-text-tertiary mb-6">Mesure chaque zone en position détendue sauf indication contraire. Utilise un mètre ruban souple.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <NumberInput label="Tour de poitrine" value={mensurations.chest} onChange={(v) => updateMensurations("chest", v)} />
               <NumberInput label="Tour d'épaules *" value={mensurations.shoulders} onChange={(v) => updateMensurations("shoulders", v)} />
@@ -908,14 +908,14 @@ export default function DiagnosticPage() {
               <NumberInput label="Tour de cuisse" value={mensurations.thigh} onChange={(v) => updateMensurations("thigh", v)} />
               <NumberInput label="Tour de mollet" value={mensurations.calf} onChange={(v) => updateMensurations("calf", v)} />
             </div>
-            <p className="text-xs text-black/25 mt-4">* Champs requis pour l'analyse des ratios</p>
+            <p className="text-xs text-text-disabled mt-4">* Champs requis pour l'analyse des ratios</p>
           </Card>
         )}
 
         {step === 1 && (
           <Card>
             <SectionTitle>Longueurs segmentaires (cm)</SectionTitle>
-            <p className="text-xs text-black/40 mb-6">Ces mesures permettent d'analyser tes leviers biomécaniques pour optimiser les exercices.</p>
+            <p className="text-xs text-text-tertiary mb-6">Ces mesures permettent d'analyser tes leviers biomécaniques pour optimiser les exercices.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <NumberInput label="Envergure (bras tendus)" value={longueurs.armSpan} onChange={(v) => updateLongueurs("armSpan", v)} placeholder="Ex: 182" />
               <NumberInput label="Longueur du tronc (C7 au coccyx)" value={longueurs.torsoLength} onChange={(v) => updateLongueurs("torsoLength", v)} placeholder="Ex: 55" />
@@ -930,7 +930,7 @@ export default function DiagnosticPage() {
         {step === 2 && (
           <Card>
             <SectionTitle>Tests de mobilité</SectionTitle>
-            <p className="text-xs text-black/40 mb-6">Évalue ta mobilité articulaire pour identifier les limitations qui impactent tes mouvements.</p>
+            <p className="text-xs text-text-tertiary mb-6">Évalue ta mobilité articulaire pour identifier les limitations qui impactent tes mouvements.</p>
             <div className="space-y-4">
               <SelectInput label="Peux-tu joindre tes mains derrière le dos (une main par-dessus, une par-dessous) ?" value={mobilite.shoulderMobility} onChange={(v) => updateMobilite("shoulderMobility", v)} options={MOBILITY_OPTIONS} />
               <SelectInput label="Peux-tu descendre en squat complet (ass-to-grass) sans lever les talons ?" value={mobilite.hipMobility} onChange={(v) => updateMobilite("hipMobility", v)} options={MOBILITY_OPTIONS} />
@@ -942,12 +942,12 @@ export default function DiagnosticPage() {
         {step === 3 && (
           <Card>
             <SectionTitle>Historique et forces</SectionTitle>
-            <p className="text-xs text-black/40 mb-6">Tes records et ton historique permettent de calibrer l'intensité et d'identifier les déséquilibres.</p>
+            <p className="text-xs text-text-tertiary mb-6">Tes records et ton historique permettent de calibrer l'intensité et d'identifier les déséquilibres.</p>
             <div className="space-y-6">
               <TextAreaInput label="Blessures passées ou limitations" value={historique.injuries} onChange={(v) => updateHistorique("injuries", v)} placeholder="Ex: Épaule droite opérée en 2022, lombaires sensibles..." />
               <NumberInput label="Années d'entraînement en musculation" value={historique.trainingHistory} onChange={(v) => updateHistorique("trainingHistory", v)} unit="ans" />
               <div className="pt-2">
-                <p className="text-xs text-black/50 font-medium mb-3 uppercase tracking-wider">1RM estimés (kg)</p>
+                <p className="text-xs text-text-secondary font-medium mb-3 uppercase tracking-wider">1RM estimés (kg)</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <NumberInput label="Développé couché (Bench Press)" value={historique.benchPress1RM} onChange={(v) => updateHistorique("benchPress1RM", v)} unit="kg" />
                   <NumberInput label="Squat" value={historique.squat1RM} onChange={(v) => updateHistorique("squat1RM", v)} unit="kg" />
@@ -963,12 +963,12 @@ export default function DiagnosticPage() {
         {step === 4 && (
           <Card>
             <SectionTitle>Points faibles perçus</SectionTitle>
-            <p className="text-xs text-black/40 mb-6">Sélectionne les groupes musculaires que tu considères en retard. Cela orientera les recommandations de volume.</p>
+            <p className="text-xs text-text-tertiary mb-6">Sélectionne les groupes musculaires que tu considères en retard. Cela orientera les recommandations de volume.</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {WEAK_POINT_OPTIONS.map((wp) => {
                 const isSelected = weakPoints.includes(wp);
                 return (
-                  <button key={wp} onClick={() => toggleWeakPoint(wp)} className={`p-3 rounded-xl text-sm font-medium transition-all border ${isSelected ? "bg-[#34c759]/15 border-[#34c759]/40 text-[#34c759]" : "bg-black/[0.03] border-black/[0.06] text-black/60 hover:bg-black/[0.06] hover:text-black/80"}`}>
+                  <button key={wp} onClick={() => toggleWeakPoint(wp)} className={`p-3 rounded-xl text-sm font-medium transition-all border ${isSelected ? "bg-[var(--success)]/15 border-[var(--success)]/40 text-[var(--success)]" : "bg-bg-hover border-border-subtle text-text-secondary hover:bg-bg-hover hover:text-text-primary"}`}>
                     {isSelected && <svg className="w-4 h-4 inline mr-1.5 -mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                     {wp}
                   </button>
@@ -992,7 +992,7 @@ export default function DiagnosticPage() {
       <div className="flex justify-between items-center mt-8">
         <Button variant="ghost" onClick={handleBack} disabled={step === 0}>Retour</Button>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-black/30">{STEP_LABELS[step]}</span>
+          <span className="text-xs text-text-tertiary">{STEP_LABELS[step]}</span>
           <Button onClick={handleNext} disabled={!canAdvance() || analyzingPhotos}>
             {step === 5 ? (photos.some(Boolean) ? "Analyser avec photos" : "Analyser sans photos") : "Suivant"}
           </Button>

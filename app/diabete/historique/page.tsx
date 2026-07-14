@@ -197,12 +197,12 @@ function aggregateByHour(points: ArchivePoint[]) {
 
 /** Couleur de la barre selon la zone glycémique moyenne. */
 function barColor(avg: number | null): string {
-  if (avg === null) return "#c7c7cc";
-  if (avg < GLUCOSE_THRESHOLDS.hypo) return "#ff2d55";
-  if (avg < GLUCOSE_THRESHOLDS.low) return "#ff3b30";
-  if (avg <= GLUCOSE_THRESHOLDS.high) return "#34c759";
-  if (avg <= GLUCOSE_THRESHOLDS.hyper) return "#ff9500";
-  return "#ff2d55";
+  if (avg === null) return "var(--text-disabled)";
+  if (avg < GLUCOSE_THRESHOLDS.hypo) return "var(--running)";
+  if (avg < GLUCOSE_THRESHOLDS.low) return "var(--error)";
+  if (avg <= GLUCOSE_THRESHOLDS.high) return "var(--success)";
+  if (avg <= GLUCOSE_THRESHOLDS.hyper) return "var(--warning)";
+  return "var(--running)";
 }
 
 function formatTick(t: number, days: number): string {
@@ -752,7 +752,7 @@ export default function DiabeteHistoriquePage() {
               <div className="flex rounded-lg overflow-hidden h-6 bg-bg-tertiary">
                 {overallStats.hypoPct > 0 && (
                   <div
-                    style={{ width: `${overallStats.hypoPct}%`, background: "#ff2d55" }}
+                    style={{ width: `${overallStats.hypoPct}%`, background: "var(--running)" }}
                     className="flex items-center justify-center"
                     title={`Hypo : ${overallStats.hypoPct}%`}
                   >
@@ -763,13 +763,13 @@ export default function DiabeteHistoriquePage() {
                 )}
                 {overallStats.lowPct > 0 && (
                   <div
-                    style={{ width: `${overallStats.lowPct}%`, background: "#ff3b30" }}
+                    style={{ width: `${overallStats.lowPct}%`, background: "var(--error)" }}
                     title={`Low : ${overallStats.lowPct}%`}
                   />
                 )}
                 {overallStats.tirPct > 0 && (
                   <div
-                    style={{ width: `${overallStats.tirPct}%`, background: "#34c759" }}
+                    style={{ width: `${overallStats.tirPct}%`, background: "var(--success)" }}
                     className="flex items-center justify-center"
                     title={`Cible : ${overallStats.tirPct}%`}
                   >
@@ -780,7 +780,7 @@ export default function DiabeteHistoriquePage() {
                 )}
                 {overallStats.highPct > 0 && (
                   <div
-                    style={{ width: `${overallStats.highPct}%`, background: "#ff9500" }}
+                    style={{ width: `${overallStats.highPct}%`, background: "var(--warning)" }}
                     className="flex items-center justify-center"
                     title={`High : ${overallStats.highPct}%`}
                   >
@@ -791,17 +791,17 @@ export default function DiabeteHistoriquePage() {
                 )}
                 {overallStats.hyperPct > 0 && (
                   <div
-                    style={{ width: `${overallStats.hyperPct}%`, background: "#ff2d55" }}
+                    style={{ width: `${overallStats.hyperPct}%`, background: "var(--running)" }}
                     title={`Hyper : ${overallStats.hyperPct}%`}
                   />
                 )}
               </div>
               <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-text-tertiary">
-                <span><span className="inline-block w-2 h-2 rounded-sm bg-[#ff2d55] mr-1" />Hypo &lt;70</span>
-                <span><span className="inline-block w-2 h-2 rounded-sm bg-[#ff3b30] mr-1" />Low 70-80</span>
-                <span><span className="inline-block w-2 h-2 rounded-sm bg-[#34c759] mr-1" />Cible 80-180</span>
-                <span><span className="inline-block w-2 h-2 rounded-sm bg-[#ff9500] mr-1" />High 180-250</span>
-                <span><span className="inline-block w-2 h-2 rounded-sm bg-[#ff2d55] mr-1" />Hyper &gt;250</span>
+                <span><span className="inline-block w-2 h-2 rounded-sm bg-[var(--running)] mr-1" />Hypo &lt;70</span>
+                <span><span className="inline-block w-2 h-2 rounded-sm bg-[var(--error)] mr-1" />Low 70-80</span>
+                <span><span className="inline-block w-2 h-2 rounded-sm bg-[var(--success)] mr-1" />Cible 80-180</span>
+                <span><span className="inline-block w-2 h-2 rounded-sm bg-[var(--warning)] mr-1" />High 180-250</span>
+                <span><span className="inline-block w-2 h-2 rounded-sm bg-[var(--running)] mr-1" />Hyper &gt;250</span>
               </div>
             </div>
           </section>
@@ -831,21 +831,21 @@ export default function DiabeteHistoriquePage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" vertical={false} />
                   <XAxis
                     dataKey="hourLabel"
-                    stroke="#8e8e93"
+                    stroke="var(--text-tertiary)"
                     tick={{ fontSize: 10 }}
                     interval={2}
                   />
                   <YAxis
-                    stroke="#8e8e93"
+                    stroke="var(--text-tertiary)"
                     tick={{ fontSize: 10 }}
                     domain={[40, 300]}
                     ticks={[70, 140, 180, 250]}
                   />
-                  <ReferenceLine y={70} stroke="#ff3b30" strokeDasharray="3 3" />
-                  <ReferenceLine y={180} stroke="#ff9500" strokeDasharray="3 3" />
+                  <ReferenceLine y={70} stroke="var(--error)" strokeDasharray="3 3" />
+                  <ReferenceLine y={180} stroke="var(--warning)" strokeDasharray="3 3" />
                   <Tooltip
                     contentStyle={{
-                      background: "#ffffff",
+                      background: "var(--bg-elevated)",
                       border: "1px solid rgba(0,0,0,0.1)",
                       borderRadius: "8px",
                       fontSize: "12px",
@@ -953,8 +953,8 @@ export default function DiabeteHistoriquePage() {
                 >
                   <defs>
                     <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#007aff" stopOpacity={0.4} />
-                      <stop offset="100%" stopColor="#007aff" stopOpacity={0} />
+                      <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" vertical={false} />
@@ -962,22 +962,22 @@ export default function DiabeteHistoriquePage() {
                     dataKey="t"
                     type="number"
                     domain={["dataMin", "dataMax"]}
-                    stroke="#8e8e93"
+                    stroke="var(--text-tertiary)"
                     tick={{ fontSize: 10 }}
                     tickFormatter={(t) => formatTick(t, days)}
                   />
                   <YAxis
-                    stroke="#8e8e93"
+                    stroke="var(--text-tertiary)"
                     tick={{ fontSize: 10 }}
                     domain={[40, 300]}
                     ticks={[70, 140, 180, 250]}
                   />
-                  <ReferenceArea y1={80} y2={180} fill="#34c759" fillOpacity={0.05} />
-                  <ReferenceLine y={70} stroke="#ff3b30" strokeDasharray="3 3" />
-                  <ReferenceLine y={180} stroke="#ff9500" strokeDasharray="3 3" />
+                  <ReferenceArea y1={80} y2={180} fill="var(--success)" fillOpacity={0.05} />
+                  <ReferenceLine y={70} stroke="var(--error)" strokeDasharray="3 3" />
+                  <ReferenceLine y={180} stroke="var(--warning)" strokeDasharray="3 3" />
                   <Tooltip
                     contentStyle={{
-                      background: "#ffffff",
+                      background: "var(--bg-elevated)",
                       border: "1px solid rgba(0,0,0,0.1)",
                       borderRadius: "8px",
                       fontSize: "12px",
@@ -999,16 +999,16 @@ export default function DiabeteHistoriquePage() {
                   <Line
                     type="monotone"
                     dataKey="value"
-                    stroke="#007aff"
+                    stroke="var(--accent)"
                     strokeWidth={2}
                     dot={false}
-                    activeDot={{ r: 4, fill: "#007aff" }}
+                    activeDot={{ r: 4, fill: "var(--accent)" }}
                     isAnimationActive={false}
                   />
                   {/* Overlay injections */}
                   <Scatter
                     data={injectionsInRange.map((i) => ({ t: i.t, value: 60, units: i.units }))}
-                    fill="#5856d6"
+                    fill="var(--diabete)"
                     shape="triangle"
                   />
                 </ComposedChart>

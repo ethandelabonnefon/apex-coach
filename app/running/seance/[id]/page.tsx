@@ -296,8 +296,8 @@ export default function RunningSeanceDetailPage({
                   <AreaChart data={elevProfile} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="elevGradDetail" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#32ade6" stopOpacity={0.4} />
-                        <stop offset="100%" stopColor="#32ade6" stopOpacity={0} />
+                        <stop offset="0%" stopColor="var(--chart-2)" stopOpacity={0.4} />
+                        <stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid stroke="rgba(0,0,0,0.04)" vertical={false} />
@@ -318,7 +318,7 @@ export default function RunningSeanceDetailPage({
                     />
                     <Tooltip
                       contentStyle={{
-                        background: "#ffffff",
+                        background: "var(--bg-elevated)",
                         border: "1px solid rgba(0,0,0,0.1)",
                         borderRadius: "8px",
                         fontSize: "11px",
@@ -329,7 +329,7 @@ export default function RunningSeanceDetailPage({
                     <Area
                       type="monotone"
                       dataKey="alt"
-                      stroke="#32ade6"
+                      stroke="var(--chart-2)"
                       strokeWidth={1.5}
                       fill="url(#elevGradDetail)"
                       isAnimationActive={false}
@@ -369,12 +369,12 @@ export default function RunningSeanceDetailPage({
                       tickLine={false}
                       width={30}
                     />
-                    <ReferenceArea y1={70} y2={180} fill="#34c759" fillOpacity={0.06} />
-                    <ReferenceLine y={70} stroke="#ff3b30" strokeDasharray="3 3" strokeWidth={1} />
-                    <ReferenceLine y={180} stroke="#ff9500" strokeDasharray="3 3" strokeWidth={1} />
+                    <ReferenceArea y1={70} y2={180} fill="var(--success)" fillOpacity={0.06} />
+                    <ReferenceLine y={70} stroke="var(--error)" strokeDasharray="3 3" strokeWidth={1} />
+                    <ReferenceLine y={180} stroke="var(--warning)" strokeDasharray="3 3" strokeWidth={1} />
                     <Tooltip
                       contentStyle={{
-                        background: "#ffffff",
+                        background: "var(--bg-elevated)",
                         border: "1px solid rgba(0,0,0,0.1)",
                         borderRadius: "8px",
                         fontSize: "11px",
@@ -385,9 +385,9 @@ export default function RunningSeanceDetailPage({
                     <Line
                       type="monotone"
                       dataKey="value"
-                      stroke="#5856d6"
+                      stroke="var(--diabete)"
                       strokeWidth={2}
-                      dot={{ r: 3, fill: "#5856d6" }}
+                      dot={{ r: 3, fill: "var(--diabete)" }}
                       isAnimationActive={false}
                     />
                   </LineChart>

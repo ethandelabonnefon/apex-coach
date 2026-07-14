@@ -28,7 +28,7 @@ export function InstallBanner() {
   if (!isIOS && !canInstall) return null;
 
   return (
-    <div className="fixed bottom-20 left-4 right-4 bg-gradient-to-r from-white to-white rounded-2xl p-4 shadow-lg border border-black/[0.06] z-50 lg:hidden">
+    <div className="fixed bottom-20 left-4 right-4 bg-gradient-to-r from-bg-primary to-bg-primary rounded-2xl p-4 shadow-lg border border-border-subtle z-50 lg:hidden">
       <button
         onClick={handleDismiss}
         className="absolute top-2 right-3 text-text-tertiary hover:text-text-primary text-lg"
@@ -39,7 +39,7 @@ export function InstallBanner() {
       <div className="flex items-center gap-4">
         <div className="text-3xl shrink-0">
           <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-            <rect width="32" height="32" rx="8" fill="#007AFF" />
+            <rect width="32" height="32" rx="8" fill="var(--accent)" />
             <text x="16" y="22" textAnchor="middle" fill="#ffffff" fontSize="14" fontWeight="bold">A</text>
           </svg>
         </div>
@@ -55,7 +55,7 @@ export function InstallBanner() {
         {canInstall && !isIOS && (
           <button
             onClick={promptInstall}
-            className="px-3 py-1.5 bg-[#007AFF] text-white rounded-xl text-sm font-semibold shrink-0"
+            className="px-3 py-1.5 bg-[var(--accent)] text-white rounded-xl text-sm font-semibold shrink-0"
           >
             Installer
           </button>

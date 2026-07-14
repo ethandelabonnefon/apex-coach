@@ -57,11 +57,11 @@ export default function BodyMap({ muscles, onMuscleClick, view = "both" }: BodyM
         {/* FRONT VIEW */}
         {(view === "front" || view === "both") && (
           <div className="relative">
-            <p className="text-center text-[10px] text-black/30 uppercase tracking-wider mb-2">Face</p>
+            <p className="text-center text-[10px] text-text-tertiary uppercase tracking-wider mb-2">Face</p>
             <svg viewBox="0 0 200 420" className="w-36 sm:w-44 h-auto">
               {/* Body outline */}
-              <ellipse cx="100" cy="30" rx="22" ry="25" fill="#ffffff" stroke="#e5e5ea" strokeWidth="1" />
-              <rect x="88" y="53" width="24" height="14" rx="4" fill="#ffffff" stroke="#e5e5ea" strokeWidth="0.5" />
+              <ellipse cx="100" cy="30" rx="22" ry="25" fill="#ffffff" stroke="var(--border-default)" strokeWidth="1" />
+              <rect x="88" y="53" width="24" height="14" rx="4" fill="#ffffff" stroke="var(--border-default)" strokeWidth="0.5" />
 
               {/* Trapèzes */}
               <path d="M 62 68 L 88 68 L 88 88 L 52 98 Z" {...muscleProps("traps")} />
@@ -104,8 +104,8 @@ export default function BodyMap({ muscles, onMuscleClick, view = "both" }: BodyM
               <ellipse cx="124" cy="348" rx="10" ry="32" {...muscleProps("calves")} />
 
               {/* Pieds */}
-              <ellipse cx="76" cy="395" rx="12" ry="6" fill="#ffffff" stroke="#e5e5ea" strokeWidth="0.5" />
-              <ellipse cx="124" cy="395" rx="12" ry="6" fill="#ffffff" stroke="#e5e5ea" strokeWidth="0.5" />
+              <ellipse cx="76" cy="395" rx="12" ry="6" fill="#ffffff" stroke="var(--border-default)" strokeWidth="0.5" />
+              <ellipse cx="124" cy="395" rx="12" ry="6" fill="#ffffff" stroke="var(--border-default)" strokeWidth="0.5" />
             </svg>
           </div>
         )}
@@ -113,11 +113,11 @@ export default function BodyMap({ muscles, onMuscleClick, view = "both" }: BodyM
         {/* BACK VIEW */}
         {(view === "back" || view === "both") && (
           <div className="relative">
-            <p className="text-center text-[10px] text-black/30 uppercase tracking-wider mb-2">Dos</p>
+            <p className="text-center text-[10px] text-text-tertiary uppercase tracking-wider mb-2">Dos</p>
             <svg viewBox="0 0 200 420" className="w-36 sm:w-44 h-auto">
               {/* Body outline */}
-              <ellipse cx="100" cy="30" rx="22" ry="25" fill="#ffffff" stroke="#e5e5ea" strokeWidth="1" />
-              <rect x="88" y="53" width="24" height="14" rx="4" fill="#ffffff" stroke="#e5e5ea" strokeWidth="0.5" />
+              <ellipse cx="100" cy="30" rx="22" ry="25" fill="#ffffff" stroke="var(--border-default)" strokeWidth="1" />
+              <rect x="88" y="53" width="24" height="14" rx="4" fill="#ffffff" stroke="var(--border-default)" strokeWidth="0.5" />
 
               {/* Trapèzes dos */}
               <path d="M 72 68 L 128 68 L 138 98 L 100 118 L 62 98 Z" {...muscleProps("traps")} />
@@ -154,8 +154,8 @@ export default function BodyMap({ muscles, onMuscleClick, view = "both" }: BodyM
               <ellipse cx="128" cy="358" rx="12" ry="28" {...muscleProps("calves")} />
 
               {/* Pieds */}
-              <ellipse cx="72" cy="398" rx="12" ry="6" fill="#ffffff" stroke="#e5e5ea" strokeWidth="0.5" />
-              <ellipse cx="128" cy="398" rx="12" ry="6" fill="#ffffff" stroke="#e5e5ea" strokeWidth="0.5" />
+              <ellipse cx="72" cy="398" rx="12" ry="6" fill="#ffffff" stroke="var(--border-default)" strokeWidth="0.5" />
+              <ellipse cx="128" cy="398" rx="12" ry="6" fill="#ffffff" stroke="var(--border-default)" strokeWidth="0.5" />
             </svg>
           </div>
         )}

@@ -23,7 +23,7 @@ export function OfflineIndicator() {
   if (isOnline) return null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-black text-center py-2 text-sm font-medium z-50">
+    <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-text-primary text-center py-2 text-sm font-medium z-50">
       Mode hors ligne — Certaines fonctionnalités sont limitées
     </div>
   );

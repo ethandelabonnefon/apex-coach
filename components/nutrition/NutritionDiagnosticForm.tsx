@@ -27,12 +27,12 @@ function OptionButton({
       onClick={onClick}
       className={`text-left p-3 rounded-xl border transition-all ${
         selected
-          ? "border-[#007aff]/50 bg-accent-subtle text-text-primary"
-          : "border-black/[0.06] bg-black/[0.03] text-black/60 hover:bg-black/[0.06]"
+          ? "border-[var(--accent)]/50 bg-accent-subtle text-text-primary"
+          : "border-border-subtle bg-bg-hover text-text-secondary hover:bg-bg-hover"
       }`}
     >
       <span className="text-sm font-medium">{children}</span>
-      {description && <p className="text-[11px] text-black/40 mt-0.5">{description}</p>}
+      {description && <p className="text-[11px] text-text-tertiary mt-0.5">{description}</p>}
     </button>
   );
 }
@@ -55,22 +55,22 @@ function NumberInput({
 }) {
   return (
     <div>
-      <label className="text-xs text-black/40 mb-1 block">{label}</label>
+      <label className="text-xs text-text-tertiary mb-1 block">{label}</label>
       <div className="relative">
         <input
           type="number"
           value={value || ""}
           onChange={(e) => onChange(Number(e.target.value))}
           placeholder={placeholder}
-          className="w-full bg-black/[0.06] border border-black/[0.06] rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder:text-black/20 focus:outline-none focus:border-[#34c759]/50"
+          className="w-full bg-bg-hover border border-border-subtle rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none focus:border-[var(--success)]/50"
         />
         {suffix && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-black/30">
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-tertiary">
             {suffix}
           </span>
         )}
       </div>
-      {helpText && <p className="text-[10px] text-black/30 mt-1">{helpText}</p>}
+      {helpText && <p className="text-[10px] text-text-tertiary mt-1">{helpText}</p>}
     </div>
   );
 }
@@ -145,12 +145,12 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
           <div key={s} className="flex-1">
             <div
               className={`h-1 rounded-full transition-colors ${
-                i <= step ? "bg-[#34c759]" : "bg-black/[0.06]"
+                i <= step ? "bg-[var(--success)]" : "bg-bg-hover"
               }`}
             />
             <p
               className={`text-[10px] mt-1 ${
-                i === step ? "text-[#34c759]" : "text-black/30"
+                i === step ? "text-[var(--success)]" : "text-text-tertiary"
               }`}
             >
               {s}
@@ -163,7 +163,7 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
       {step === 0 && (
         <div className="space-y-4">
           <h3 className="text-lg font-semibold">Données physiques</h3>
-          <p className="text-sm text-black/40">Pré-rempli depuis ton profil. Ajuste si nécessaire.</p>
+          <p className="text-sm text-text-tertiary">Pré-rempli depuis ton profil. Ajuste si nécessaire.</p>
 
           <div className="grid grid-cols-3 gap-3">
             <NumberInput label="Taille" value={data.height} onChange={(v) => update({ height: v })} suffix="cm" />
@@ -172,8 +172,8 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
           </div>
 
           <div>
-            <label className="text-xs text-black/40 mb-2 block">Sexe biologique</label>
-            <p className="text-[10px] text-black/25 mb-2">Nécessaire pour le calcul du métabolisme</p>
+            <label className="text-xs text-text-tertiary mb-2 block">Sexe biologique</label>
+            <p className="text-[10px] text-text-disabled mb-2">Nécessaire pour le calcul du métabolisme</p>
             <div className="grid grid-cols-2 gap-2">
               <OptionButton selected={data.sex === "male"} onClick={() => update({ sex: "male" })}>
                 Homme
@@ -201,7 +201,7 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-black/40 mb-2 block">Séances muscu / semaine</label>
+              <label className="text-xs text-text-tertiary mb-2 block">Séances muscu / semaine</label>
               <div className="grid grid-cols-4 gap-1.5">
                 {[0, 1, 2, 3, 4, 5, 6].map((n) => (
                   <OptionButton
@@ -215,7 +215,7 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
               </div>
             </div>
             <div>
-              <label className="text-xs text-black/40 mb-2 block">Séances running / semaine</label>
+              <label className="text-xs text-text-tertiary mb-2 block">Séances running / semaine</label>
               <div className="grid grid-cols-4 gap-1.5">
                 {[0, 1, 2, 3, 4].map((n) => (
                   <OptionButton
@@ -232,7 +232,7 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
 
           {(data.muscuSessionsPerWeek ?? 0) > 0 && (
             <div>
-              <label className="text-xs text-black/40 mb-2 block">Durée moyenne d&apos;une séance muscu</label>
+              <label className="text-xs text-text-tertiary mb-2 block">Durée moyenne d&apos;une séance muscu</label>
               <div className="grid grid-cols-5 gap-1.5">
                 {[
                   { v: 30, l: "~30 min" },
@@ -255,7 +255,7 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
 
           {(data.runningSessionsPerWeek ?? 0) > 0 && (
             <div>
-              <label className="text-xs text-black/40 mb-2 block">Durée moyenne d&apos;une sortie running</label>
+              <label className="text-xs text-text-tertiary mb-2 block">Durée moyenne d&apos;une sortie running</label>
               <div className="grid grid-cols-5 gap-1.5">
                 {[
                   { v: 20, l: "~20 min" },
@@ -277,7 +277,7 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
           )}
 
           <div>
-            <label className="text-xs text-black/40 mb-2 block">Activité quotidienne (hors sport)</label>
+            <label className="text-xs text-text-tertiary mb-2 block">Activité quotidienne (hors sport)</label>
             <div className="grid grid-cols-1 gap-1.5">
               {[
                 { v: "sedentary", l: "Sédentaire", d: "Bureau, peu de marche" },
@@ -299,7 +299,7 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
           </div>
 
           <div>
-            <label className="text-xs text-black/40 mb-2 block">Type de travail</label>
+            <label className="text-xs text-text-tertiary mb-2 block">Type de travail</label>
             <div className="grid grid-cols-3 gap-2">
               {[
                 { v: "desk", l: "Bureau / Assis" },
@@ -369,8 +369,8 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
             data.targetTimelineWeeks &&
             data.targetTimelineWeeks > 0 &&
             data.weight && (
-              <div className="rounded-xl bg-[#34c759]/10 border border-[#34c759]/25 px-3 py-2.5 text-xs">
-                <p className="text-[#34c759] font-medium">
+              <div className="rounded-xl bg-[var(--success)]/10 border border-[var(--success)]/25 px-3 py-2.5 text-xs">
+                <p className="text-[var(--success)] font-medium">
                   Rythme calculé :{" "}
                   {(
                     Math.round(
@@ -379,7 +379,7 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
                   ).toFixed(2)}{" "}
                   kg/sem
                 </p>
-                <p className="text-black/50 mt-0.5">
+                <p className="text-text-secondary mt-0.5">
                   {data.targetWeight - data.weight > 0 ? "+" : ""}
                   {(data.targetWeight - data.weight).toFixed(1)} kg sur {data.targetTimelineWeeks}{" "}
                   semaines
@@ -389,10 +389,10 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
 
           {(data.primaryGoal === "bulk" || data.primaryGoal === "cut") && (
             <div>
-              <label className="text-xs text-black/40 mb-2 block">
+              <label className="text-xs text-text-tertiary mb-2 block">
                 Rythme souhaité{" "}
                 {data.targetWeight && data.targetTimelineWeeks ? (
-                  <span className="text-black/25">(ignoré — objectif chiffré prioritaire)</span>
+                  <span className="text-text-disabled">(ignoré — objectif chiffré prioritaire)</span>
                 ) : null}
               </label>
               <div className="grid grid-cols-3 gap-2">
@@ -434,7 +434,7 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
           <h3 className="text-lg font-semibold">Préférences & Diabète T1</h3>
 
           <div>
-            <label className="text-xs text-black/40 mb-2 block">Nombre de repas par jour</label>
+            <label className="text-xs text-text-tertiary mb-2 block">Nombre de repas par jour</label>
             <div className="grid grid-cols-4 gap-1.5">
               {[
                 { v: 3, l: "3 repas" },
@@ -454,7 +454,7 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
           </div>
 
           <div>
-            <label className="text-xs text-black/40 mb-2 block">Restrictions alimentaires</label>
+            <label className="text-xs text-text-tertiary mb-2 block">Restrictions alimentaires</label>
             <div className="flex flex-wrap gap-1.5">
               {["Aucune", "Végétarien", "Végan", "Sans lactose", "Sans gluten", "Halal", "Allergie noix"].map(
                 (r) => (
@@ -464,8 +464,8 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
                     onClick={() => toggleRestriction(r)}
                     className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${
                       (data.dietaryRestrictions || []).includes(r)
-                        ? "bg-[#34c759]/15 text-[#34c759] border border-[#34c759]/30"
-                        : "bg-black/[0.04] text-black/50 border border-black/[0.06] hover:bg-black/[0.08]"
+                        ? "bg-[var(--success)]/15 text-[var(--success)] border border-[var(--success)]/30"
+                        : "bg-bg-hover text-text-secondary border border-border-subtle hover:bg-bg-hover"
                     }`}
                   >
                     {r}
@@ -476,7 +476,7 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
           </div>
 
           <div>
-            <label className="text-xs text-black/40 mb-2 block">Répartition des glucides préférée</label>
+            <label className="text-xs text-text-tertiary mb-2 block">Répartition des glucides préférée</label>
             <div className="grid grid-cols-1 gap-1.5">
               {[
                 { v: "spread", l: "Répartis sur la journée", d: "Plus stable pour la glycémie" },
@@ -496,24 +496,24 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
           </div>
 
           {/* T1D section */}
-          <div className="pt-4 border-t border-black/[0.06]">
-            <p className="text-sm font-semibold text-[#32ade6] mb-3">Considérations Diabète T1</p>
+          <div className="pt-4 border-t border-border-subtle">
+            <p className="text-sm font-semibold text-[var(--chart-2)] mb-3">Considérations Diabète T1</p>
 
             <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-black/[0.03] border border-black/[0.06]">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-bg-hover border border-border-subtle">
                 <div>
-                  <p className="text-sm text-black/80">Calcul des glucides précis par repas</p>
-                  <p className="text-[10px] text-black/30">Pour faciliter le calcul de ton bolus</p>
+                  <p className="text-sm text-text-primary">Calcul des glucides précis par repas</p>
+                  <p className="text-[10px] text-text-tertiary">Pour faciliter le calcul de ton bolus</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => updateT1D({ countCarbs: !data.t1dConsiderations?.countCarbs })}
                   className={`w-10 h-6 rounded-full transition-colors ${
-                    data.t1dConsiderations?.countCarbs ? "bg-[#34c759]" : "bg-black/[0.1]"
+                    data.t1dConsiderations?.countCarbs ? "bg-[var(--success)]" : "bg-bg-hover"
                   }`}
                 >
                   <span
-                    className={`block w-4 h-4 bg-white rounded-full transition-transform mx-1 ${
+                    className={`block w-4 h-4 bg-bg-secondary rounded-full transition-transform mx-1 ${
                       data.t1dConsiderations?.countCarbs ? "translate-x-4" : ""
                     }`}
                   />
@@ -521,7 +521,7 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
               </div>
 
               <div>
-                <label className="text-xs text-black/40 mb-2 block">Approche glucides</label>
+                <label className="text-xs text-text-tertiary mb-2 block">Approche glucides</label>
                 <div className="grid grid-cols-3 gap-1.5">
                   {[
                     { v: "no", l: "Normal" },
@@ -544,7 +544,7 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
               </div>
 
               <div>
-                <label className="text-xs text-black/40 mb-2 block">Sensibilité à l'insuline</label>
+                <label className="text-xs text-text-tertiary mb-2 block">Sensibilité à l'insuline</label>
                 <div className="grid grid-cols-3 gap-1.5">
                   {[
                     { v: "high", l: "Haute", d: "Peu d'insuline nécessaire" },
@@ -572,7 +572,7 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
       )}
 
       {/* Navigation buttons */}
-      <div className="flex items-center justify-between mt-6 pt-4 border-t border-black/[0.06]">
+      <div className="flex items-center justify-between mt-6 pt-4 border-t border-border-subtle">
         {step > 0 ? (
           <Button variant="ghost" onClick={() => setStep((s) => s - 1)}>
             Retour

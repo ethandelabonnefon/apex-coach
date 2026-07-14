@@ -44,17 +44,17 @@ interface RunningMapProps {
 
 /** Tone glycémie → couleur de trace. */
 function glucoseToColor(value: number | null): string {
-  if (value === null) return "#32ade6"; // sky default
-  if (value < 70 || value > 250) return "#ff3b30"; // hypo / hyper → rouge
-  if (value < 80 || value > 180) return "#ff9500"; // low / high → orange
-  return "#34c759"; // target → vert
+  if (value === null) return "var(--chart-2)"; // sky default
+  if (value < 70 || value > 250) return "var(--error)"; // hypo / hyper → rouge
+  if (value < 80 || value > 180) return "var(--warning)"; // low / high → orange
+  return "var(--success)"; // target → vert
 }
 
 export default function RunningMap({
   points,
   mode,
   height = "100%",
-  strokeColor = "#32ade6",
+  strokeColor = "var(--chart-2)",
   glucoseCheckpoints,
   scrubIndex,
 }: RunningMapProps) {
@@ -151,7 +151,7 @@ export default function RunningMap({
         zoom={16}
         scrollWheelZoom
         zoomControl={false}
-        style={{ height: "100%", width: "100%", background: "#ffffff" }}
+        style={{ height: "100%", width: "100%", background: "var(--bg-elevated)" }}
         attributionControl={false}
       >
         {/* Tile layer — CARTO Positron (clair, style Plans iOS).
@@ -211,14 +211,14 @@ export default function RunningMap({
           <CircleMarker
             center={firstPoint}
             radius={6}
-            pathOptions={{ color: "#FFFFFF", fillColor: "#34c759", fillOpacity: 1, weight: 2 }}
+            pathOptions={{ color: "#FFFFFF", fillColor: "var(--success)", fillOpacity: 1, weight: 2 }}
           />
         )}
         {mode === "replay" && lastPoint && positions.length > 1 && (
           <CircleMarker
             center={lastPoint}
             radius={6}
-            pathOptions={{ color: "#FFFFFF", fillColor: "#ff3b30", fillOpacity: 1, weight: 2 }}
+            pathOptions={{ color: "#FFFFFF", fillColor: "var(--error)", fillOpacity: 1, weight: 2 }}
           />
         )}
 
@@ -228,12 +228,12 @@ export default function RunningMap({
             <CircleMarker
               center={[scrubPoint.lat, scrubPoint.lon]}
               radius={14}
-              pathOptions={{ color: "#5856d6", fillColor: "#5856d6", fillOpacity: 0.25, weight: 0 }}
+              pathOptions={{ color: "var(--diabete)", fillColor: "var(--diabete)", fillOpacity: 0.25, weight: 0 }}
             />
             <CircleMarker
               center={[scrubPoint.lat, scrubPoint.lon]}
               radius={7}
-              pathOptions={{ color: "#FFFFFF", fillColor: "#5856d6", fillOpacity: 1, weight: 2.5 }}
+              pathOptions={{ color: "#FFFFFF", fillColor: "var(--diabete)", fillOpacity: 1, weight: 2.5 }}
             />
           </>
         )}
