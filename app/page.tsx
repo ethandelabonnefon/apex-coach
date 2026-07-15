@@ -8,6 +8,7 @@ import { Ring } from "@/components/ui/Ring";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { glucoseToneColor, glucoseToneLabel } from "@/lib/libre-link/utils";
 import WhoopCard from "@/components/whoop/WhoopCard";
+import RecoveryFigure from "@/components/whoop/RecoveryFigure";
 import {
   ArrowUpRight,
   Dumbbell,
@@ -235,6 +236,9 @@ export default function Dashboard() {
           </div>
         )}
       </section>
+
+      {/* ============ FIGURE 3D RÉCUPÉRATION (couleur = Recovery Whoop) ============ */}
+      <RecoveryFigure />
 
       {/* ============ WHOOP QUICK-VIEW (si connecté) ============ */}
       <WhoopCard variant="compact" />
@@ -485,7 +489,10 @@ export default function Dashboard() {
       </section>
 
       <footer className="mt-10 text-center text-[10px] text-text-tertiary">
-        APEX · <span className="num">v3</span> · Precision Coach
+        APEX · <span className="num">v3</span> · Precision Coach ·{" "}
+        <Link href="/credits" className="hover:text-text-secondary transition-colors">
+          Crédits
+        </Link>
       </footer>
     </div>
   );
