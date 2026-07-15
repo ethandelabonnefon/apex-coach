@@ -712,19 +712,35 @@ export function computePreSportBriefing(input: {
 }
 
 /**
- * Conseil de timing d'injection — Phase 11.
+ * Conseil de timing d'injection — pré-bolus calé sur la pharmacocinétique
+ * réelle du Novorapid (insuline aspart, stylo — schéma d'Ethan).
  *
- * Le pré-bolus 15min avant le repas est le standard T1D pour anticiper le
- * pic glycémique des glucides. Mais ça dépend du contexte :
- *  - Glycémie basse / trend descendante → injecter au moment du repas
- *    (ou même 15min après) pour éviter une hypo précoce
- *  - Glycémie haute / trend montante → injecter 20-30 min avant pour
- *    laisser à l'insuline le temps d'agir avant le pic
- *  - Snack / petit repas → moins critique, au moment du repas suffit
- *  - Pré-workout → géré par l'advisor pré-sport, on ne dit rien ici
+ * PK Novorapid (SmPC Novo Nordisk / StatPearls) : début d'action 10-20 min,
+ * pic 1-3h, durée 3-5h. Le fabricant recommande 5-10 min avant le repas ;
+ * les études cliniques (Cobry 2010 ; revue Slattery 2018) montrent que 15-20
+ * min avant est optimal sur le pic post-prandial — MAIS un pré-bolus de 15-20
+ * min est trop agressif près de ~90 mg/dL ou en descente : l'insuline commence
+ * à tirer avant que les glucides montent → petite hypo précoce (le cas d'Ethan).
  *
- * Renvoie null pour les saisies sans repas (correction seule, mealTime "other"
- * sans glucides) — pas de conseil de timing pertinent.
+ * Donc le délai N'EST PAS fixe : il monte avec la glycémie de départ et
+ * s'annule près de la cible / en descente. Barème (cible ~110 mg/dL) :
+ *   < 80 ou ↓↓  → au repas / après les 1res bouchées (jamais anticiper)
+ *   80-109      → au repas (0 min) — proche/​sous cible : pas de pré-bolus
+ *   110-139     → ~10 min
+ *   140-179     → ~15 min
+ *   180-249     → ~20 min
+ *   ≥ 250       → ~25 min
+ * Ajusté par la tendance Libre : ↘ -10 min · ↗ +5 min · ↑↑ +10 min.
+ * Snack rapide (<20g) → jamais de long pré-bolus (cap 5 min).
+ *
+ * Sources :
+ *  - Novo Nordisk NovoRapid Product Monograph (onset 10-20 min, pic 1-3h)
+ *  - StatPearls "Aspart Insulin" (NCBI NBK500030)
+ *  - Cobry E. et al. 2010, Diabetes Care (aspart -30/-15/0 min : -15 optimal)
+ *  - Slattery D. et al. 2018, Diabetic Medicine (revue timing pré-bolus)
+ *
+ * Renvoie null pour les saisies sans repas (mealTime "other" / 0g) ou en mode
+ * pré-sport (l'advisor pré-sport prend le relais).
  */
 export function getInjectionTimingAdvice(
   currentGlucose: number,
@@ -734,67 +750,64 @@ export function getInjectionTimingAdvice(
   isPreWorkout: boolean = false,
 ): {
   tone: 'standard' | 'early' | 'delay' | 'with-meal';
-  /** Phrase courte type "Injecte 15 min avant le repas". */
+  /** Phrase courte type "Injecte ~15 min avant le repas". */
   headline: string;
   /** Justification en une phrase. */
   rationale: string;
+  /** Minutes de pré-bolus recommandées (0 = au repas, <0 = après les bouchées). */
+  leadMinutes: number;
 } | null {
   // Pas de repas → pas de conseil
   if (carbsGrams === 0 || mealTime === 'other') return null;
   // En mode pré-sport, l'advisor sport prend le relais
   if (isPreWorkout) return null;
 
-  const isFalling = trendArrow === 1 || trendArrow === 2; // ↓↓ ou ↘
-  const isRising = trendArrow === 4 || trendArrow === 5;  // ↗ ou ↑↑
-  const isSnack = mealTime === 'snack';
-
-  // 1. Glycémie basse OU en chute → injecter pendant le repas, pas avant
-  if (currentGlucose < 90 || trendArrow === 1) {
+  // Filet de sécurité : glycémie basse ou en chute rapide → jamais anticiper.
+  // Le Novorapid tire en 10-20 min ; un pré-bolus ferait tomber avant le repas.
+  if (currentGlucose < 80 || trendArrow === 1) {
     return {
-      tone: 'with-meal',
-      headline: 'Injecte au moment du repas',
+      tone: 'delay',
+      leadMinutes: -1,
+      headline: 'Injecte au moment du repas (ou après les 1res bouchées)',
       rationale:
-        currentGlucose < 90
-          ? `Glycémie ${currentGlucose} mg/dL : pas de pré-bolus, sinon risque d'hypo précoce.`
-          : 'Glycémie en chute : pas de pré-bolus, attends que ça se stabilise.',
+        currentGlucose < 80
+          ? `Glycémie ${currentGlucose} mg/dL : trop bas pour anticiper. Le Novorapid agit en 10-20 min → tu tomberais avant que les glucides montent.`
+          : 'Glycémie en chute rapide : pas de pré-bolus, laisse-la se stabiliser d\'abord.',
     };
   }
 
-  // 2. Trend descendante simple → injecte au moment du repas
-  if (isFalling) {
+  // Délai de base selon la glycémie (mg/dL), calé sur onset Novorapid 10-20 min.
+  let lead: number;
+  if (currentGlucose < 110) lead = 0;        // proche/​sous cible → au repas
+  else if (currentGlucose < 140) lead = 10;
+  else if (currentGlucose < 180) lead = 15;
+  else if (currentGlucose < 250) lead = 20;
+  else lead = 25;
+
+  // Ajustement tendance Libre (↘ raccourcit, ↗/↑↑ rallongent).
+  if (trendArrow === 2) lead = Math.max(0, lead - 10); // ↘
+  else if (trendArrow === 4) lead += 5;                // ↗
+  else if (trendArrow === 5) lead += 10;               // ↑↑
+
+  // Snack à absorption rapide (<20g) → jamais de long pré-bolus.
+  if (mealTime === 'snack' && carbsGrams < 20) lead = Math.min(lead, 5);
+
+  // Au moment du repas (0 min) — proche de la cible : le cas anti-hypo d'Ethan.
+  if (lead === 0) {
     return {
       tone: 'with-meal',
+      leadMinutes: 0,
       headline: 'Injecte au moment du repas',
-      rationale: 'Glycémie en descente : un pré-bolus risquerait de te faire tomber bas avant le pic glucides.',
+      rationale: `Glycémie ${currentGlucose} mg/dL (proche de ta cible) : pas de pré-bolus, sinon le Novorapid te fait une petite hypo avant que les glucides montent.`,
     };
   }
 
-  // 3. Glycémie haute (>180) ou trend montante → pré-bolus plus long
-  if (currentGlucose > 180 || isRising) {
-    return {
-      tone: 'early',
-      headline: 'Injecte 20-30 min avant le repas',
-      rationale:
-        currentGlucose > 180
-          ? `Glycémie ${currentGlucose} mg/dL : laisse à l'insuline le temps de redescendre avant que les glucides arrivent.`
-          : 'Glycémie en montée : pré-bolus plus long pour anticiper le pic.',
-    };
-  }
-
-  // 4. Snack avec peu de glucides → moins critique
-  if (isSnack && carbsGrams < 20) {
-    return {
-      tone: 'with-meal',
-      headline: 'Injecte au moment du goûter',
-      rationale: 'Petit snack : pas besoin de pré-bolus, l\'absorption est rapide.',
-    };
-  }
-
-  // 5. Cas standard : glycémie en plage, trend stable → pré-bolus 15min
+  // Pré-bolus gradué.
   return {
-    tone: 'standard',
-    headline: 'Injecte idéalement 15 min avant le repas',
-    rationale: 'Pré-bolus standard : l\'insuline commence à agir avant le pic glycémique des glucides.',
+    tone: lead >= 20 ? 'early' : 'standard',
+    leadMinutes: lead,
+    headline: `Injecte ~${lead} min avant le repas`,
+    rationale: `Glycémie ${currentGlucose} mg/dL : le Novorapid met 10-20 min à agir, ~${lead} min de pré-bolus lissent le pic glucides sans te faire tomber bas.`,
   };
 }
 
