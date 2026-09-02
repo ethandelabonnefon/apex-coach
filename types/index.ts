@@ -145,6 +145,22 @@ export interface InsulinLog {
   isSplitDose?: boolean;
   /** Lien vers la 1re injection si split. */
   parentInjectionId?: string;
+  // ─── Confirmation des glucides réels (septembre 2026) ───────────────
+  /** Glucides réellement mangés, confirmés après le repas. Prime sur carbsGrams. */
+  carbsConfirmedGrams?: number;
+  /** Lipides confirmés après le repas. Prime sur fatGrams. */
+  fatConfirmedGrams?: number;
+  /** Protéines confirmées après le repas. Prime sur proteinGrams. */
+  proteinConfirmedGrams?: number;
+  /** ISO du moment de la confirmation. */
+  carbsConfirmedAt?: string;
+  /**
+   * Quantité de glucides déclarée non fiable (plat au resto, portion inconnue).
+   * Rend l'app muette sur la dose et exclut le repas de l'apprentissage —
+   * mais les glucides restent dans le calcul de couverture, sinon on
+   * conclurait à tort « trop d'insuline, mange des glucides ».
+   */
+  carbsUncertain?: boolean;
 }
 
 /**
