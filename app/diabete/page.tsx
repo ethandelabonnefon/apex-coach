@@ -91,6 +91,7 @@ import {
   Footprints,
   Minus,
   Trash2,
+  Pencil,
   History,
   Sparkles,
   Clock,
@@ -379,7 +380,21 @@ export default function DiabetePage() {
   // `insulinLogs` est trié du plus récent au plus ancien (addInsulinLog
   // insère en tête) → .find() retourne bien la dernière injection éligible.
   // Ne pas ajouter de tri.
+  // Injection dont le drapeau « incertain » vient d'être levé depuis
+  // l'historique : elle rouvre la carte de saisie même hors fenêtre
+  // (spec §5, « réversible dans les deux sens »).
+  const [reopenedConfirmId, setReopenedConfirmId] = useState<string | null>(null);
+
   const pendingConfirm = useMemo(() => {
+    const reopened = reopenedConfirmId
+      ? insulinLogs.find(
+          (log) =>
+            log.id === reopenedConfirmId &&
+            !log.carbsConfirmedAt &&
+            !log.carbsUncertain,
+        )
+      : undefined;
+    if (reopened) return reopened;
     return (
       insulinLogs.find((log) => {
         if (log.isSplitDose) return false;
@@ -389,7 +404,7 @@ export default function DiabetePage() {
         return minutesAgo >= 15 && minutesAgo <= 180;
       }) ?? null
     );
-  }, [insulinLogs, nowTick]);
+  }, [insulinLogs, nowTick, reopenedConfirmId]);
 
   // Détails de la dernière injection active (pour message contextualisé IOB)
   const lastActiveInjection = useMemo(() => {
@@ -600,9 +615,21 @@ export default function DiabetePage() {
   function handleDeleteInjection(id: string, units: number) {
     if (
       typeof window !== "undefined" &&
-      window.confirm(`Supprimer cette injection de ${units}U ? Action irréversible.`)
+      !window.confirm(`Supprimer cette injection de ${units}U ? Action irréversible.`)
     ) {
-      removeInsulinLog(id);
+      return;
+    }
+    removeInsulinLog(id);
+    // Supprimer une injection est le geste de quelqu'un qui corrige une
+    // erreur de saisie : ses rappels doivent partir avec elle. Sans ça, le
+    // rappel de confirmation T+20 demande « tu as mangé combien
+    // finalement ? » pour un repas qui n'existe plus, et le rappel de
+    // split ordonne une 2e dose pour un bolus effacé.
+    cancelReminderOnServer(`mc-${id}`);
+    for (const r of splitDoseReminders) {
+      if (r.parentInjectionId !== id) continue;
+      removeSplitDoseReminder(r.id); // store local
+      cancelReminderOnServer(r.id); // KV serveur (cron)
     }
   }
 
@@ -763,6 +790,7 @@ export default function DiabetePage() {
     log: InsulinLog,
     values: { carbs: number; fat: number; protein: number },
   ) {
+    setReopenedConfirmId(null);
     updateInsulinLog(log.id, {
       carbsConfirmedGrams: values.carbs,
       fatConfirmedGrams: values.fat,
@@ -774,11 +802,28 @@ export default function DiabetePage() {
   }
 
   function handleMarkUncertain(log: InsulinLog) {
+    setReopenedConfirmId(null);
     updateInsulinLog(log.id, {
       carbsUncertain: true,
       carbsConfirmedAt: new Date().toISOString(),
     });
     cancelReminderOnServer(`mc-${log.id}`);
+  }
+
+  /**
+   * Lève le drapeau « quantité incertaine » depuis l'historique et rouvre
+   * la carte de saisie (spec §5 : réversible dans les deux sens). Un tap
+   * accidentel excluait sinon le repas de l'apprentissage à vie.
+   */
+  function handleClearUncertain(log: InsulinLog) {
+    updateInsulinLog(log.id, {
+      carbsUncertain: false,
+      carbsConfirmedAt: undefined,
+    });
+    setReopenedConfirmId(log.id);
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   }
 
   function handleAcceptTopUp(units: number) {
@@ -2584,9 +2629,18 @@ export default function DiabetePage() {
                         </Badge>
                       )}
                       {log.carbsUncertain && (
-                        <Badge variant="warning" size="sm">
-                          incertain
-                        </Badge>
+                        <button
+                          type="button"
+                          onClick={() => handleClearUncertain(log)}
+                          title="Lever le drapeau et saisir la quantité"
+                          aria-label="Lever le drapeau « incertain » et saisir la quantité"
+                          className="tap-scale rounded-full"
+                        >
+                          <Badge variant="warning" size="sm">
+                            incertain
+                            <Pencil className="w-2.5 h-2.5 ml-1 inline-block align-[-1px]" />
+                          </Badge>
+                        </button>
                       )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
