@@ -68,6 +68,66 @@ test("plan nuit voit les glucides sans insuline (montée intégrée)", () => {
   assert.ok(max(avecCarbs) > max(sansCarbs), "40g sans insuline doivent faire monter la prédiction nuit");
 });
 
+// ─── minPred sur la courbe complète : risque + recommandation (re-revue) ──
+//
+// Même scénario que le test "creux transitoire" de lib/night-brain.test.ts :
+// un léger sur-dosage (45g glucides / 25g lip / 20g prot, bolus 5,37U injecté
+// il y a 45min, glycémie 130) produit, sur la courbe à pas de 15 min :
+//   minute 120 (+2h)  → 90 mg/dL   (pas < 90)
+//   minute 135        → 89 mg/dL   (< 90, AUCUN échantillon ne tombe ici)
+//   minute 240 (+4h)  → 125 mg/dL
+//   minute 420 (réveil) → 155 mg/dL
+// Ancien minPred (3 échantillons) = min(90, 125, 155) = 90 → ni le risque
+// (90 n'est pas < 90) ni la recommandation (idem) ne voient le creux. Le
+// vrai minimum de la courbe est 89 → les deux doivent basculer.
+
+const EVENING = new Date("2026-09-02T22:30:00").getTime();
+const dipEvents = [
+  {
+    minutesAgo: 45,
+    units: 5.37,
+    carbsGrams: 45,
+    fatGrams: 25,
+    proteinGrams: 20,
+    carbSensitivity: carbSensitivity(ISF, 10),
+  },
+];
+
+function dipAdvice() {
+  return computeBedtimeAdvice({
+    currentGlucose: 130,
+    trendArrow: 3,
+    iobUnits: 0,
+    isfMgPerU: ISF,
+    insulinActiveMinutes: 195,
+    targetGlucose: 110,
+    hoursUntilWakeup: 7,
+    nowMs: EVENING,
+    events: dipEvents,
+  });
+}
+
+test("risque : un creux à 89 mg/dL entre +2h et +4h fait basculer le risque en caution-low", () => {
+  const advice = dipAdvice();
+  // Les 3 échantillons (90/125/155) ne franchissent aucun seuil de risque :
+  // sans le fix, risk resterait 'safe'.
+  assert.ok(
+    advice.risk === "caution-low" || advice.risk === "risk-low",
+    `creux à 89 mg/dL attendu en caution-low (ou risk-low), reçu '${advice.risk}'`,
+  );
+});
+
+test("recommandation : le même creux produit une collation, pas 'tout va bien'", () => {
+  const advice = dipAdvice();
+  // Sans le fix, minPred (3 échantillons) = 90 → aucune branche hypo ne
+  // matche → fallback 'all-good'. Avec le fix, minPred = 89 → 'eat-carbs'.
+  assert.equal(
+    advice.recommendation.type,
+    "eat-carbs",
+    `une collation est attendue sur ce creux, reçu '${advice.recommendation.type}' (${advice.recommendation.headline})`,
+  );
+});
+
 test("mode legacy (sans events) reste fonctionnel (rétrocompat)", () => {
   const advice = computeBedtimeAdvice({
     currentGlucose: 140,

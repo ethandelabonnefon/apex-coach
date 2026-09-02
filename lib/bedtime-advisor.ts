@@ -416,6 +416,42 @@ function predictGlucoseAt(
   };
 }
 
+/**
+ * Minimum de la courbe COMPLÈTE (pas des 3 échantillons +2h/+4h/réveil de
+ * `predictions`), bornée à l'horizon réveil — jamais au-delà (un rebond dawn
+ * après le réveil n'a rien à faire dans « le pire creux de la nuit »).
+ * Retombe sur les 3 échantillons quand aucune courbe continue n'est
+ * disponible (mode legacy, sans `events` — cf. le commentaire sur
+ * `BedtimeAdvice.curve`).
+ *
+ * ⚠️ ASYMÉTRIE VOLONTAIRE avec le maximum, qui reste calculé sur les 3
+ * échantillons partout où minPred et maxPred sont utilisés ensemble (risque
+ * ci-dessous, `buildRecommendation`). NE PAS "corriger" cette incohérence
+ * apparente en appliquant le même traitement à maxPred — c'est un choix
+ * délibéré, pas un oubli :
+ *  - Porter minPred sur la courbe complète va dans le sens de la sécurité :
+ *    on détecte des creux hypo transitoires qu'on ratait entre deux
+ *    échantillons, donc on protège PLUS.
+ *  - Porter maxPred sur la courbe complète irait dans l'autre sens : on
+ *    déclencherait risk-high/caution-high sur des PICS transitoires qu'on
+ *    ignorait jusqu'ici, sans bénéfice de sécurité proportionné.
+ *  - Le patient est actuellement en hypoglycémie fréquente, parfois sévère —
+ *    pas en hyperglycémie. Noyer ses alertes sous du bruit hyper serait
+ *    contre-productif et userait la confiance dans les vraies alertes.
+ */
+function curveAwareMinPred(
+  predictions: BedtimePrediction[],
+  curve: PredictionPoint[] | undefined,
+  hoursUntilWakeup: number,
+): number {
+  const wakeupMinute = hoursUntilWakeup * 60;
+  const points = curve?.filter((p) => p.minute > 0 && p.minute <= wakeupMinute);
+  if (points && points.length > 0) {
+    return Math.min(...points.map((p) => p.value));
+  }
+  return Math.min(...predictions.map((p) => p.glucose));
+}
+
 // ───────────────────────────────────────────────────────────────────────
 // Fonction principale
 // ───────────────────────────────────────────────────────────────────────
@@ -490,7 +526,9 @@ export function computeBedtimeAdvice(input: BedtimeAdvisorInput): BedtimeAdvice 
       : 0,
   };
 
-  const minPred = Math.min(...predictions.map((p) => p.glucose));
+  // minPred porte sur la courbe complète (fix re-revue) ; maxPred reste sur
+  // les 3 échantillons — asymétrie volontaire, cf. `curveAwareMinPred`.
+  const minPred = curveAwareMinPred(predictions, curvePoints, hoursUntilWakeup);
   const maxPred = Math.max(...predictions.map((p) => p.glucose));
 
   // ─── Détection prédiction peu fiable ─────────────────
@@ -521,7 +559,7 @@ export function computeBedtimeAdvice(input: BedtimeAdvisorInput): BedtimeAdvice 
         headline: 'Repas trop récent pour prédire fiablement',
         detail: `Tu viens de manger (il y a ${input.lastMealHoursAgo?.toFixed(1).replace('.', ',')}h) avec ${input.iobUnits.toFixed(1).replace('.', ',')}U d'IOB en cours. La dynamique glucides/insuline est encore instable. Reviens dans 1-2h pour une prédiction fiable.`,
       }
-    : buildRecommendation(predictions, input, risk);
+    : buildRecommendation(predictions, input, risk, curvePoints, hoursUntilWakeup);
 
   return {
     predictions,
@@ -594,8 +632,12 @@ function buildRecommendation(
   predictions: BedtimePrediction[],
   input: BedtimeAdvisorInput,
   risk: BedtimeRisk,
+  curve: PredictionPoint[] | undefined,
+  hoursUntilWakeup: number,
 ): BedtimeRecommendation {
-  const minPred = Math.min(...predictions.map((p) => p.glucose));
+  // minPred porte sur la courbe complète (fix re-revue) ; maxPred reste sur
+  // les 3 échantillons — asymétrie volontaire, cf. `curveAwareMinPred`.
+  const minPred = curveAwareMinPred(predictions, curve, hoursUntilWakeup);
   const maxPred = Math.max(...predictions.map((p) => p.glucose));
   const wakeupPred = predictions[predictions.length - 1].glucose;
   const splitAdjustment = buildSplitAdjustment(predictions, input);
