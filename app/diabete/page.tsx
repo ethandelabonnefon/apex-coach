@@ -5,12 +5,13 @@ import Link from "next/link";
 import { useStore } from "@/lib/store";
 import {
   calculateBolus,
-  getInsulinOnBoard,
   getDigestiveComplexity,
   getInjectionTimingAdvice,
   computePreSportBriefing,
   inferMealTimeFromClock,
 } from "@/lib/insulin-calculator";
+import { activeIOB } from "@/lib/glucose-prediction";
+import { computeCarbsOnBoard } from "@/lib/carbs-on-board";
 import { DIABETES_CONFIG } from "@/lib/constants";
 import type { MealTime, SplitDoseReminder } from "@/types";
 import type { GlucoseTrend } from "@/lib/libre-link/utils";
@@ -19,6 +20,7 @@ import { useGlucose } from "@/hooks/useGlucose";
 import GlucoseWidget from "@/components/glucose/GlucoseWidget";
 import GlucoseChart from "@/components/glucose/GlucoseChart";
 import CarbEntryLogger from "@/components/glucose/CarbEntryLogger";
+import { CarbsOnBoardTile } from "@/components/glucose/CarbsOnBoardTile";
 import CorrectionSuggestion from "@/components/glucose/CorrectionSuggestion";
 import PushOptIn from "@/components/glucose/PushOptIn";
 import {
@@ -321,8 +323,32 @@ export default function DiabetePage() {
         (inj) =>
           inj.minutesAgo < DIABETES_CONFIG.insulinActiveDuration && inj.minutesAgo >= 0
       );
-    return getInsulinOnBoard(recentInjections);
+    // Modèle bi-exponentiel (même moteur que la prédiction nuit / COB) — un
+    // seul modèle d'IOB affiché sur la page pour ne jamais contredire la
+    // tuile Glucides actifs.
+    const totalIOB = activeIOB(
+      recentInjections.map((inj) => ({ units: inj.units, minutesAgo: inj.minutesAgo })),
+    );
+    return {
+      totalIOB: Math.round(totalIOB * 10) / 10,
+      details: recentInjections,
+    };
   }, [insulinLogs, nowTick]);
+
+  // ─── Glucides actifs (COB) ────────────────────────────────────────
+  // Même moteur d'absorption que la prédiction nuit → les deux vues ne
+  // peuvent pas se contredire.
+  const cob = useMemo(
+    () =>
+      computeCarbsOnBoard({
+        insulinLogs,
+        carbEntries,
+        isf: diabetesConfig.insulinSensitivityFactor,
+        ratios: diabetesConfig.ratios,
+        nowMs: nowTick,
+      }),
+    [insulinLogs, carbEntries, diabetesConfig, nowTick],
+  );
 
   // Détails de la dernière injection active (pour message contextualisé IOB)
   const lastActiveInjection = useMemo(() => {
@@ -1105,34 +1131,37 @@ export default function DiabetePage() {
           </div>
         </div>
 
-        <div className="relative grid sm:grid-cols-2 gap-4">
+        <div className="relative space-y-4">
           <GlucoseWidget
             fallbackValue={lastValue}
             fallbackRecordedAt={lastGlucose?.recordedAt}
           />
 
-          <div className="surface-2 rounded-2xl p-5 flex items-center gap-5">
-            <div className="shrink-0 w-12 h-12 rounded-xl bg-info/10 flex items-center justify-center">
-              <Syringe className={`w-5 h-5 ${iobTone === "warning" ? "text-warning" : "text-info"}`} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="label mb-1">Insuline active</p>
-              <div className="flex items-baseline gap-1.5">
-                <span
-                  className={`num-hero text-4xl sm:text-5xl font-semibold leading-none ${
-                    iobTone === "warning" ? "text-warning" : "text-info"
-                  }`}
-                >
-                  {iob.totalIOB.toFixed(1)}
-                </span>
-                <span className="text-xs text-text-tertiary">U</span>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="surface-2 rounded-2xl p-5 flex items-center gap-5">
+              <div className="shrink-0 w-12 h-12 rounded-xl bg-info/10 flex items-center justify-center">
+                <Syringe className={`w-5 h-5 ${iobTone === "warning" ? "text-warning" : "text-info"}`} />
               </div>
-              <p className="mt-1 text-xs text-text-secondary">
-                {iob.details.length === 0
-                  ? "Rien d'actif"
-                  : `${iob.details.length} injection${iob.details.length > 1 ? "s" : ""} en cours`}
-              </p>
+              <div className="flex-1 min-w-0">
+                <p className="label mb-1">Insuline active</p>
+                <div className="flex items-baseline gap-1.5">
+                  <span
+                    className={`num-hero text-4xl sm:text-5xl font-semibold leading-none ${
+                      iobTone === "warning" ? "text-warning" : "text-info"
+                    }`}
+                  >
+                    {iob.totalIOB.toFixed(1)}
+                  </span>
+                  <span className="text-xs text-text-tertiary">U</span>
+                </div>
+                <p className="mt-1 text-xs text-text-secondary">
+                  {iob.details.length === 0
+                    ? "Rien d'actif"
+                    : `${iob.details.length} injection${iob.details.length > 1 ? "s" : ""} en cours`}
+                </p>
+              </div>
             </div>
+            <CarbsOnBoardTile cob={cob} />
           </div>
         </div>
       </section>
