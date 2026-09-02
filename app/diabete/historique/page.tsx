@@ -37,7 +37,7 @@ import GlucoseCalendar from "@/components/glucose/GlucoseCalendar";
 import AGPChart from "@/components/glucose/AGPChart";
 import SportGlucoseCorrelation from "@/components/glucose/SportGlucoseCorrelation";
 import { usePatternDetection } from "@/hooks/usePatternDetection";
-import { isLearnable } from "@/lib/carbs-on-board";
+import { isLearnable, resolveCarbs } from "@/lib/carbs-on-board";
 import type { SportSession } from "@/lib/sport-glucose-analytics";
 import {
   ArrowLeft,
@@ -303,17 +303,22 @@ export default function DiabeteHistoriquePage() {
           })),
       ];
 
-      // Meal context — injections taguées avec leurs macros
+      // Meal context — injections taguées avec leurs macros. Exclut les
+      // repas incertains (même règle que `injections` ci-dessus) et
+      // reporte les glucides réellement mangés (confirmé prime sur
+      // l'estimation d'avant repas) : c'est ce signal que le prompt IA
+      // croise pour distinguer un ratio mal calibré d'une digestion FPU
+      // lente, et pour proposer des consignes de dose chiffrées.
       const mealContext = insulinLogs
         .filter((log) => {
           const t = new Date(log.injectedAt).getTime();
-          return t >= fromMs && !log.isSplitDose;
+          return t >= fromMs && !log.isSplitDose && isLearnable(log);
         })
         .map((log) => ({
           mealType: log.mealType,
           mealTag: log.mealTag,
           mealSize: log.mealSize,
-          carbsGrams: log.carbsGrams,
+          carbsGrams: resolveCarbs(log),
           fatGrams: log.fatGrams,
           proteinGrams: log.proteinGrams,
           injectedAt:

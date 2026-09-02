@@ -21,7 +21,7 @@ import {
 } from "@/components/ui";
 import { useStore } from "@/lib/store";
 import { usePatternDetection } from "@/hooks/usePatternDetection";
-import { isLearnable } from "@/lib/carbs-on-board";
+import { isLearnable, resolveCarbs } from "@/lib/carbs-on-board";
 import type { InsulinRatio } from "@/types";
 import {
   Stethoscope,
@@ -226,16 +226,21 @@ export default function DocteurPage() {
           })),
       ];
 
+      // Meal context — exclut les repas incertains (même règle que
+      // `injections` ci-dessous) et reporte les glucides réellement mangés
+      // (confirmé prime sur l'estimation d'avant repas) : c'est ce signal
+      // que le prompt IA croise pour distinguer un ratio mal calibré d'une
+      // digestion FPU lente, et pour proposer des consignes de dose chiffrées.
       const mealContext = insulinLogs
         .filter((log) => {
           const t = new Date(log.injectedAt).getTime();
-          return t >= fromMs && !log.isSplitDose;
+          return t >= fromMs && !log.isSplitDose && isLearnable(log);
         })
         .map((log) => ({
           mealType: log.mealType,
           mealTag: log.mealTag,
           mealSize: log.mealSize,
-          carbsGrams: log.carbsGrams,
+          carbsGrams: resolveCarbs(log),
           fatGrams: log.fatGrams,
           proteinGrams: log.proteinGrams,
           injectedAt:
