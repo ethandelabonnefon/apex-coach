@@ -593,6 +593,9 @@ export default function DiabetePage() {
     // local — un meal-confirm n'a rien à faire là, ça enverrait un ordre
     // d'injection au lieu d'une demande de confirmation.
     if (carbsGrams > 0 && !carbsUncertain) {
+      // Une seule lecture d'horloge : `triggerAt` et `createdAt` doivent
+      // décrire le même instant.
+      const nowMs = Date.now();
       scheduleReminderOnServer({
         // ID déterministe : permet d'annuler le rappel à la confirmation
         // sans avoir à mémoriser son identifiant côté client.
@@ -600,8 +603,8 @@ export default function DiabetePage() {
         kind: "meal-confirm",
         parentInjectionId: injectionId,
         units: finalUnits,
-        triggerAt: new Date(Date.now() + 20 * 60_000).toISOString(),
-        createdAt: new Date().toISOString(),
+        triggerAt: new Date(nowMs + 20 * 60_000).toISOString(),
+        createdAt: new Date(nowMs).toISOString(),
         mealLabel: mealTag,
         carbsEstimated: carbsGrams,
         status: "pending",
