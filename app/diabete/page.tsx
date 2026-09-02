@@ -1364,9 +1364,12 @@ export default function DiabetePage() {
           />
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="surface-2 rounded-2xl p-5 flex items-center gap-5">
-              <div className="shrink-0 w-12 h-12 rounded-xl bg-info/10 flex items-center justify-center">
-                <Syringe className={`w-5 h-5 ${iobTone === "warning" ? "text-warning" : "text-info"}`} />
+            {/* Jumelle visuelle de CarbsOnBoardTile : même fix mobile (icône
+                empilée au-dessus du texte sous `sm`) — cf. son commentaire
+                pour le calcul de largeur à 375px. */}
+            <div className="surface-2 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5">
+              <div className="shrink-0 w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-info/10 flex items-center justify-center">
+                <Syringe className={`w-4 h-4 sm:w-5 sm:h-5 ${iobTone === "warning" ? "text-warning" : "text-info"}`} />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="label mb-1">Insuline active</p>

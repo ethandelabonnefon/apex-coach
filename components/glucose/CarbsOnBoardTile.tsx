@@ -35,11 +35,19 @@ export function CarbsOnBoardTile({ cob }: { cob: CarbsOnBoard }) {
         : "bg-nutrition/10";
 
   return (
-    <div className="surface-2 rounded-2xl p-5 flex items-center gap-5">
+    // Mobile (< sm, ex: 375px) : icône empilée AU-DESSUS du texte plutôt
+    // qu'à côté. À 140px de large avec l'icône côte à côte (48px + gap-5 20px
+    // + p-5 40px = 108px d'overhead), il ne restait que 32px pour un contenu
+    // qui en demande ~69 (chiffre + suffixe « g ») → le suffixe débordait et
+    // le verdict textuel — l'élément porteur de sens de cette tuile — se
+    // repliait sur 3 lignes. Empiler rend au texte toute la largeur de la
+    // tuile (moins le padding) : le verdict reste lisible avant le confort
+    // visuel de l'icône, qui redevient normale à partir de `sm`.
+    <div className="surface-2 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5">
       <div
-        className={`shrink-0 w-12 h-12 rounded-xl ${iconBg} flex items-center justify-center`}
+        className={`shrink-0 w-8 h-8 sm:w-12 sm:h-12 rounded-xl ${iconBg} flex items-center justify-center`}
       >
-        <Wheat className={`w-5 h-5 ${colorClass}`} />
+        <Wheat className={`w-4 h-4 sm:w-5 sm:h-5 ${colorClass}`} />
       </div>
       <div className="flex-1 min-w-0">
         <p className="label mb-1">Glucides actifs</p>
