@@ -6,53 +6,33 @@
  * Affiche ce qu'il reste à digérer et le verdict de couverture. Ne porte
  * JAMAIS de bouton d'action : les doses se valident dans la carte de
  * confirmation, pour qu'il n'y ait qu'un seul endroit où une dose part.
+ *
+ * Le verdict lui-même vit dans `lib/carbs-on-board.ts` (`cobVerdict`) :
+ * c'est une règle de sécurité (l'alerte d'excès d'insuline doit survivre à
+ * un repas incertain), elle est testée, pas réimplémentée ici.
  */
 
 import { Wheat } from "lucide-react";
-import type { CarbsOnBoard } from "@/lib/carbs-on-board";
-
-function fr(n: number): string {
-  return n.toFixed(1).replace(".", ",");
-}
+import { cobVerdict, type CarbsOnBoard } from "@/lib/carbs-on-board";
 
 export function CarbsOnBoardTile({ cob }: { cob: CarbsOnBoard }) {
-  const tone =
-    cob.status === "deficit"
-      ? "warning"
-      : cob.status === "excess"
-        ? "info"
-        : cob.status === "idle"
-          ? "idle"
-          : "nutrition";
+  const verdict = cobVerdict(cob);
 
   const colorClass =
-    tone === "warning"
+    verdict.tone === "warning"
       ? "text-warning"
-      : tone === "info"
+      : verdict.tone === "info"
         ? "text-info"
-        : tone === "idle"
+        : verdict.tone === "idle"
           ? "text-text-tertiary"
           : "text-nutrition";
 
   const iconBg =
-    tone === "warning"
+    verdict.tone === "warning"
       ? "bg-warning/10"
-      : tone === "info"
+      : verdict.tone === "info"
         ? "bg-info/10"
         : "bg-nutrition/10";
-
-  let verdict: string;
-  if (cob.status === "idle") {
-    verdict = "Rien en cours";
-  } else if (cob.uncertain) {
-    verdict = "Quantité incertaine — pas de conseil de dose";
-  } else if (cob.status === "deficit") {
-    verdict = `Il manque ~${fr(Math.abs(cob.balanceU))} U`;
-  } else if (cob.status === "excess") {
-    verdict = `Insuline en excès ~${fr(cob.balanceU)} U`;
-  } else {
-    verdict = "Couvert";
-  }
 
   return (
     <div className="surface-2 rounded-2xl p-5 flex items-center gap-5">
@@ -67,7 +47,7 @@ export function CarbsOnBoardTile({ cob }: { cob: CarbsOnBoard }) {
           <span
             className={`num-hero text-4xl sm:text-5xl font-semibold leading-none ${colorClass}`}
           >
-            {cob.uncertain ? "≈" : ""}
+            {verdict.approximate ? "≈" : ""}
             {Math.round(cob.totalRemainingG)}
           </span>
           <span className="text-xs text-text-tertiary">g</span>
@@ -77,7 +57,7 @@ export function CarbsOnBoardTile({ cob }: { cob: CarbsOnBoard }) {
             dont {Math.round(cob.fpuRemainingG)} g de lipides/protéines
           </p>
         )}
-        <p className="mt-1 text-xs text-text-secondary">{verdict}</p>
+        <p className="mt-1 text-xs text-text-secondary">{verdict.text}</p>
       </div>
     </div>
   );

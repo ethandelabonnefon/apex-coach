@@ -16,6 +16,8 @@ import {
   suggestTopUp,
   filterLearnableNightLogs,
   resolveCarbs,
+  resolveCobStatus,
+  NIGHT_BALANCE_THRESHOLD_U,
   type CarbDelta,
 } from "@/lib/carbs-on-board";
 import { DIABETES_CONFIG } from "@/lib/constants";
@@ -1111,10 +1113,26 @@ export default function DiabetePage() {
       exerciseHoursAgo: exerciseAdjustment?.hoursAgo,
       pendingSplitUnits: upcomingSplit?.units,
       pendingSplitMinutesUntil: upcomingSplit?.minutesUntil,
+      // Le soir, on qualifie déficit/excès avec un seuil plus strict
+      // (1,5 U), mais avec LA MÊME définition que la tuile — pas un
+      // second seuillage dans night-brain. Un repas incertain n'est plus
+      // retiré en bloc : seule sa branche déficit sera neutralisée, la
+      // branche « trop d'insuline, garde du sucre à portée » est une
+      // alerte hypo et doit survivre (spec §5).
       mealCoverage:
-        cob.status === "idle" || cob.uncertain
+        cob.status === "idle"
           ? undefined
-          : { carbsRemainingG: cob.totalRemainingG, balanceU: cob.balanceU },
+          : {
+              carbsRemainingG: cob.totalRemainingG,
+              balanceU: cob.balanceU,
+              status: resolveCobStatus({
+                totalRemainingG: cob.totalRemainingG,
+                insulinActiveU: cob.insulinActiveU,
+                balanceU: cob.balanceU,
+                thresholdU: NIGHT_BALANCE_THRESHOLD_U,
+              }),
+              uncertain: cob.uncertain,
+            },
       nowMs: nowTick,
     };
   }, [

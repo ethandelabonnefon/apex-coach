@@ -21,6 +21,7 @@
  *  - le split est PRÉSENTÉ DANS LE MÊME PLAN, avec le lien explicite
  */
 
+import type { CobStatus } from "./carbs-on-board";
 import {
   computeBedtimeAdvice,
   type BedtimeAdvisorInput,
@@ -43,13 +44,22 @@ export interface NightBrainInput extends BedtimeAdvisorInput {
 
   /**
    * Couverture du repas en cours, calculée par le moteur COB
-   * (lib/carbs-on-board.ts). Night Brain ne recalcule rien : il présente.
+   * (lib/carbs-on-board.ts). Night Brain ne recalcule rien, ne re-seuille
+   * rien : il PRÉSENTE le statut qu'on lui donne.
    */
   mealCoverage?: {
     /** Glucides encore à absorber (g). */
     carbsRemainingG: number;
     /** Balance insuline active − besoin (U). Négatif = sous-dosé. */
     balanceU: number;
+    /** Statut calculé par `resolveCobStatus` (seuil du soir). */
+    status: CobStatus;
+    /**
+     * Au moins une source à quantité incertaine. Neutralise la branche
+     * déficit (aucun conseil de dose à la hausse sur une quantité
+     * inconnue) — mais JAMAIS la branche excès, qui est une alerte hypo.
+     */
+    uncertain: boolean;
   };
 }
 
@@ -144,9 +154,11 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
   // ── Couverture du repas déclaré à la main (trop mangé / trop d'insuline) ──
   let coverageStep: NightStep | undefined;
   if (input.mealCoverage) {
-    const { carbsRemainingG, balanceU } = input.mealCoverage;
+    const { carbsRemainingG, balanceU, status, uncertain } = input.mealCoverage;
     const grams = Math.round(carbsRemainingG);
-    if (balanceU <= -1.5) {
+    // Quantité incertaine → muet sur la dose (pas de branche déficit),
+    // jamais silencieux sur l'hypo (la branche excès reste émise).
+    if (status === "deficit" && !uncertain) {
       coverageStep = {
         id: "coverage",
         order: 0,
@@ -155,7 +167,7 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
         headline: `Attention, tu as peut-être trop mangé pour ton insuline`,
         detail: `Il reste ~${grams}g de glucides à digérer et il manque ~${(-balanceU).toFixed(1).replace(".", ",")}U pour les couvrir → ça va te faire monter (vois le réveil prédit ci-dessous). Surveille, une correction sera peut-être conseillée plus bas.`,
       };
-    } else if (balanceU >= 1.5) {
+    } else if (status === "excess") {
       coverageStep = {
         id: "coverage",
         order: 0,

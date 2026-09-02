@@ -49,6 +49,13 @@ export const IDLE_INSULIN_U = 0.5;
 export const BALANCE_THRESHOLD_U = 1.0;
 /** Au-delà de ce reliquat de glucides, on ne parle pas d'excès d'insuline (g). */
 export const EXCESS_MAX_CARBS_G = 15;
+/**
+ * Écart minimal le soir (U). Plus prudent que le seuil diurne : la nuit,
+ * personne ne surveille. C'est un SEUIL passé au calcul de statut, pas une
+ * seconde définition de « excès » — il n'en existe qu'une,
+ * `resolveCobStatus`.
+ */
+export const NIGHT_BALANCE_THRESHOLD_U = 1.5;
 
 // ───────────────────────────────────────────────────────────────────────
 // Résolution estimé ↔ confirmé
@@ -226,6 +233,42 @@ export interface CarbsOnBoard {
 
 export interface ComputeCarbsOnBoardOptions extends BuildCarbSourcesOptions {
   isf: number;
+  /**
+   * Écart minimal pour qualifier déficit/excès (U). Défaut
+   * `BALANCE_THRESHOLD_U` (1,0). Le soir on passe
+   * `NIGHT_BALANCE_THRESHOLD_U` (1,5) — même définition, seuil plus strict.
+   */
+  balanceThresholdU?: number;
+}
+
+/**
+ * SEULE définition de « déficit » et « excès » de couverture.
+ *
+ * Le plan de la nuit re-seuillait de son côté (`balanceU ≥ 1,5`, sans la
+ * condition sur les grammes) : juste après un split correctement injecté —
+ * le geste que l'app recommande elle-même — la tuile disait « Couvert »
+ * pendant que le plan de la nuit criait « trop d'insuline ». Faux positif
+ * systématique sur le comportement nominal. Il n'y a désormais qu'un seul
+ * endroit où « excès » est défini.
+ */
+export function resolveCobStatus(opts: {
+  totalRemainingG: number;
+  insulinActiveU: number;
+  balanceU: number;
+  thresholdU?: number;
+}): CobStatus {
+  const threshold = opts.thresholdU ?? BALANCE_THRESHOLD_U;
+  if (
+    opts.totalRemainingG < IDLE_CARBS_G &&
+    opts.insulinActiveU < IDLE_INSULIN_U
+  ) {
+    return "idle";
+  }
+  if (opts.balanceU <= -threshold) return "deficit";
+  if (opts.balanceU >= threshold && opts.totalRemainingG < EXCESS_MAX_CARBS_G) {
+    return "excess";
+  }
+  return "covered";
 }
 
 /** Arrondi à 1 décimale (évite les 3,0000000000004 dans l'UI). */
@@ -272,19 +315,12 @@ export function computeCarbsOnBoard(
   const totalRemainingG = carbsRemainingG + fpuRemainingG;
   const balanceU = insulinActiveU - insulinNeededU;
 
-  let status: CobStatus;
-  if (totalRemainingG < IDLE_CARBS_G && insulinActiveU < IDLE_INSULIN_U) {
-    status = "idle";
-  } else if (balanceU <= -BALANCE_THRESHOLD_U) {
-    status = "deficit";
-  } else if (
-    balanceU >= BALANCE_THRESHOLD_U &&
-    totalRemainingG < EXCESS_MAX_CARBS_G
-  ) {
-    status = "excess";
-  } else {
-    status = "covered";
-  }
+  const status = resolveCobStatus({
+    totalRemainingG,
+    insulinActiveU,
+    balanceU,
+    thresholdU: opts.balanceThresholdU,
+  });
 
   return {
     carbsRemainingG: round1(carbsRemainingG),
@@ -297,6 +333,64 @@ export function computeCarbsOnBoard(
     uncertain,
     sources,
   };
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Verdict affichable
+// ───────────────────────────────────────────────────────────────────────
+
+export interface CobVerdict {
+  /** Phrase prête à afficher sous les grammes. */
+  text: string;
+  /** Tonalité de couleur (token). */
+  tone: "idle" | "warning" | "info" | "nutrition";
+  /** Préfixer le nombre de grammes d'un « ≈ ». */
+  approximate: boolean;
+}
+
+/**
+ * Verdict de couverture affiché par la tuile.
+ *
+ * ⚠️ Invariant de la spec §5 : « un repas incertain rend l'app muette sur
+ * la dose et aveugle pour l'apprentissage, mais JAMAIS silencieuse sur un
+ * risque d'hypoglycémie ». L'incertitude est donc un MODIFICATEUR (le
+ * « ≈ » et un suffixe), pas une branche prioritaire : traitée en premier,
+ * elle masquait « Insuline en excès ~7 U » — l'alerte hypo — derrière un
+ * « Quantité incertaine ». Seul le verdict `deficit` (conseil de dose à la
+ * hausse) est neutralisé sur une quantité inconnue.
+ */
+export function cobVerdict(cob: CarbsOnBoard): CobVerdict {
+  const suffix = cob.uncertain ? " · quantité incertaine" : "";
+
+  if (cob.status === "idle") {
+    return { text: "Rien en cours", tone: "idle", approximate: cob.uncertain };
+  }
+  if (cob.status === "excess") {
+    return {
+      text: `Insuline en excès ~${fr1(cob.balanceU)} U${suffix}`,
+      tone: "info",
+      approximate: cob.uncertain,
+    };
+  }
+  if (cob.status === "deficit") {
+    return cob.uncertain
+      ? {
+          text: "Quantité incertaine — pas de conseil de dose",
+          tone: "nutrition",
+          approximate: true,
+        }
+      : {
+          text: `Il manque ~${fr1(Math.abs(cob.balanceU))} U`,
+          tone: "warning",
+          approximate: false,
+        };
+  }
+  return { text: `Couvert${suffix}`, tone: "nutrition", approximate: cob.uncertain };
+}
+
+/** Format français à 1 décimale. */
+function fr1(n: number): string {
+  return n.toFixed(1).replace(".", ",");
 }
 
 // ───────────────────────────────────────────────────────────────────────

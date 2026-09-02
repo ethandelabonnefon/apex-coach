@@ -12,8 +12,11 @@ import {
   isLearnable,
   fpuRemainingFraction,
   computeCarbsOnBoard,
+  cobVerdict,
+  resolveCobStatus,
   suggestTopUp,
   filterLearnableNightLogs,
+  NIGHT_BALANCE_THRESHOLD_U,
   type CarbDelta,
   type TopUpContext,
 } from "./carbs-on-board";
@@ -216,6 +219,77 @@ test("aucune donnée → idle, tous les compteurs à zéro", () => {
   assert.equal(cob.insulinNeededU, 0);
   assert.equal(cob.insulinActiveU, 0);
   assert.equal(cob.uncertain, false);
+});
+
+// ─── Verdict affiché par la tuile ─────────────────────────────────────
+
+test("verdict : repas incertain avec insuline en excès → alerte hypo toujours émise", () => {
+  // Spec §5 : « un repas incertain rend l'app muette sur la dose et
+  // aveugle pour l'apprentissage, mais JAMAIS silencieuse sur un risque
+  // d'hypoglycémie ». Ce test échoue si la branche `uncertain` repasse en
+  // priorité devant `excess` dans le verdict.
+  const cob = computeCarbsOnBoard({
+    insulinLogs: [log(60, { carbsGrams: 20, units: 8, carbsUncertain: true })],
+    isf: ISF,
+    ratios: RATIOS,
+  });
+  assert.equal(cob.status, "excess");
+  assert.equal(cob.uncertain, true);
+
+  const v = cobVerdict(cob);
+  assert.match(v.text, /excès/i, `alerte d'excès attendue, reçu « ${v.text} »`);
+  // L'incertitude reste signalée — comme modificateur, pas comme écran.
+  assert.match(v.text, /incertaine/i);
+  assert.equal(v.approximate, true);
+});
+
+test("verdict : repas incertain en déficit → aucun conseil de dose à la hausse", () => {
+  const cob = computeCarbsOnBoard({
+    insulinLogs: [log(20, { carbsGrams: 100, units: 0, carbsUncertain: true })],
+    isf: ISF,
+    ratios: RATIOS,
+  });
+  assert.equal(cob.status, "deficit");
+  const v = cobVerdict(cob);
+  assert.doesNotMatch(v.text, /il manque/i);
+  assert.match(v.text, /incertaine/i);
+});
+
+test("verdict : déficit certain → nombre d'unités manquantes affiché", () => {
+  const cob = computeCarbsOnBoard({
+    insulinLogs: [log(20, { carbsGrams: 100, units: 0 })],
+    isf: ISF,
+    ratios: RATIOS,
+  });
+  assert.equal(cob.status, "deficit");
+  const v = cobVerdict(cob);
+  assert.match(v.text, /il manque/i);
+  assert.equal(v.tone, "warning");
+  assert.equal(v.approximate, false);
+});
+
+// ─── Définition unique du statut (seuil paramétrable) ─────────────────
+
+test("statut : le seuil du soir est plus strict, la définition reste la même", () => {
+  const base = { totalRemainingG: 3, insulinActiveU: 2 };
+  // Balance +1,2 U : excès le jour (seuil 1,0), pas le soir (seuil 1,5).
+  assert.equal(resolveCobStatus({ ...base, balanceU: 1.2 }), "excess");
+  assert.equal(
+    resolveCobStatus({ ...base, balanceU: 1.2, thresholdU: NIGHT_BALANCE_THRESHOLD_U }),
+    "covered",
+  );
+  // La condition sur les grammes vaut aussi pour le seuil du soir : juste
+  // après un split correctement injecté, il reste des glucides à digérer,
+  // donc ce n'est PAS un excès (faux positif du plan de la nuit).
+  assert.equal(
+    resolveCobStatus({
+      totalRemainingG: 60,
+      insulinActiveU: 8,
+      balanceU: 2,
+      thresholdU: NIGHT_BALANCE_THRESHOLD_U,
+    }),
+    "covered",
+  );
 });
 
 /** Écart de glucides synthétique pour tester les garde-fous isolément. */
