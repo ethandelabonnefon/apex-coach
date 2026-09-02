@@ -502,6 +502,66 @@ export function filterLearnableNightLogs<T extends { createdAt: string }>(
 }
 
 /**
+ * Fenêtre après l'injection pendant laquelle un écart de glucides confirmé
+ * peut encore donner lieu à un appoint (min). Au-delà, le repas est trop
+ * loin dans la digestion pour qu'une dose supplémentaire ait un sens
+ * clinique — cf. `resolveCarbDelta`.
+ */
+export const TOPUP_DELTA_WINDOW_MIN = 180;
+
+/**
+ * Construit le `CarbDelta` d'appoint à partir de l'historique des
+ * injections : QUELLE injection et QUEL écart de glucides deviennent une
+ * proposition de dose (`suggestTopUp` en aval).
+ *
+ * Extrait de `app/diabete/page.tsx` (re-revue de branche,
+ * feat/glucides-actifs-cob) : cette décision vivait en JSX, hors de portée
+ * de `npm test`. C'est exactement la cause qui avait déjà laissé passer une
+ * régression précédente ailleurs dans l'app — logique de dose non testée
+ * car coincée dans un composant React. Même remède ici : fonction pure,
+ * testée, appelée par la page.
+ *
+ * Règles (l'écart ne porte QUE sur les glucides — jamais lipides/protéines,
+ * qui sont couverts par le split FPU, pas par l'appoint) :
+ *  - Ignore les injections split (`isSplitDose`) : une 2e dose FPU n'est pas
+ *    un repas dont il faudrait mesurer l'écart de glucides.
+ *  - Ignore les injections non confirmées (`carbsConfirmedAt` absent) :
+ *    sans confirmation, il n'y a pas d'écart mesurable.
+ *  - Ignore les injections hors fenêtre (> `TOPUP_DELTA_WINDOW_MIN` après
+ *    l'injection) ou dont l'horodatage est incohérent (dans le futur).
+ *  - Ignore les injections qui ont déjà un appoint enfant non-split
+ *    (`parentInjectionId` pointant dessus) : le delta a déjà été servi.
+ *
+ * `insulinLogs` DOIT être trié du plus récent au plus ancien (contrat déjà
+ * respecté par le store) : on retient la PREMIÈRE injection éligible.
+ */
+export function resolveCarbDelta(
+  insulinLogs: InsulinLog[],
+  nowMs: number,
+  ratios: MealRatios | undefined,
+): CarbDelta | null {
+  const log = insulinLogs.find((l) => {
+    if (l.isSplitDose) return false;
+    if (!l.carbsConfirmedAt) return false;
+    const minutesAgo = (nowMs - new Date(l.injectedAt).getTime()) / 60_000;
+    if (!Number.isFinite(minutesAgo) || minutesAgo < 0 || minutesAgo > TOPUP_DELTA_WINDOW_MIN) {
+      return false;
+    }
+    // Un appoint enfant existe déjà pour ce repas → delta déjà servi.
+    return !insulinLogs.some(
+      (child) => child.parentInjectionId === l.id && !child.isSplitDose,
+    );
+  });
+  if (!log) return null;
+  return {
+    injectionId: log.id,
+    extraCarbsG: resolveCarbs(log) - (log.carbsGrams ?? 0),
+    gramsPerU: ratioForMeal(ratios, log.mealType),
+    uncertain: log.carbsUncertain === true,
+  };
+}
+
+/**
  * Propose un appoint d'insuline pour l'écart de glucides d'une injection
  * confirmée. Ce n'est pas du stacking : c'est le complément du bolus repas
  * (pratique MDI standard quand on a mangé plus que prévu).

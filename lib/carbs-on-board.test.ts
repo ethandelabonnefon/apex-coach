@@ -15,6 +15,8 @@ import {
   cobVerdict,
   resolveCobStatus,
   suggestTopUp,
+  resolveCarbDelta,
+  TOPUP_DELTA_WINDOW_MIN,
   filterLearnableNightLogs,
   NIGHT_BALANCE_THRESHOLD_U,
   type CarbDelta,
@@ -425,6 +427,126 @@ test("appoint : gros FPU mais delta glucides nul → null (non-régression C1)",
     uncertain: false,
   };
   assert.equal(suggestTopUp(delta, OK_CTX), null);
+});
+
+// ─── resolveCarbDelta : extraction depuis app/diabete/page.tsx (re-revue) ──
+//
+// Avant, `carbDelta` était construit à la main en JSX dans la page — hors de
+// portée de `npm test`. Le test C1 ci-dessus construisait son `CarbDelta` à
+// la main, donc ne pouvait pas se rendre compte d'une régression dans le
+// calcul RÉEL de l'écart. Ces tests appellent `resolveCarbDelta` directement.
+
+test("resolveCarbDelta : l'écart ne porte que sur les glucides (gros FPU, aucun écart carbs → aucun appoint)", () => {
+  // Pâtes 100 g confirmées à l'identique + 24 g lip / 40 g prot. Le FPU est
+  // couvert par le split (2e injection), pas par l'appoint — ce test échoue
+  // si `resolveCarbDelta` se met à intégrer fat/protein dans `extraCarbsG`.
+  const l = log(10, {
+    carbsGrams: 100,
+    carbsConfirmedGrams: 100,
+    carbsConfirmedAt: new Date().toISOString(),
+    fatGrams: 24,
+    proteinGrams: 40,
+    units: 10,
+  });
+  const delta = resolveCarbDelta([l], Date.now(), RATIOS);
+  assert.ok(delta, "une injection confirmée doit produire un CarbDelta");
+  assert.equal(delta?.extraCarbsG, 0);
+  // Bout en bout : la chaîne complète ne doit proposer aucun appoint.
+  assert.equal(suggestTopUp(delta, OK_CTX), null);
+});
+
+test("resolveCarbDelta : gros FPU MAIS écart de glucides réel → le delta suit les glucides, pas le FPU", () => {
+  const l = log(10, {
+    carbsGrams: 100,
+    carbsConfirmedGrams: 130, // +30 g de glucides confirmés
+    carbsConfirmedAt: new Date().toISOString(),
+    fatGrams: 24,
+    proteinGrams: 40,
+    units: 10,
+  });
+  const delta = resolveCarbDelta([l], Date.now(), RATIOS);
+  // 30 g d'écart, pas influencé par 24 g lip / 40 g prot.
+  assert.equal(delta?.extraCarbsG, 30);
+});
+
+test("resolveCarbDelta : injection non confirmée → aucun delta", () => {
+  const l = log(10, { carbsGrams: 50, units: 5 }); // pas de carbsConfirmedAt
+  assert.equal(resolveCarbDelta([l], Date.now(), RATIOS), null);
+});
+
+test("resolveCarbDelta : injection split → ignorée (une 2e dose FPU n'est pas un repas à mesurer)", () => {
+  const l = log(10, {
+    carbsGrams: 100,
+    carbsConfirmedGrams: 130,
+    carbsConfirmedAt: new Date().toISOString(),
+    isSplitDose: true,
+    units: 4,
+  });
+  assert.equal(resolveCarbDelta([l], Date.now(), RATIOS), null);
+});
+
+test("resolveCarbDelta : appoint enfant déjà servi → l'injection parent est ignorée", () => {
+  const parent = log(30, {
+    id: "parent",
+    carbsGrams: 100,
+    carbsConfirmedGrams: 130,
+    carbsConfirmedAt: new Date().toISOString(),
+    units: 10,
+  });
+  const child = log(5, {
+    id: "child",
+    parentInjectionId: "parent",
+    units: 3,
+  });
+  // Ordre le plus récent → le plus ancien, comme le store.
+  assert.equal(resolveCarbDelta([child, parent], Date.now(), RATIOS), null);
+});
+
+test("resolveCarbDelta : un split enfant du parent ne compte PAS comme appoint déjà servi", () => {
+  // Un split FPU (`isSplitDose: true`) est une dose PLANIFIÉE dès le bolus
+  // initial, pas un appoint sur un écart confirmé. Il ne doit pas masquer
+  // un vrai delta de glucides sur son injection parent.
+  const parent = log(30, {
+    id: "parent",
+    carbsGrams: 100,
+    carbsConfirmedGrams: 130,
+    carbsConfirmedAt: new Date().toISOString(),
+    units: 10,
+  });
+  const split = log(5, {
+    id: "split-child",
+    parentInjectionId: "parent",
+    isSplitDose: true,
+    units: 4,
+  });
+  const delta = resolveCarbDelta([split, parent], Date.now(), RATIOS);
+  assert.equal(delta?.injectionId, "parent");
+  assert.equal(delta?.extraCarbsG, 30);
+});
+
+test("resolveCarbDelta : la fenêtre temporelle est respectée", () => {
+  const base = {
+    carbsGrams: 100,
+    carbsConfirmedGrams: 130,
+    carbsConfirmedAt: new Date().toISOString(),
+    units: 10,
+  };
+  // Dans la fenêtre (180 min) : delta produit.
+  const inWindow = log(TOPUP_DELTA_WINDOW_MIN - 1, base);
+  assert.ok(resolveCarbDelta([inWindow], Date.now(), RATIOS));
+  // Hors fenêtre : le repas est trop loin dans la digestion pour un appoint.
+  const outOfWindow = log(TOPUP_DELTA_WINDOW_MIN + 1, base);
+  assert.equal(resolveCarbDelta([outOfWindow], Date.now(), RATIOS), null);
+});
+
+test("resolveCarbDelta : horodatage dans le futur (dérive d'horloge) → aucun delta fantôme", () => {
+  const l = log(-5, {
+    carbsGrams: 100,
+    carbsConfirmedGrams: 130,
+    carbsConfirmedAt: new Date().toISOString(),
+    units: 10,
+  });
+  assert.equal(resolveCarbDelta([l], Date.now(), RATIOS), null);
 });
 
 test("appoint : ne re-propose pas tant que l'écart ne s'est pas creusé d'1 U", () => {

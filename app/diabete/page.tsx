@@ -14,13 +14,13 @@ import { activeIOB } from "@/lib/glucose-prediction";
 import {
   computeCarbsOnBoard,
   suggestTopUp,
+  resolveCarbDelta,
   filterLearnableNightLogs,
   resolveCarbs,
   resolveFat,
   resolveProtein,
   resolveCobStatus,
   NIGHT_BALANCE_THRESHOLD_U,
-  type CarbDelta,
 } from "@/lib/carbs-on-board";
 import { DIABETES_CONFIG } from "@/lib/constants";
 import type { InsulinLog, MealTime, SplitDoseReminder } from "@/types";
@@ -56,7 +56,7 @@ import {
   resolveRecentExercise,
   type RecentExercise,
 } from "@/lib/exercise-insulin-adjustment";
-import { buildPredictionEvents, ratioForMeal } from "@/lib/prediction-inputs";
+import { buildPredictionEvents } from "@/lib/prediction-inputs";
 import { useWhoop } from "@/hooks/useWhoop";
 import NightBrain from "@/components/diabete/NightBrain";
 import { estimatePersonalGRG, classifyHypoContext } from "@/lib/hypo-resucrage";
@@ -651,26 +651,10 @@ export default function DiabetePage() {
   // celle-ci inclut les FPU que le split diffère volontairement, et
   // prescrire dessus rejoue l'hypo de 12h-14h. Seul l'écart
   // « confirmé − estimé » d'une injection donne lieu à une dose.
-  const carbDelta = useMemo<CarbDelta | null>(() => {
-    // `insulinLogs` est trié du plus récent au plus ancien.
-    const log = insulinLogs.find((l) => {
-      if (l.isSplitDose) return false;
-      if (!l.carbsConfirmedAt) return false;
-      const minutesAgo = (nowTick - new Date(l.injectedAt).getTime()) / 60_000;
-      if (!Number.isFinite(minutesAgo) || minutesAgo < 0 || minutesAgo > 180) return false;
-      // Un appoint enfant existe déjà pour ce repas → delta déjà servi.
-      return !insulinLogs.some(
-        (child) => child.parentInjectionId === l.id && !child.isSplitDose,
-      );
-    });
-    if (!log) return null;
-    return {
-      injectionId: log.id,
-      extraCarbsG: resolveCarbs(log) - (log.carbsGrams ?? 0),
-      gramsPerU: ratioForMeal(diabetesConfig.ratios, log.mealType),
-      uncertain: log.carbsUncertain === true,
-    };
-  }, [insulinLogs, nowTick, diabetesConfig.ratios]);
+  const carbDelta = useMemo(
+    () => resolveCarbDelta(insulinLogs, nowTick, diabetesConfig.ratios),
+    [insulinLogs, nowTick, diabetesConfig.ratios],
+  );
 
   // Placé après `liveGlucose` (déclaré ci-dessus) : suggestTopUp a besoin
   // de la glycémie CAPTEUR la plus fraîche pour ses garde-fous anti-hypo.
