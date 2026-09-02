@@ -8,6 +8,11 @@
  */
 
 import { carbSensitivity, type PredictionEvent } from "./glucose-prediction";
+import {
+  resolveCarbs,
+  resolveFat,
+  resolveProtein,
+} from "./insulin-log-values";
 import type { InsulinLog, CarbEntry } from "@/types";
 
 export type MealRatios = { morning: number; lunch: number; snack: number; dinner: number };
@@ -61,9 +66,12 @@ export function buildPredictionEvents(opts: {
     events.push({
       minutesAgo: Math.max(0, minutesAgo),
       units: log.units > 0 ? log.units : undefined,
-      carbsGrams: log.carbsGrams || 0,
-      fatGrams: log.fatGrams ?? 0,
-      proteinGrams: log.proteinGrams ?? 0,
+      // Confirmé ?? estimé : sans ça, le patient confirme 140 g au lieu de
+      // 100 et la prédiction du réveil — celle qui pilote la correction du
+      // coucher — modélise toujours 100 g (≈ 140 mg/dL d'écart).
+      carbsGrams: resolveCarbs(log),
+      fatGrams: resolveFat(log),
+      proteinGrams: resolveProtein(log),
       carbSensitivity: carbSensitivity(opts.isf, ratioForMeal(opts.ratios, log.mealType)),
     });
   }

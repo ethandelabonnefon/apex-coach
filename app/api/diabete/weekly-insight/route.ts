@@ -190,6 +190,8 @@ export async function POST(req: NextRequest) {
         units: log.units,
         mealType: log.mealType,
         carbsGrams: log.carbsGrams,
+        // Transmis tel quel : `buildWeeklyReport` applique resolveCarbs.
+        carbsConfirmedGrams: log.carbsConfirmedGrams,
         profileId: log.profileId,
       };
     })

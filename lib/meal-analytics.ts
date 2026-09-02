@@ -13,7 +13,7 @@
  */
 
 import type { InsulinLog } from "@/types";
-import { isLearnable } from "./carbs-on-board";
+import { isLearnable, resolveFat, resolveProtein } from "./insulin-log-values";
 
 export interface ArchivePoint {
   t: number;          // timestamp ms
@@ -153,8 +153,10 @@ export function getAvgMacrosForTag(
       log.mealTag === mealTag &&
       !log.isSplitDose &&
       isLearnable(log) &&
-      // Au moins une macro renseignée pour compter
-      ((log.fatGrams ?? 0) > 0 || (log.proteinGrams ?? 0) > 0)
+      // Au moins une macro renseignée pour compter — sur les valeurs
+      // confirmées si elles existent, c'est la moyenne de ce qu'Ethan a
+      // VRAIMENT mangé qu'on lui propose de réutiliser.
+      (resolveFat(log) > 0 || resolveProtein(log) > 0)
     )
     .map((log) => ({ ...log, ts: new Date(log.injectedAt).getTime() }))
     .sort((a, b) => b.ts - a.ts)
@@ -164,8 +166,8 @@ export function getAvgMacrosForTag(
     return { count: 0, avgFat: null, avgProtein: null };
   }
 
-  const fats = tagged.map((l) => l.fatGrams ?? 0);
-  const prots = tagged.map((l) => l.proteinGrams ?? 0);
+  const fats = tagged.map(resolveFat);
+  const prots = tagged.map(resolveProtein);
 
   return {
     count: tagged.length,

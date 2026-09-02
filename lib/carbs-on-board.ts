@@ -31,6 +31,12 @@ import {
   ratioForMeal,
   type MealRatios,
 } from "./prediction-inputs";
+import {
+  isLearnable,
+  resolveCarbs,
+  resolveFat,
+  resolveProtein,
+} from "./insulin-log-values";
 import type { CarbEntry, InsulinLog } from "@/types";
 
 // ───────────────────────────────────────────────────────────────────────
@@ -60,31 +66,17 @@ export const NIGHT_BALANCE_THRESHOLD_U = 1.5;
 // ───────────────────────────────────────────────────────────────────────
 // Résolution estimé ↔ confirmé
 // ───────────────────────────────────────────────────────────────────────
-
-/** Glucides retenus pour une injection : le confirmé prime sur l'estimation. */
-export function resolveCarbs(log: InsulinLog): number {
-  return log.carbsConfirmedGrams ?? log.carbsGrams ?? 0;
-}
-
-/** Lipides retenus : le confirmé prime sur l'estimation. */
-export function resolveFat(log: InsulinLog): number {
-  return log.fatConfirmedGrams ?? log.fatGrams ?? 0;
-}
-
-/** Protéines retenues : le confirmé prime sur l'estimation. */
-export function resolveProtein(log: InsulinLog): number {
-  return log.proteinConfirmedGrams ?? log.proteinGrams ?? 0;
-}
-
-/**
- * Une injection peut-elle nourrir l'apprentissage (stats par type de repas,
- * backtest nuit, contexte du Docteur) ?
- *
- * Prédicat unique : un seul endroit à modifier si la règle évolue.
- */
-export function isLearnable(log: InsulinLog): boolean {
-  return log.carbsUncertain !== true;
-}
+//
+// Les helpers vivent dans `lib/insulin-log-values.ts` (module sans aucune
+// dépendance) : `prediction-inputs.ts` en a besoin, et il est déjà importé
+// par ce fichier — les laisser ici bouclerait. Ré-exportés pour ne casser
+// aucun appelant existant.
+export {
+  resolveCarbs,
+  resolveFat,
+  resolveProtein,
+  isLearnable,
+} from "./insulin-log-values";
 
 // ───────────────────────────────────────────────────────────────────────
 // Fractions restantes

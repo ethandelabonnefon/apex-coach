@@ -16,6 +16,8 @@ import {
   suggestTopUp,
   filterLearnableNightLogs,
   resolveCarbs,
+  resolveFat,
+  resolveProtein,
   resolveCobStatus,
   NIGHT_BALANCE_THRESHOLD_U,
   type CarbDelta,
@@ -1035,20 +1037,25 @@ export default function DiabetePage() {
     const refGlucose = liveGlucose?.value ?? currentGlucose;
     const refTrend = liveGlucose ? trendStringToNumber(liveGlucose.trend) : trendArrow;
     // Dernier repas significatif depuis les insulinLogs (carbs > 0)
+    // Confirmé ?? estimé partout : le plan de la nuit doit raisonner sur ce
+    // qu'Ethan a réellement mangé, pas sur son estimation d'avant repas.
     const lastMeal = insulinLogs
-      .filter((log) => log.carbsGrams > 0 && log.mealType !== "correction")
+      .filter((log) => resolveCarbs(log) > 0 && log.mealType !== "correction")
       .map((log) => {
         const injectedAt = new Date(log.injectedAt).getTime();
         return { ...log, injectedAt, hoursAgo: (nowTick - injectedAt) / 3_600_000 };
       })
       .sort((a, b) => b.injectedAt - a.injectedAt)[0];
-    const inferredFpu = lastMeal?.fatGrams && lastMeal?.proteinGrams
-      ? (lastMeal.fatGrams * 9 + lastMeal.proteinGrams * 4) / 100
-      : 0;
+    const lastMealFat = lastMeal ? resolveFat(lastMeal) : 0;
+    const lastMealProtein = lastMeal ? resolveProtein(lastMeal) : 0;
+    const inferredFpu =
+      lastMealFat > 0 && lastMealProtein > 0
+        ? (lastMealFat * 9 + lastMealProtein * 4) / 100
+        : 0;
 
     const mealHoursAgo = lastMeal?.hoursAgo;
     const mealFpu = inferredFpu;
-    const mealCarbs = lastMeal?.carbsGrams;
+    const mealCarbs = lastMeal ? resolveCarbs(lastMeal) : undefined;
 
     // Moteur unifié : mêmes événements que la prédiction 8h (bolus + glucides
     // sans insuline) → le plan nuit voit exactement le même contexte.
@@ -1200,16 +1207,16 @@ export default function DiabetePage() {
   // "Ce que tu digères" → Ethan n'a qu'à ajouter un en-cas par-dessus.
   const loggedMealPrefill = useMemo(() => {
     const m = insulinLogs
-      .filter((log) => log.carbsGrams > 0 && log.mealType !== "correction")
+      .filter((log) => resolveCarbs(log) > 0 && log.mealType !== "correction")
       .map((log) => ({ ...log, t: new Date(log.injectedAt).getTime() }))
       .sort((a, b) => b.t - a.t)[0];
     if (!m) return null;
     const minsAgo = Math.max(0, Math.round((nowTick - m.t) / 60000));
     if (minsAgo > 360) return null; // > 6h → plus pertinent pour la nuit
     return {
-      carbsGrams: m.carbsGrams,
-      fatGrams: m.fatGrams ?? 0,
-      proteinGrams: m.proteinGrams ?? 0,
+      carbsGrams: resolveCarbs(m),
+      fatGrams: resolveFat(m),
+      proteinGrams: resolveProtein(m),
       insulinUnits: m.units,
       minsAgo,
       timeLabel: new Date(m.t).toLocaleTimeString("fr-FR", {

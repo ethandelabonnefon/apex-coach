@@ -77,6 +77,8 @@ export function buildDoctorContext(input: DoctorContextInput): DoctorContext {
         units: log.units,
         mealType: log.mealType,
         carbsGrams: log.carbsGrams,
+        // Transmis tel quel : `buildWeeklyReport` applique resolveCarbs.
+        carbsConfirmedGrams: log.carbsConfirmedGrams,
         profileId: log.profileId,
       };
     })

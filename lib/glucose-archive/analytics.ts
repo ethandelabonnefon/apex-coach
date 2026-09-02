@@ -17,6 +17,7 @@
  */
 
 import { GLUCOSE_THRESHOLDS } from "@/lib/libre-link/config";
+import { resolveCarbs } from "@/lib/insulin-log-values";
 import type { ArchivedPoint } from "@/lib/glucose-archive/store";
 import type { InsulinLog } from "@/types";
 
@@ -528,7 +529,10 @@ function aggregateByProfile(
 
 export interface BuildReportInput {
   points: ArchivedPoint[];
-  injections: (Pick<InsulinLog, "units" | "mealType" | "carbsGrams" | "profileId"> & {
+  injections: (Pick<
+    InsulinLog,
+    "units" | "mealType" | "carbsGrams" | "carbsConfirmedGrams" | "profileId"
+  > & {
     /** timestamp ms (converti depuis injectedAt). */
     t: number;
   })[];
@@ -563,7 +567,9 @@ export function buildWeeklyReport(input: BuildReportInput): WeeklyReport {
   const injectionsForMeal = injections.map((i) => ({
     t: i.t,
     mealType: i.mealType,
-    carbs: i.carbsGrams,
+    // Confirmé ?? estimé — sinon les courbes post-repas du bilan et du
+    // Docteur raisonnent sur une estimation que le patient a corrigée.
+    carbs: resolveCarbs(i),
     units: i.units,
   }));
   const postMeal = aggregatePostMeal(sortedPoints, injectionsForMeal);

@@ -414,7 +414,7 @@ export default function DiabeteHistoriquePage() {
         const t = log.injectedAt instanceof Date
           ? log.injectedAt.getTime()
           : new Date(log.injectedAt).getTime();
-        return { t, units: log.units, mealType: log.mealType, carbs: log.carbsGrams };
+        return { t, units: log.units, mealType: log.mealType, carbs: resolveCarbs(log) };
       })
       .filter((i) => i.t >= fromMs && i.t <= toMs)
       .sort((a, b) => a.t - b.t);
