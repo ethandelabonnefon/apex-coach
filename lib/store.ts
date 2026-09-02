@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { USER_PROFILE, DIABETES_CONFIG, DIABETES_PROFILES_DEFAULT, MUSCU_PROGRAM } from './constants';
-import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile, SplitDoseReminder, HypoEvent, ManualDigestion, CarbEntry } from '@/types';
+import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile, SplitDoseReminder, HypoEvent, CarbEntry } from '@/types';
 import type { NightPredictionRecord } from '@/lib/night-calibration';
 
 interface CompletedWorkout {
@@ -96,10 +96,6 @@ interface AppState {
   addHypoEvent: (event: HypoEvent) => void;
   updateHypoEvent: (id: string, updates: Partial<HypoEvent>) => void;
   removeHypoEvent: (id: string) => void;
-
-  // Night Brain — repas déclaré à la main en cours de digestion (juin 2026)
-  manualDigestion: ManualDigestion | null;
-  setManualDigestion: (digestion: ManualDigestion | null) => void;
 
   // Glucides sans insuline (re-sucrage course, collation non bolussée) — pour la prédiction 8h
   carbEntries: CarbEntry[];
@@ -357,9 +353,6 @@ export const useStore = create<AppState>()(
           e.id === id ? { ...e, ...updates } : e,
         ),
       })),
-      manualDigestion: null,
-      setManualDigestion: (digestion) => set({ manualDigestion: digestion }),
-
       // Glucides sans insuline — prédiction 8h (juin 2026)
       carbEntries: [],
       addCarbEntry: (entry) => set((s) => ({

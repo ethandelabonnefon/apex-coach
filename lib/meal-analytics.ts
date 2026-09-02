@@ -13,6 +13,7 @@
  */
 
 import type { InsulinLog } from "@/types";
+import { isLearnable } from "./carbs-on-board";
 
 export interface ArchivePoint {
   t: number;          // timestamp ms
@@ -70,7 +71,7 @@ export function getMealTypeHistory(
 ): MealTypeHistory {
   // Filtrer les injections du tag, les plus récentes en premier, garder les N
   const tagged = insulinLogs
-    .filter((log) => log.mealTag === mealTag && !log.isSplitDose)
+    .filter((log) => log.mealTag === mealTag && !log.isSplitDose && isLearnable(log))
     .map((log) => ({ ...log, ts: new Date(log.injectedAt).getTime() }))
     .sort((a, b) => b.ts - a.ts)
     .slice(0, limit);
@@ -151,6 +152,7 @@ export function getAvgMacrosForTag(
     .filter((log) =>
       log.mealTag === mealTag &&
       !log.isSplitDose &&
+      isLearnable(log) &&
       // Au moins une macro renseignée pour compter
       ((log.fatGrams ?? 0) > 0 || (log.proteinGrams ?? 0) > 0)
     )

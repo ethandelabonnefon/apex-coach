@@ -37,6 +37,7 @@ import GlucoseCalendar from "@/components/glucose/GlucoseCalendar";
 import AGPChart from "@/components/glucose/AGPChart";
 import SportGlucoseCorrelation from "@/components/glucose/SportGlucoseCorrelation";
 import { usePatternDetection } from "@/hooks/usePatternDetection";
+import { isLearnable } from "@/lib/carbs-on-board";
 import type { SportSession } from "@/lib/sport-glucose-analytics";
 import {
   ArrowLeft,
@@ -327,7 +328,7 @@ export default function DiabeteHistoriquePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           days,
-          injections: insulinLogs,
+          injections: insulinLogs.filter(isLearnable),
           profiles: (diabetesConfig.profiles ?? []).map((p) => ({
             id: p.id,
             name: p.name,

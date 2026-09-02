@@ -21,6 +21,7 @@ import {
 } from "@/components/ui";
 import { useStore } from "@/lib/store";
 import { usePatternDetection } from "@/hooks/usePatternDetection";
+import { isLearnable } from "@/lib/carbs-on-board";
 import type { InsulinRatio } from "@/types";
 import {
   Stethoscope,
@@ -265,7 +266,7 @@ export default function DocteurPage() {
 
       return {
         days: windowDays,
-        injections: insulinLogs,
+        injections: insulinLogs.filter(isLearnable),
         activeProfileName,
         detectedPatterns: detectedPatterns.map((p) => ({
           type: p.type,

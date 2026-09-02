@@ -334,6 +334,43 @@ export interface TopUpSuggestion {
   reason: string;
 }
 
+// ───────────────────────────────────────────────────────────────────────
+// Filtrage du backtest nocturne
+// ───────────────────────────────────────────────────────────────────────
+
+/** Fenêtre avant une nuit pendant laquelle un repas peut la polluer (ms). */
+const NIGHT_MEAL_WINDOW_MS = 6 * 3_600_000;
+
+/**
+ * Écarte du backtest nocturne les nuits précédées d'un repas à quantité
+ * incertaine : leur erreur de prédiction ne mesure pas la qualité du
+ * modèle, mais l'imprécision de la saisie.
+ *
+ * ⚠️ Ne PAS confondre avec la liste d'injections passée à
+ * `estimateNightDrift` : celle-ci sert à repérer les fenêtres SANS
+ * insuline. Y masquer une injection réelle ferait croire à une fenêtre à
+ * jeun et fausserait la dérive basale. L'insuline injectée est réelle et
+ * ne sort jamais des calculs.
+ */
+export function filterLearnableNightLogs<T extends { createdAt: string }>(
+  nightLogs: T[],
+  insulinLogs: InsulinLog[],
+): T[] {
+  const uncertainTimes = insulinLogs
+    .filter((l) => !isLearnable(l))
+    .map((l) => toMs(l.injectedAt))
+    .filter((t) => Number.isFinite(t));
+  if (uncertainTimes.length === 0) return nightLogs;
+
+  return nightLogs.filter((log) => {
+    const nightMs = new Date(log.createdAt).getTime();
+    if (!Number.isFinite(nightMs)) return true;
+    return !uncertainTimes.some(
+      (t) => t <= nightMs && nightMs - t <= NIGHT_MEAL_WINDOW_MS,
+    );
+  });
+}
+
 /**
  * Propose un appoint d'insuline quand les glucides restants ne sont pas
  * couverts. Ce n'est pas du stacking : c'est le complément du bolus repas

@@ -4,7 +4,8 @@
  * Endpoint cron — appelé par Vercel Cron toutes les minutes (cf. vercel.json).
  * Protégé par CRON_SECRET (header Authorization Bearer ou ?secret= en query).
  *
- * Pour chaque split-dose reminder dont triggerAt ≤ now et status === pending :
+ * Pour chaque rappel (split-dose ou confirmation de repas) dont triggerAt ≤ now
+ * et status === pending :
  *   1. Envoie un push VAPID
  *   2. Marque le reminder "fired" en KV
  *

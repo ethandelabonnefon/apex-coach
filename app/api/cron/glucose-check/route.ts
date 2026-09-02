@@ -52,21 +52,21 @@ export async function GET(req: NextRequest) {
   // 1. Check glycémie (hypo/hyper push)
   const glucoseResult = await checkGlucoseAndAlert();
 
-  // 2. Check splits dûs (piggyback : Hobby tier = 1 cron/jour, on
-  //    réutilise donc ce cron qui tourne toutes les 5 min). Latence
-  //    max 5 min vs triggerAt = acceptable pour un split (qui attend
-  //    déjà 2-3h avant déclenchement).
-  let splitResult;
+  // 2. Check rappels dûs (split-dose + confirmation de repas — piggyback :
+  //    Hobby tier = 1 cron/jour, on réutilise donc ce cron qui tourne
+  //    toutes les 5 min). Latence max 5 min vs triggerAt = acceptable, ces
+  //    rappels attendent déjà 2-3h avant déclenchement.
+  let reminderResult;
   try {
-    splitResult = await checkRemindersAndAlert();
+    reminderResult = await checkRemindersAndAlert();
   } catch (err) {
     const msg = err instanceof Error ? err.message : "unknown";
-    console.error("[cron/glucose-check] split-check error:", msg);
-    splitResult = { ok: false, checked: 0, fired: 0, errors: [msg] };
+    console.error("[cron/glucose-check] reminder-check error:", msg);
+    reminderResult = { ok: false, checked: 0, fired: 0, errors: [msg] };
   }
 
   return NextResponse.json({
     glucose: glucoseResult,
-    splits: splitResult,
+    reminders: reminderResult,
   });
 }

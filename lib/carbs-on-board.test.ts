@@ -13,6 +13,7 @@ import {
   fpuRemainingFraction,
   computeCarbsOnBoard,
   suggestTopUp,
+  filterLearnableNightLogs,
   type CarbsOnBoard,
 } from "./carbs-on-board";
 import type { InsulinLog } from "@/types";
@@ -283,4 +284,33 @@ test("appoint : ne re-propose pas tant que le déficit ne s'est pas creusé d'1 
   assert.equal(suggestTopUp(cobWith({ balanceU: -4.5 }), ctx), null);
   const s = suggestTopUp(cobWith({ balanceU: -5.2 }), ctx);
   assert.equal(s?.units, 4);
+});
+
+test("filterLearnableNightLogs : écarte les nuits précédées d'un repas incertain", () => {
+  const nightAt = new Date("2026-09-01T22:00:00Z").getTime();
+  const logs = [{ createdAt: new Date(nightAt).toISOString() }];
+
+  const uncertainDinner = log(0, {
+    id: "d1",
+    carbsGrams: 90,
+    carbsUncertain: true,
+    injectedAt: new Date(nightAt - 2 * 3_600_000),
+  });
+  assert.equal(filterLearnableNightLogs(logs, [uncertainDinner]).length, 0);
+
+  const cleanDinner = log(0, {
+    id: "d2",
+    carbsGrams: 90,
+    injectedAt: new Date(nightAt - 2 * 3_600_000),
+  });
+  assert.equal(filterLearnableNightLogs(logs, [cleanDinner]).length, 1);
+
+  // Un repas incertain vieux de 12 h ne pollue pas la nuit.
+  const oldDinner = log(0, {
+    id: "d3",
+    carbsGrams: 90,
+    carbsUncertain: true,
+    injectedAt: new Date(nightAt - 12 * 3_600_000),
+  });
+  assert.equal(filterLearnableNightLogs(logs, [oldDinner]).length, 1);
 });

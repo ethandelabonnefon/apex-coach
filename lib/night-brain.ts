@@ -42,15 +42,14 @@ export interface NightBrainInput extends BedtimeAdvisorInput {
   };
 
   /**
-   * Couverture du repas déclaré à la main : combien de glucides ont été
-   * mangés vs combien d'insuline a été prise. Permet l'alerte « tu as
-   * peut-être trop mangé » (sous-dosage) ou « trop d'insuline » (sur-dosage).
+   * Couverture du repas en cours, calculée par le moteur COB
+   * (lib/carbs-on-board.ts). Night Brain ne recalcule rien : il présente.
    */
   mealCoverage?: {
-    carbsGrams: number;
-    insulinUnits: number;
-    /** Ratio glucides du repas (g par U). */
-    gramsPerU: number;
+    /** Glucides encore à absorber (g). */
+    carbsRemainingG: number;
+    /** Balance insuline active − besoin (U). Négatif = sous-dosé. */
+    balanceU: number;
   };
 }
 
@@ -144,27 +143,26 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
 
   // ── Couverture du repas déclaré à la main (trop mangé / trop d'insuline) ──
   let coverageStep: NightStep | undefined;
-  if (input.mealCoverage && input.mealCoverage.gramsPerU > 0) {
-    const { carbsGrams, insulinUnits, gramsPerU } = input.mealCoverage;
-    const expected = carbsGrams / gramsPerU;
-    const delta = insulinUnits - expected; // <0 = sous-dosé, >0 = sur-dosé
-    if (delta <= -1.5) {
+  if (input.mealCoverage) {
+    const { carbsRemainingG, balanceU } = input.mealCoverage;
+    const grams = Math.round(carbsRemainingG);
+    if (balanceU <= -1.5) {
       coverageStep = {
         id: "coverage",
         order: 0,
         kind: "coverage",
         tone: "warning",
         headline: `Attention, tu as peut-être trop mangé pour ton insuline`,
-        detail: `${carbsGrams}g de glucides ≈ ${expected.toFixed(1).replace(".", ",")}U nécessaires, mais tu n'as pris que ${insulinUnits.toFixed(1).replace(".", ",")}U. Il manque ~${(-delta).toFixed(1).replace(".", ",")}U → ça va te faire monter (vois le réveil prédit ci-dessous). Surveille, une correction sera peut-être conseillée plus bas.`,
+        detail: `Il reste ~${grams}g de glucides à digérer et il manque ~${(-balanceU).toFixed(1).replace(".", ",")}U pour les couvrir → ça va te faire monter (vois le réveil prédit ci-dessous). Surveille, une correction sera peut-être conseillée plus bas.`,
       };
-    } else if (delta >= 1.5) {
+    } else if (balanceU >= 1.5) {
       coverageStep = {
         id: "coverage",
         order: 0,
         kind: "coverage",
         tone: "info",
-        headline: `Tu as pris plus d'insuline que pour ces glucides`,
-        detail: `${insulinUnits.toFixed(1).replace(".", ",")}U pour ${carbsGrams}g (il en fallait ~${expected.toFixed(1).replace(".", ",")}U). Surplus ~${delta.toFixed(1).replace(".", ",")}U → risque de baisse. Garde du sucre à portée et surveille.`,
+        headline: `Tu as plus d'insuline active que nécessaire`,
+        detail: `Surplus ~${balanceU.toFixed(1).replace(".", ",")}U pour les ~${grams}g qu'il te reste à digérer → risque de baisse. Garde du sucre à portée et surveille.`,
       };
     }
   }

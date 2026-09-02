@@ -11,7 +11,7 @@ import {
   inferMealTimeFromClock,
 } from "@/lib/insulin-calculator";
 import { activeIOB } from "@/lib/glucose-prediction";
-import { computeCarbsOnBoard, suggestTopUp } from "@/lib/carbs-on-board";
+import { computeCarbsOnBoard, suggestTopUp, filterLearnableNightLogs } from "@/lib/carbs-on-board";
 import { DIABETES_CONFIG } from "@/lib/constants";
 import type { InsulinLog, MealTime, SplitDoseReminder } from "@/types";
 import type { GlucoseTrend } from "@/lib/libre-link/utils";
@@ -947,9 +947,12 @@ export default function DiabetePage() {
         injectedAt: new Date(l.injectedAt).toISOString(),
         units: l.units,
       }));
-    const logsSinceChange = basalChangeMs
-      ? nightPredictionLogs.filter((l) => new Date(l.createdAt).getTime() >= basalChangeMs)
-      : nightPredictionLogs;
+    const logsSinceChange = filterLearnableNightLogs(
+      basalChangeMs
+        ? nightPredictionLogs.filter((l) => new Date(l.createdAt).getTime() >= basalChangeMs)
+        : nightPredictionLogs,
+      insulinLogs,
+    );
     const drift = estimateNightDrift(pts, injections);
     const dawn = estimateDawnCurve(pts);
     const resolved = resolveNightLogs(logsSinceChange, pts, nowTick);
@@ -1060,6 +1063,10 @@ export default function DiabetePage() {
       exerciseHoursAgo: exerciseAdjustment?.hoursAgo,
       pendingSplitUnits: upcomingSplit?.units,
       pendingSplitMinutesUntil: upcomingSplit?.minutesUntil,
+      mealCoverage:
+        cob.status === "idle" || cob.uncertain
+          ? undefined
+          : { carbsRemainingG: cob.totalRemainingG, balanceU: cob.balanceU },
       nowMs: nowTick,
     };
   }, [
@@ -1077,6 +1084,7 @@ export default function DiabetePage() {
     whoop.connected,
     whoop.snapshot,
     nightCalibration,
+    cob,
     nowTick,
   ]);
 
