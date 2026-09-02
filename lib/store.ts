@@ -83,6 +83,7 @@ interface AppState {
   insulinLogs: InsulinLog[];
   addInsulinLog: (log: InsulinLog) => void;
   removeInsulinLog: (id: string) => void;
+  updateInsulinLog: (id: string, updates: Partial<InsulinLog>) => void;
 
   // Phase 11 — Split dose reminders (FPU)
   splitDoseReminders: SplitDoseReminder[];
@@ -325,6 +326,12 @@ export const useStore = create<AppState>()(
       removeInsulinLog: (id) => set((s) => ({
         insulinLogs: s.insulinLogs.filter((log) => log.id !== id),
       })),
+      updateInsulinLog: (id, updates) =>
+        set((s) => ({
+          insulinLogs: s.insulinLogs.map((log) =>
+            log.id === id ? { ...log, ...updates } : log,
+          ),
+        })),
 
       // Phase 11 — Split dose reminders
       splitDoseReminders: [],
