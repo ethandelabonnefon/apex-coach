@@ -162,6 +162,31 @@ test("glucides sans insuline (CarbEntry) comptés dans le besoin", () => {
   assert.equal(cob.status, "deficit");
 });
 
+test("glucides avec bolus (CarbEntry) : l'insuline compte dans l'IOB", () => {
+  // Sans ça, les glucides du CarbEntry entrent dans `insulinNeededU` mais
+  // ses unités sont ignorées de `insulinActiveU` → déficit fantôme, donc
+  // appoint injustifié.
+  const cob = computeCarbsOnBoard({
+    insulinLogs: [],
+    carbEntries: [
+      {
+        id: "c1",
+        carbsGrams: 60,
+        insulinUnits: 6,
+        eatenAt: new Date(Date.now() - 20 * 60_000).toISOString(),
+      },
+    ],
+    isf: ISF,
+    ratios: RATIOS,
+  });
+  assert.ok(cob.insulinActiveU > 0, "le bolus du CarbEntry doit être vu par activeIOB");
+  assert.notEqual(cob.status, "deficit");
+  assert.ok(
+    Math.abs(cob.balanceU) < 1,
+    `60 g au ratio 10 pour 6 U : balance attendue ~0, reçue ${cob.balanceU}`,
+  );
+});
+
 test("repas incertain : compté dans la couverture, mais flag uncertain levé", () => {
   const cob = computeCarbsOnBoard({
     insulinLogs: [

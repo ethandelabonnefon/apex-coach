@@ -302,6 +302,16 @@ export function computeCarbsOnBoard(
     if (!Number.isFinite(minutesAgo) || minutesAgo < -5 || minutesAgo > windowMin) continue;
     boluses.push({ units: log.units, minutesAgo: Math.max(0, minutesAgo) });
   }
+  // Un CarbEntry peut porter un bolus (`insulinUnits`) : `buildCarbSources`
+  // le lit déjà, et `buildPredictionEvents` le compte. L'omettre ici
+  // comptait ses glucides dans le besoin sans compter son insuline dans
+  // l'IOB — un déficit fantôme, donc un appoint injustifié.
+  for (const c of opts.carbEntries ?? []) {
+    if (!c || typeof c.insulinUnits !== "number" || c.insulinUnits <= 0) continue;
+    const minutesAgo = (now - toMs(c.eatenAt)) / 60_000;
+    if (!Number.isFinite(minutesAgo) || minutesAgo < -5 || minutesAgo > windowMin) continue;
+    boluses.push({ units: c.insulinUnits, minutesAgo: Math.max(0, minutesAgo) });
+  }
   const insulinActiveU = activeIOB(boluses);
 
   const totalRemainingG = carbsRemainingG + fpuRemainingG;
