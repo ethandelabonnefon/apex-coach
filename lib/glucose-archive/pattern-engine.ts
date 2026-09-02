@@ -16,6 +16,7 @@
  */
 
 import type { ArchivedPoint } from "./store";
+import { isLearnable, resolveCarbs } from "@/lib/insulin-log-values";
 import type { DiabetesConfig, InsulinLog, MealTime } from "@/types";
 
 // ───────────────────────────────────────────────────────────────────────
@@ -202,7 +203,17 @@ function detectPostMealSpike(
   const recentInjections = injections
     .filter((inj) => {
       const ts = new Date(inj.injectedAt).getTime();
-      return ts >= fourteenDaysAgo && !inj.isSplitDose && inj.carbsGrams > 0;
+      // `isLearnable` : cette règle produit une suggestion de DOSE
+      // (« pré-doser 15 min avant, ou +0,1U/10g ») qui remonte au Docteur
+      // via `detectedPatterns`. Un repas dont la quantité est inconnue ne
+      // peut pas servir à conclure que le ratio est trop faible : le pic
+      // vient peut-être simplement d'avoir mangé plus que déclaré.
+      return (
+        ts >= fourteenDaysAgo &&
+        !inj.isSplitDose &&
+        isLearnable(inj) &&
+        resolveCarbs(inj) > 0
+      );
     });
 
   const byMealType = new Map<string, number>(); // mealType → spike count
