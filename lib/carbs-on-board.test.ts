@@ -273,7 +273,7 @@ test("appoint : bloqué si une source est incertaine", () => {
 
 test("appoint : rien si le statut n'est pas 'deficit'", () => {
   assert.equal(
-    suggestTopUp(cobWith({ status: "covered", balanceU: -0.2 }), { currentGlucose: 150 }),
+    suggestTopUp(cobWith({ status: "covered", balanceU: -4 }), { currentGlucose: 150 }),
     null,
   );
 });
