@@ -128,6 +128,55 @@ test("recommandation : le même creux produit une collation, pas 'tout va bien'"
   );
 });
 
+// ─── buildSplitAdjustment : dernier des 3 sites (re-revue, passe finale) ──
+//
+// C'est la décision la plus directement anti-hypo du module : elle annule ou
+// réduit une dose d'insuline DÉJÀ programmée (le split FPU en attente), pas
+// un simple message. Scénario : un split de 2U en attente (déclenché dans
+// 30min), sur-dosage modéré (45g glucides / 25g lip / 20g prot, bolus 4,3U
+// injecté il y a 45min, glycémie 130). Courbe résultante (pas 15 min,
+// pendingSplit inclus dans le calcul) :
+//   minute 120 (+2h)  → 96 mg/dL   (pas < 70)
+//   minute 165-195    → 66 mg/dL   (< 70, AUCUN échantillon ne tombe ici)
+//   minute 240 (+4h)  → 75 mg/dL   (pas < 70)
+//   minute 420 (réveil) → 104 mg/dL (pas < 70)
+// Ancien minPred (3 échantillons) = min(96, 75, 104) = 75 → tombe dans la
+// branche REDUCE (70-85), pas SKIP : le split serait réduit à 1U et FAIT,
+// pendant que la glycémie réelle creuse à 66 entre-temps. Avec le fix, le
+// vrai minimum de la courbe (66) < 70 → SKIP.
+
+const splitDipEvents = [
+  {
+    minutesAgo: 45,
+    units: 4.3,
+    carbsGrams: 45,
+    fatGrams: 25,
+    proteinGrams: 20,
+    carbSensitivity: carbSensitivity(ISF, 10),
+  },
+];
+
+test("split en attente : un creux à 66 mg/dL entre échantillons impose SKIP, pas REDUCE", () => {
+  const advice = computeBedtimeAdvice({
+    currentGlucose: 130,
+    trendArrow: 3,
+    iobUnits: 0,
+    isfMgPerU: ISF,
+    insulinActiveMinutes: 195,
+    targetGlucose: 110,
+    hoursUntilWakeup: 7,
+    nowMs: EVENING,
+    events: splitDipEvents,
+    pendingSplitUnits: 2,
+    pendingSplitMinutesUntil: 30,
+  });
+  assert.equal(
+    advice.recommendation.splitAdjustment?.type,
+    "skip",
+    `un creux à 66 mg/dL doit annuler le split (skip), reçu '${advice.recommendation.splitAdjustment?.type}'`,
+  );
+});
+
 test("mode legacy (sans events) reste fonctionnel (rétrocompat)", () => {
   const advice = computeBedtimeAdvice({
     currentGlucose: 140,

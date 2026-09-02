@@ -582,10 +582,17 @@ export function computeBedtimeAdvice(input: BedtimeAdvisorInput): BedtimeAdvice 
 function buildSplitAdjustment(
   predictions: BedtimePrediction[],
   input: BedtimeAdvisorInput,
+  curve: PredictionPoint[] | undefined,
+  hoursUntilWakeup: number,
 ): BedtimeRecommendation['splitAdjustment'] | undefined {
   if (!input.pendingSplitUnits || input.pendingSplitUnits <= 0) return undefined;
   if (input.pendingSplitMinutesUntil === undefined) return undefined;
-  const minPred = Math.min(...predictions.map((p) => p.glucose));
+  // minPred porte sur la courbe complète (fix re-revue, 3e et dernier site) ;
+  // c'est la décision la plus directement anti-hypo du module — elle annule
+  // ou réduit une dose déjà programmée. Cf. `curveAwareMinPred` pour
+  // l'asymétrie volontaire avec maxPred (non pertinent ici, cette fonction
+  // ne regarde que le creux).
+  const minPred = curveAwareMinPred(predictions, curve, hoursUntilWakeup);
   const original = input.pendingSplitUnits;
 
   // SKIP : prédiction min critique (< 70) → on annule le split
@@ -640,7 +647,7 @@ function buildRecommendation(
   const minPred = curveAwareMinPred(predictions, curve, hoursUntilWakeup);
   const maxPred = Math.max(...predictions.map((p) => p.glucose));
   const wakeupPred = predictions[predictions.length - 1].glucose;
-  const splitAdjustment = buildSplitAdjustment(predictions, input);
+  const splitAdjustment = buildSplitAdjustment(predictions, input, curve, hoursUntilWakeup);
 
   // ─── Hypo prédite (< 70) ─────────────────────────────
   if (minPred < 70) {
