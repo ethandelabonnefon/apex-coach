@@ -31,6 +31,7 @@ import { iobRemainingFraction } from "./night-calibration";
 import {
   predictGlucoseCurve,
   type PredictionEvent,
+  type PredictionPoint,
 } from "./glucose-prediction";
 import type { RecentExercise } from "./exercise-insulin-adjustment";
 
@@ -169,6 +170,17 @@ export interface BedtimeAdvice {
   };
   /** Flag : true si le repas est trop récent pour prédire fiablement. */
   unreliableTooFresh: boolean;
+  /**
+   * Courbe continue (pas 15 min), bornée à l'horizon réveil — disponible
+   * SEULEMENT en mode unifié (`events` fourni). `predictions` n'échantillonne
+   * que 3 instants (+2h, +4h, réveil) ; un creux transitoire entre deux
+   * horizons (ex: 85 mg/dL à T+1h30 qui remonte à 95 à T+2h — signature d'un
+   * excès d'insuline avec glucides encore en cours d'absorption) n'apparaît
+   * que dans la courbe complète. undefined en mode legacy : `predictGlucoseAt`
+   * y est évalué analytiquement par horizon, sans points intermédiaires — il
+   * n'existe pas de courbe continue à exposer.
+   */
+  curve?: PredictionPoint[];
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -424,6 +436,7 @@ export function computeBedtimeAdvice(input: BedtimeAdvisorInput): BedtimeAdvice 
 
   let predictions: BedtimePrediction[];
   let curveUnreliable: boolean | undefined;
+  let curvePoints: PredictionPoint[] | undefined;
 
   if (input.events) {
     // ── Mode unifié : mêmes chiffres que la courbe 8h ──────────────────
@@ -453,6 +466,7 @@ export function computeBedtimeAdvice(input: BedtimeAdvisorInput): BedtimeAdvice 
     };
     predictions = horizons.map((h) => ({ offsetHours: h, glucose: sampleAt(h), ...labelFor(h) }));
     curveUnreliable = curve.unreliableTooFresh;
+    curvePoints = curve.curve;
   } else {
     // ── Mode legacy (rétrocompat) ──────────────────────────────────────
     predictions = horizons.map((h) => ({
@@ -515,6 +529,7 @@ export function computeBedtimeAdvice(input: BedtimeAdvisorInput): BedtimeAdvice 
     recommendation: reco,
     breakdown: globalBreakdown,
     unreliableTooFresh,
+    curve: curvePoints,
   };
 }
 

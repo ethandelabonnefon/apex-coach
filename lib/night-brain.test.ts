@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 
 import { computeNightPlan, type NightBrainInput } from "./night-brain";
 import { resolveCobStatus, NIGHT_BALANCE_THRESHOLD_U } from "./carbs-on-board";
+import { carbSensitivity } from "./glucose-prediction";
 
 const EVENING = new Date("2026-09-02T22:30:00").getTime();
 
@@ -128,4 +129,45 @@ test("nuit : après un split correctement injecté → pas de faux 'trop d'insul
     }),
   );
   assert.equal(coverageStep(plan), undefined);
+});
+
+test("nuit : creux transitoire ENTRE deux échantillons → déclenche 'mange maintenant'", () => {
+  // Régression maille anti-hypo trop large (re-revue de branche) : l'ancien
+  // code calculait minPred sur les 3 échantillons de `advice.predictions`
+  // (+2h, +4h, réveil) alors que la courbe sous-jacente (mode unifié,
+  // `predictGlucoseCurve`) est calculée à pas de 15 min. Un léger sur-dosage
+  // par rapport aux glucides (45g + 25g lip + 20g prot, bolus 5,37U injecté
+  // il y a 45min) produit un creux à T+2h15 (135min) qui remonte ensuite —
+  // digestion des lipides/protéines encore en cours. Vérifié par calcul
+  // direct sur predictGlucoseCurve (mêmes paramètres, même nowMs) :
+  //   minute 120 (+2h)  → 90 mg/dL  (pas < 90 → l'ancien code ne déclenche PAS)
+  //   minute 135        → 89 mg/dL  (< 90, mais AUCUN échantillon ne tombe ici)
+  //   minute 240 (+4h)  → 125 mg/dL
+  //   minute 420 (réveil) → 155 mg/dL
+  // L'ancien minPred (3 échantillons) = min(90, 125, 155) = 90 → pas < 90 →
+  // aucune étape "mange maintenant". Le vrai minimum de la courbe est 89 → la
+  // correction doit faire apparaître l'étape avec le fix, et ce test échoue
+  // sans lui (vérifié en retirant temporairement le fix).
+  const ISF = 100;
+  const plan = computeNightPlan(
+    input({
+      currentGlucose: 130,
+      trendArrow: 3,
+      events: [
+        {
+          minutesAgo: 45,
+          units: 5.37,
+          carbsGrams: 45,
+          fatGrams: 25,
+          proteinGrams: 20,
+          carbSensitivity: carbSensitivity(ISF, 10),
+        },
+      ],
+    }),
+  );
+  const eatNow = plan.steps.find((s) => s.kind === "eat-now");
+  assert.ok(
+    eatNow,
+    "un creux à 89 mg/dL entre +2h et +4h doit déclencher une étape 'mange maintenant', même si les échantillons +2h/+4h/réveil sont tous ≥ 90",
+  );
 });

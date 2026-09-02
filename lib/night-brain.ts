@@ -141,7 +141,25 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
   const grgVal = grg.value > 0 ? grg.value : 4;
 
   const predictions = advice.predictions;
-  const minPred = Math.min(...predictions.map((p) => p.glucose));
+  // Fix re-revue (maille anti-hypo trop large) : `predictions` n'échantillonne
+  // que 3 instants (+2h, +4h, réveil) alors que la courbe sous-jacente est
+  // calculée à pas de 15 min (`advice.curve`, mode unifié — cf.
+  // bedtime-advisor.ts). Un creux transitoire entre deux échantillons (ex:
+  // 85 mg/dL à T+1h30 qui remonte à 95 à T+2h) ne déclenchait ni l'étape
+  // « mange maintenant » ni l'alerte d'excès — exactement la signature d'un
+  // excès d'insuline avec des glucides encore en cours d'absorption. On porte
+  // donc le minimum sur la courbe COMPLÈTE quand elle est disponible, bornée
+  // à la fenêtre nocturne pertinente (jamais au-delà du réveil — un rebond
+  // dawn après le réveil n'a rien à faire dans « le pire creux de la nuit »).
+  // Fallback sur les 3 échantillons en mode legacy (pas d'`events` fourni →
+  // pas de courbe continue à ce niveau, cf. commentaire sur `BedtimeAdvice.curve`).
+  const hoursUntilWakeup = input.hoursUntilWakeup ?? 7;
+  const wakeupMinute = hoursUntilWakeup * 60;
+  const curvePoints = advice.curve?.filter((p) => p.minute > 0 && p.minute <= wakeupMinute);
+  const minPred =
+    curvePoints && curvePoints.length > 0
+      ? Math.min(...curvePoints.map((p) => p.value))
+      : Math.min(...predictions.map((p) => p.glucose));
   const wakeup = predictions[predictions.length - 1];
   // Repas très récent → on donne quand même un plan (best-effort) mais on le
   // signale ; on ne refuse plus avec un simple "reviens plus tard".
