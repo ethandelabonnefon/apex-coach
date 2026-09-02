@@ -12,6 +12,8 @@ import {
   isLearnable,
   fpuRemainingFraction,
   computeCarbsOnBoard,
+  suggestTopUp,
+  type CarbsOnBoard,
 } from "./carbs-on-board";
 import type { InsulinLog } from "@/types";
 
@@ -212,4 +214,73 @@ test("aucune donnée → idle, tous les compteurs à zéro", () => {
   assert.equal(cob.insulinNeededU, 0);
   assert.equal(cob.insulinActiveU, 0);
   assert.equal(cob.uncertain, false);
+});
+
+/** CarbsOnBoard synthétique pour tester les garde-fous isolément. */
+function cobWith(over: Partial<CarbsOnBoard> = {}): CarbsOnBoard {
+  return {
+    carbsRemainingG: 40,
+    fpuRemainingG: 0,
+    totalRemainingG: 40,
+    insulinNeededU: 4,
+    insulinActiveU: 0,
+    balanceU: -4,
+    status: "deficit",
+    uncertain: false,
+    sources: [],
+    ...over,
+  };
+}
+
+test("appoint : déficit de 4 U à glycémie normale → 4 U proposées", () => {
+  const s = suggestTopUp(cobWith(), { currentGlucose: 150 });
+  assert.ok(s, "une suggestion est attendue");
+  assert.equal(s.units, 4);
+});
+
+test("appoint : dose arrondie à l'entier inférieur (stylo sans demi-unités)", () => {
+  const s = suggestTopUp(cobWith({ balanceU: -3.8 }), { currentGlucose: 150 });
+  assert.equal(s?.units, 3);
+});
+
+test("appoint : plafonné à 4 U même sur un gros déficit", () => {
+  const s = suggestTopUp(cobWith({ balanceU: -9 }), { currentGlucose: 200 });
+  assert.equal(s?.units, 4);
+  assert.equal(s?.capped, true);
+});
+
+test("appoint : rien sous le seuil de 1 U", () => {
+  assert.equal(suggestTopUp(cobWith({ balanceU: -0.9 }), { currentGlucose: 150 }), null);
+});
+
+test("appoint : bloqué si glycémie < 90", () => {
+  assert.equal(suggestTopUp(cobWith(), { currentGlucose: 85 }), null);
+});
+
+test("appoint : bloqué si trend en chute rapide", () => {
+  assert.equal(
+    suggestTopUp(cobWith(), { currentGlucose: 150, trendArrow: 1 }),
+    null,
+  );
+});
+
+test("appoint : bloqué si une source est incertaine", () => {
+  assert.equal(
+    suggestTopUp(cobWith({ uncertain: true }), { currentGlucose: 150 }),
+    null,
+  );
+});
+
+test("appoint : rien si le statut n'est pas 'deficit'", () => {
+  assert.equal(
+    suggestTopUp(cobWith({ status: "covered", balanceU: -0.2 }), { currentGlucose: 150 }),
+    null,
+  );
+});
+
+test("appoint : ne re-propose pas tant que le déficit ne s'est pas creusé d'1 U", () => {
+  const ctx = { currentGlucose: 150, lastOfferedDeficitU: 4 };
+  assert.equal(suggestTopUp(cobWith({ balanceU: -4.5 }), ctx), null);
+  const s = suggestTopUp(cobWith({ balanceU: -5.2 }), ctx);
+  assert.equal(s?.units, 4);
 });

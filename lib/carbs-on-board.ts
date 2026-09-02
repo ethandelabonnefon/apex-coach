@@ -298,3 +298,84 @@ export function computeCarbsOnBoard(
     sources,
   };
 }
+
+// ───────────────────────────────────────────────────────────────────────
+// Proposition d'appoint
+// ───────────────────────────────────────────────────────────────────────
+
+/** Déficit minimal pour proposer un appoint (U). */
+export const TOPUP_MIN_DEFICIT_U = BALANCE_THRESHOLD_U;
+/** Plafond dur d'un appoint (U). */
+export const TOPUP_MAX_UNITS = 4;
+/** En dessous de cette glycémie, aucun appoint n'est proposé (mg/dL). */
+export const TOPUP_MIN_GLUCOSE = 90;
+
+export interface TopUpContext {
+  /** Glycémie courante (mg/dL). */
+  currentGlucose: number;
+  /** Trend Libre numérique Abbott (1 = ↓↓ … 5 = ↑↑). */
+  trendArrow?: number;
+  /**
+   * Déficit (valeur absolue, U) au moment de la dernière proposition.
+   * Empêche de re-proposer en boucle tant que la situation n'a pas
+   * matériellement empiré.
+   */
+  lastOfferedDeficitU?: number;
+}
+
+export interface TopUpSuggestion {
+  /** Dose proposée (U entières — le stylo ne fait pas de demi-unités). */
+  units: number;
+  /** Déficit brut ayant motivé la proposition (U, valeur absolue). */
+  deficitU: number;
+  /** True si la dose a été rabotée par le plafond. */
+  capped: boolean;
+  /** Phrase prête à afficher. */
+  reason: string;
+}
+
+/**
+ * Propose un appoint d'insuline quand les glucides restants ne sont pas
+ * couverts. Ce n'est pas du stacking : c'est le complément du bolus repas
+ * (pratique MDI standard quand on a mangé plus que prévu).
+ *
+ * Renvoie null dès qu'un garde-fou s'oppose. Aucune application
+ * automatique : l'appelant DOIT afficher la proposition et attendre un
+ * clic explicite de l'utilisateur.
+ */
+export function suggestTopUp(
+  cob: CarbsOnBoard,
+  ctx: TopUpContext,
+): TopUpSuggestion | null {
+  if (cob.status !== "deficit") return null;
+
+  // Quantité de glucides non fiable → on ne dose pas sur du vent.
+  if (cob.uncertain) return null;
+
+  // Garde-fous anti-hypo.
+  if (ctx.currentGlucose < TOPUP_MIN_GLUCOSE) return null;
+  if (ctx.trendArrow === 1) return null;
+
+  const deficitU = Math.abs(cob.balanceU);
+  if (deficitU < TOPUP_MIN_DEFICIT_U) return null;
+
+  // Ne re-parle que si le déficit s'est creusé d'au moins 1 U de plus.
+  if (
+    ctx.lastOfferedDeficitU !== undefined &&
+    deficitU < ctx.lastOfferedDeficitU + TOPUP_MIN_DEFICIT_U
+  ) {
+    return null;
+  }
+
+  const raw = Math.floor(deficitU);
+  const units = Math.min(raw, TOPUP_MAX_UNITS);
+  if (units < 1) return null;
+
+  const capped = raw > TOPUP_MAX_UNITS;
+  const grams = Math.round(cob.totalRemainingG);
+  const reason = capped
+    ? `Il reste ${grams} g à digérer et il manque environ ${deficitU.toFixed(1).replace(".", ",")} U. Proposition plafonnée à ${units} U par sécurité — re-vérifie ta glycémie dans 1 h.`
+    : `Il reste ${grams} g à digérer et l'insuline active ne les couvre pas. Il manque environ ${units} U.`;
+
+  return { units, deficitU: round1(deficitU), capped, reason };
+}
