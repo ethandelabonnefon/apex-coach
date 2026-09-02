@@ -1,12 +1,16 @@
 /**
- * Split dose reminders — stockage KV serveur.
+ * Rappels serveur (split dose + confirmation de repas) — stockage KV.
  *
  * App single-user → un seul array de reminders en KV. Survit aux
  * fermetures d'app PWA et permet au cron de tirer les notifs même
  * quand l'utilisateur n'a pas l'app ouverte.
  *
  * Schéma KV :
- *   "split:reminders" → SplitDoseReminder[]
+ *   "split:reminders" → Reminder[]
+ *
+ * ⚠️ Ne PAS renommer cette clé KV : des rappels sont potentiellement déjà
+ * programmés en production sous cette clé (héritée du pipeline split-only
+ * de juin 2026). La renommer les rendrait invisibles au cron.
  *
  * On garde max 100 reminders (sécurité), les anciens "dismissed" ou
  * "fired" de + de 48h sont auto-purgés à chaque écriture.
@@ -16,7 +20,7 @@
 
 import "server-only";
 import { kv } from "@vercel/kv";
-import type { SplitDoseReminder } from "@/types";
+import type { Reminder } from "@/types";
 
 const K_REMINDERS = "split:reminders";
 const MAX_REMINDERS = 100;
@@ -27,18 +31,18 @@ export function isKvConfigured(): boolean {
 }
 
 /** Charge la liste complète (KV peut retourner null si jamais set). */
-export async function getAllReminders(): Promise<SplitDoseReminder[]> {
+export async function getAllReminders(): Promise<Reminder[]> {
   try {
-    const list = await kv.get<SplitDoseReminder[]>(K_REMINDERS);
+    const list = await kv.get<Reminder[]>(K_REMINDERS);
     return Array.isArray(list) ? list : [];
   } catch (err) {
-    console.error("[split-reminders/store] get error:", err);
+    console.error("[reminders/store] get error:", err);
     return [];
   }
 }
 
 /** Sauve la liste (auto-purge des vieux + cap à MAX_REMINDERS). */
-async function saveAll(list: SplitDoseReminder[]): Promise<void> {
+async function saveAll(list: Reminder[]): Promise<void> {
   const now = Date.now();
   const pruned = list
     .filter((r) => {
@@ -53,7 +57,7 @@ async function saveAll(list: SplitDoseReminder[]): Promise<void> {
 
 /** Ajoute / remplace un reminder (idempotent via l'id). */
 export async function upsertReminder(
-  reminder: SplitDoseReminder,
+  reminder: Reminder,
 ): Promise<void> {
   const list = await getAllReminders();
   const filtered = list.filter((r) => r.id !== reminder.id);
@@ -64,7 +68,7 @@ export async function upsertReminder(
 /** Retourne les reminders à déclencher (pending + triggerAt ≤ now). */
 export async function getDueReminders(
   now: number = Date.now(),
-): Promise<SplitDoseReminder[]> {
+): Promise<Reminder[]> {
   const list = await getAllReminders();
   return list.filter(
     (r) => r.status === "pending" && new Date(r.triggerAt).getTime() <= now,

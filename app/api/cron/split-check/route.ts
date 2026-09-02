@@ -13,7 +13,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { PUSH_CONFIG } from "@/lib/push/config";
-import { checkSplitsAndAlert } from "@/lib/split-reminders/check";
+import { checkRemindersAndAlert } from "@/lib/reminders/check";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,6 +44,6 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const result = await checkSplitsAndAlert();
+  const result = await checkRemindersAndAlert();
   return NextResponse.json(result);
 }

@@ -163,21 +163,36 @@ export interface InsulinLog {
   carbsUncertain?: boolean;
 }
 
+/** Nature d'un rappel serveur. */
+export type ReminderKind = 'split' | 'meal-confirm';
+
 /**
- * Rappel programmé pour la seconde injection d'un split dose (FPU).
- * Persisté côté client (Zustand persist) — le service worker peut lire
- * cette structure pour déclencher une notification approximative.
+ * Rappel programmé côté serveur (KV) et tiré par le cron, donc reçu même
+ * app fermée. Deux natures :
+ *  - 'split'        : 2e injection d'un split dose (couverture FPU)
+ *  - 'meal-confirm' : confirmation des glucides réellement mangés (T+20)
  */
-export interface SplitDoseReminder {
+export interface Reminder {
   id: string;
+  /** Absent sur les rappels créés avant septembre 2026 → lire comme 'split'. */
+  kind?: ReminderKind;
   parentInjectionId: string;
+  /** split : dose à faire · meal-confirm : dose déjà faite (contexte). */
   units: number;
   triggerAt: string;        // ISO timestamp
   createdAt: string;        // ISO
   mealLabel?: string;       // ex: "pâtes", "pizza"
+  /** meal-confirm uniquement : glucides estimés au moment du bolus. */
+  carbsEstimated?: number;
   /** "pending" | "fired" | "dismissed" — pour ne pas re-tirer le rappel */
   status: 'pending' | 'fired' | 'dismissed';
 }
+
+/**
+ * Alias historique. Le store Zustand ne persiste que des rappels de split ;
+ * conservé pour ne pas casser les imports existants.
+ */
+export type SplitDoseReminder = Reminder;
 
 /**
  * Repas déclaré à la main en cours de digestion (Night Brain, juin 2026).

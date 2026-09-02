@@ -1,46 +1,16 @@
 /**
- * DELETE /api/split/cancel?id=<reminderId>
+ * DELETE /api/split/cancel — ALIAS de compatibilité.
  *
- * Supprime un split-dose reminder côté serveur. Appelé quand l'utilisateur :
- *  - confirme manuellement la dose dans l'app (handleConfirmSplitDose)
- *  - dismiss le reminder
- *  - supprime l'injection parente
- *
- * Pas d'authentification : app single-user.
+ * Voir app/api/split/schedule/route.ts pour le pourquoi de ce handler
+ * délégué plutôt qu'un re-export ESM direct (non supporté par Turbopack
+ * sur Next.js 16.2.1 pour `runtime`/`dynamic`).
  */
-
-import { NextRequest, NextResponse } from "next/server";
-import { removeReminder, isKvConfigured } from "@/lib/split-reminders/store";
+import type { NextRequest } from "next/server";
+import { DELETE as cancelDELETE } from "@/app/api/reminders/cancel/route";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function DELETE(req: NextRequest) {
-  if (!isKvConfigured()) {
-    return NextResponse.json(
-      { ok: false, error: "kv_not_configured" },
-      { status: 503 },
-    );
-  }
-
-  const url = new URL(req.url);
-  const id = url.searchParams.get("id");
-  if (!id) {
-    return NextResponse.json(
-      { ok: false, error: "missing_id" },
-      { status: 400 },
-    );
-  }
-
-  try {
-    await removeReminder(id);
-    return NextResponse.json({ ok: true, removed: id });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "unknown";
-    console.error("[split/cancel] remove error:", msg);
-    return NextResponse.json(
-      { ok: false, error: "kv_error", message: msg },
-      { status: 500 },
-    );
-  }
+  return cancelDELETE(req);
 }

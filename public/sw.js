@@ -1,6 +1,6 @@
 // APEX Coach — Service Worker
-// v4 : pipeline serveur split reminders + fix icon path + tag perso
-const CACHE_NAME = "apex-coach-v4";
+// v5 : rappels génériques (split + meal-confirm)
+const CACHE_NAME = "apex-coach-v5";
 
 const PRECACHE_URLS = [
   "/",

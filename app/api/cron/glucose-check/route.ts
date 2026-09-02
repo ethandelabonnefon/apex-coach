@@ -17,7 +17,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PUSH_CONFIG } from "@/lib/push/config";
 import { checkGlucoseAndAlert } from "@/lib/push/alerts";
-import { checkSplitsAndAlert } from "@/lib/split-reminders/check";
+import { checkRemindersAndAlert } from "@/lib/reminders/check";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
   //    déjà 2-3h avant déclenchement).
   let splitResult;
   try {
-    splitResult = await checkSplitsAndAlert();
+    splitResult = await checkRemindersAndAlert();
   } catch (err) {
     const msg = err instanceof Error ? err.message : "unknown";
     console.error("[cron/glucose-check] split-check error:", msg);
