@@ -11,9 +11,9 @@ import {
   inferMealTimeFromClock,
 } from "@/lib/insulin-calculator";
 import { activeIOB } from "@/lib/glucose-prediction";
-import { computeCarbsOnBoard } from "@/lib/carbs-on-board";
+import { computeCarbsOnBoard, suggestTopUp } from "@/lib/carbs-on-board";
 import { DIABETES_CONFIG } from "@/lib/constants";
-import type { MealTime, SplitDoseReminder } from "@/types";
+import type { InsulinLog, MealTime, SplitDoseReminder } from "@/types";
 import type { GlucoseTrend } from "@/lib/libre-link/utils";
 import { Badge } from "@/components/ui/Badge";
 import { useGlucose } from "@/hooks/useGlucose";
@@ -21,6 +21,8 @@ import GlucoseWidget from "@/components/glucose/GlucoseWidget";
 import GlucoseChart from "@/components/glucose/GlucoseChart";
 import CarbEntryLogger from "@/components/glucose/CarbEntryLogger";
 import { CarbsOnBoardTile } from "@/components/glucose/CarbsOnBoardTile";
+import { MealConfirmCard } from "@/components/diabete/MealConfirmCard";
+import { TopUpCard } from "@/components/diabete/TopUpCard";
 import CorrectionSuggestion from "@/components/glucose/CorrectionSuggestion";
 import PushOptIn from "@/components/glucose/PushOptIn";
 import {
@@ -196,6 +198,7 @@ export default function DiabetePage() {
     glucoseReadings,
     insulinLogs,
     addInsulinLog,
+    updateInsulinLog,
     removeInsulinLog,
     splitDoseReminders,
     addSplitDoseReminder,
@@ -349,6 +352,26 @@ export default function DiabetePage() {
       }),
     [insulinLogs, carbEntries, diabetesConfig, nowTick],
   );
+
+  // ─── Confirmation des glucides (T+15 → T+3h) ──────────────────────
+  // État dérivé : la première injection avec glucides, ni confirmée ni
+  // marquée incertaine, dans la fenêtre.
+  const [topUpDismissedDeficit, setTopUpDismissedDeficit] = useState<number | undefined>(undefined);
+
+  // `insulinLogs` est trié du plus récent au plus ancien (addInsulinLog
+  // insère en tête) → .find() retourne bien la dernière injection éligible.
+  // Ne pas ajouter de tri.
+  const pendingConfirm = useMemo(() => {
+    return (
+      insulinLogs.find((log) => {
+        if (log.isSplitDose) return false;
+        if (!log.carbsGrams || log.carbsGrams <= 0) return false;
+        if (log.carbsConfirmedAt || log.carbsUncertain) return false;
+        const minutesAgo = (nowTick - new Date(log.injectedAt).getTime()) / 60_000;
+        return minutesAgo >= 15 && minutesAgo <= 180;
+      }) ?? null
+    );
+  }, [insulinLogs, nowTick]);
 
   // Détails de la dernière injection active (pour message contextualisé IOB)
   const lastActiveInjection = useMemo(() => {
@@ -549,6 +572,19 @@ export default function DiabetePage() {
   const liveValueForBolus = liveGlucose?.value;
   const liveTrend = trendStringToNumber(liveGlucose?.trend);
 
+  // ─── Appoint suggéré (glucides restants non couverts) ──────────────
+  // Placé après `liveGlucose` (déclaré ci-dessus) : suggestTopUp a besoin
+  // de la glycémie live la plus fraîche pour ses garde-fous anti-hypo.
+  const topUp = useMemo(
+    () =>
+      suggestTopUp(cob, {
+        currentGlucose: liveGlucose?.value ?? currentGlucose,
+        trendArrow: trendStringToNumber(liveGlucose?.trend) ?? trendArrow,
+        lastOfferedDeficitU: topUpDismissedDeficit,
+      }),
+    [cob, liveGlucose, currentGlucose, trendArrow, topUpDismissedDeficit],
+  );
+
   // Auto-refresh la glycémie live quand on active le briefing pré-sport
   // (pour avoir la donnée la plus fraîche possible). Évite de baser une
   // décision sur une lecture obsolète.
@@ -641,6 +677,49 @@ export default function DiabetePage() {
   function handleDismissSplitDose(reminder: SplitDoseReminder) {
     removeSplitDoseReminder(reminder.id);
     cancelReminderOnServer(reminder.id);
+  }
+
+  function handleConfirmCarbs(
+    log: InsulinLog,
+    values: { carbs: number; fat: number; protein: number },
+  ) {
+    updateInsulinLog(log.id, {
+      carbsConfirmedGrams: values.carbs,
+      fatConfirmedGrams: values.fat,
+      proteinConfirmedGrams: values.protein,
+      carbsConfirmedAt: new Date().toISOString(),
+    });
+    // Le rappel serveur n'a plus lieu d'être.
+    cancelReminderOnServer(`mc-${log.id}`);
+  }
+
+  function handleMarkUncertain(log: InsulinLog) {
+    updateInsulinLog(log.id, {
+      carbsUncertain: true,
+      carbsConfirmedAt: new Date().toISOString(),
+    });
+    cancelReminderOnServer(`mc-${log.id}`);
+  }
+
+  function handleAcceptTopUp(units: number) {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(`Enregistrer un appoint de ${units} U ?`)
+    ) {
+      return;
+    }
+    addInsulinLog({
+      id: crypto.randomUUID(),
+      units,
+      insulinType: profile.insulinRapid,
+      mealType: "correction",
+      carbsGrams: 0,
+      glucoseBefore: liveGlucose?.value ?? currentGlucose,
+      notes: "appoint (glucides non couverts)",
+      injectedAt: new Date(),
+      parentInjectionId: pendingConfirm?.id,
+    });
+    setTopUpDismissedDeficit(undefined);
   }
 
   // ─── Sessions sport enrichies (Bloc 6.3) ──────────────────────────
@@ -1205,6 +1284,29 @@ export default function DiabetePage() {
       <div className="mb-4">
         <CorrectionSuggestion />
       </div>
+
+      {/* ── CONFIRMATION DES GLUCIDES (T+15 → T+3h) ── */}
+      {/* key={pendingConfirm.id} : si l'injection éligible change pendant que
+          la carte est montée (confirmation de la précédente qui démasque la
+          suivante), on force un remount plutôt que de garder l'état local
+          (carbs/fat/protein) initialisé depuis l'ancienne injection. */}
+      {pendingConfirm && (
+        <MealConfirmCard
+          key={pendingConfirm.id}
+          log={pendingConfirm}
+          onConfirm={(v) => handleConfirmCarbs(pendingConfirm, v)}
+          onUncertain={() => handleMarkUncertain(pendingConfirm)}
+        />
+      )}
+
+      {/* ── APPOINT SUGGÉRÉ (glucides restants non couverts) ── */}
+      {topUp && (
+        <TopUpCard
+          topUp={topUp}
+          onAccept={handleAcceptTopUp}
+          onDismiss={() => setTopUpDismissedDeficit(topUp.deficitU)}
+        />
+      )}
 
       {/* ── RAPPELS SPLIT DOSE en attente ── */}
       {pendingReminders.length > 0 && (
