@@ -11,7 +11,10 @@ import assert from "node:assert/strict";
 import {
   inferMealTimeFromClock,
   getInjectionTimingAdvice,
+  calculateBolus,
+  getInsulinOnBoard,
 } from "./insulin-calculator";
+import { activeIOB } from "./glucose-prediction";
 
 /** Date locale au jour arbitraire, heure/minute contrôlées. */
 function at(hours: number, minutes = 0): Date {
@@ -90,4 +93,55 @@ test("pas de conseil : sans glucides, mealTime 'other', ou pré-workout", () => 
   assert.equal(getInjectionTimingAdvice(130, 0, "lunch"), null);
   assert.equal(getInjectionTimingAdvice(130, 60, "other"), null);
   assert.equal(getInjectionTimingAdvice(130, 60, "lunch", 3, true), null);
+});
+
+// ─── IOB résiduel et part correction (I9) ─────────────────────────────
+//
+// La spec « glucides actifs » a fait basculer l'IOB affiché du modèle
+// LINÉAIRE au modèle BI-EXPONENTIEL, en affirmant que c'était « purement
+// un changement d'affichage ». C'est faux : ce même scalaire est passé à
+// `calculateBolus`, où il est soustrait de la part correction. Le
+// bi-exponentiel décroît plus vite après ~2 h, donc il masque MOINS de
+// correction, donc la dose proposée AUGMENTE.
+//
+// Ces tests ne jugent pas le modèle (le bi-exponentiel est le bon choix,
+// physiologiquement plus juste) : ils figent le comportement actuel pour
+// qu'un futur changement d'IOB ne déplace plus les doses en silence.
+
+test("IOB : les deux modèles divergent nettement à 2h30 d'un bolus de 6 U", () => {
+  const inj = [{ units: 6, minutesAgo: 150 }];
+  const linear = getInsulinOnBoard(inj).totalIOB;
+  const biExp = activeIOB(inj);
+  assert.equal(linear, 1.4, "modèle linéaire (1 − t/DIA)");
+  assert.ok(
+    Math.abs(biExp - 0.56) < 0.01,
+    `modèle bi-exponentiel attendu ~0,56 U, reçu ${biExp}`,
+  );
+});
+
+test("IOB : la part correction dépend directement du modèle d'IOB", () => {
+  // Glycémie 250, cible 110, ISF 100 → correction brute 1,4 U.
+  const call = (iob: number) =>
+    calculateBolus(0, "lunch", 250, false, null, 0, undefined, iob);
+
+  assert.equal(call(0).correctionBolus, 1.4, "correction brute sans IOB");
+
+  // Modèle linéaire (1,4 U d'IOB) : la correction est entièrement absorbée.
+  assert.equal(call(1.4).correctionBolus, 0);
+
+  // Modèle bi-exponentiel (0,6 U d'IOB) : il reste 0,8 U de correction —
+  // soit ~80 mg/dL d'effet à ISF 100 de plus qu'avec l'ancien modèle.
+  assert.ok(
+    Math.abs(call(0.6).correctionBolus - 0.8) < 0.001,
+    `correction attendue 0,8 U, reçue ${call(0.6).correctionBolus}`,
+  );
+});
+
+test("IOB : jamais soustrait du bolus repas (T1D-safe)", () => {
+  // Garde-fou historique : l'IOB ne réduit QUE la correction. Réduire le
+  // bolus repas sous-doserait la nourriture qui arrive.
+  const withoutIob = calculateBolus(60, "lunch", 110, false, null, 0, undefined, 0);
+  const withIob = calculateBolus(60, "lunch", 110, false, null, 0, undefined, 3);
+  assert.equal(withIob.carbBolus, withoutIob.carbBolus);
+  assert.ok(withIob.carbBolus > 0);
 });

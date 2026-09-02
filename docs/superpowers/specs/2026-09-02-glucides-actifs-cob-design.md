@@ -129,9 +129,28 @@ Laisser les deux afficherait deux chiffres différents côte à côte sur le mê
 et cohérent avec le reste de l'écran. Effet visible : l'IOB affiché monte légèrement avant
 ~90 min et baisse plus vite après ~2 h.
 
-`getInsulinOnBoard()` reste exporté (utilisé ailleurs, notamment par le calculateur de bolus)
-mais l'affichage du header n'en dépend plus. Aucune modification des doses calculées : ce
-changement est purement un changement d'affichage et d'entrée du COB.
+`getInsulinOnBoard()` reste exporté mais l'affichage du header n'en dépend plus.
+
+> **Rectification (revue finale de branche, septembre 2026).** La phrase d'origine — « aucune
+> modification des doses calculées : ce changement est purement un changement d'affichage » —
+> **était fausse**. Le scalaire affiché par la tuile est le même que celui passé à
+> `calculateBolus`, où il est soustrait de la **part correction** (jamais du bolus repas). Le
+> bi-exponentiel décroît plus vite après ~2 h, donc il masque **moins** de correction, donc la
+> dose proposée **augmente**.
+>
+> Effet mesuré, bolus de 6 U vieux de 2 h 30 : IOB linéaire 1,4 U vs bi-exponentiel 0,56 U →
+> pour une glycémie à 250 (cible 110, ISF 100), la correction proposée passe de 0 U à 0,8 U,
+> soit ~80 mg/dL d'effet supplémentaire.
+>
+> Le même scalaire alimente `computePreSportBriefing`, `computeBedtimeAdvice`,
+> `classifyHypoContext` et le refus anti-stacking de `CorrectionSuggestion`, dont les seuils
+> (0,5 / 0,8 / 1,5 U) ont été calibrés sur le modèle linéaire : ils se déclenchent désormais
+> un peu plus tôt dans la vie d'un bolus.
+>
+> **Le modèle n'est pas remis en cause** — le bi-exponentiel est physiologiquement plus juste
+> et reste le bon choix. Le changement devait simplement être documenté comme un changement
+> de dose, pas d'affichage. Un test de non-régression fige le comportement actuel
+> (`lib/insulin-calculator.test.ts`, section « IOB résiduel et part correction »).
 
 ---
 
