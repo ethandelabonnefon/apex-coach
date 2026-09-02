@@ -39,12 +39,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Validation minimale
+  // Validation minimale. `units > 0` n'est exigé que pour un split (dose à
+  // faire) : un meal-confirm peut légitimement avoir units = 0 (glucides
+  // loggés sans insuline — oubli, correction à zéro) où `units` n'est
+  // qu'un contexte d'affichage.
+  const isSplit = body.kind !== "meal-confirm";
   if (
     !body.id ||
     !body.parentInjectionId ||
     typeof body.units !== "number" ||
-    body.units <= 0 ||
+    (isSplit && body.units <= 0) ||
+    body.units < 0 ||
     !body.triggerAt
   ) {
     return NextResponse.json(
@@ -52,7 +57,7 @@ export async function POST(req: NextRequest) {
         ok: false,
         error: "missing_fields",
         message:
-          "Required: id, parentInjectionId, units (>0), triggerAt (ISO).",
+          "Required: id, parentInjectionId, units (>0 for split, >=0 for meal-confirm), triggerAt (ISO).",
       },
       { status: 400 },
     );

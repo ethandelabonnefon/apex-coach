@@ -106,6 +106,7 @@ import {
   Shield,
   Sparkle,
   Stethoscope,
+  HelpCircle,
 } from "lucide-react";
 
 // Mapping iconName (lib/meal-tags) → composant lucide-react
@@ -255,6 +256,13 @@ export default function DiabetePage() {
   const [mealSize, setMealSize] = useState<MealSizeId>("normal");
   /** Si l'user édite manuellement les macros, on n'écrase plus avec le tag. */
   const [macrosManuallyEdited, setMacrosManuallyEdited] = useState(false);
+
+  // ─── Confirmation des glucides (septembre 2026) ────────────
+  // Quantité de glucides non estimable (resto, cuisine de quelqu'un
+  // d'autre). Ne remet PAS les glucides à zéro (lib/carbs-on-board.ts en a
+  // besoin pour le calcul de couverture) — juste un drapeau qui rend l'app
+  // muette sur la dose et n'attend pas de rappel de confirmation.
+  const [carbsUncertain, setCarbsUncertain] = useState(false);
 
   // Quand un tag est sélectionné (et que l'user n'a pas override les macros),
   // pré-remplir lipides + protéines + déplier le block macros.
@@ -524,6 +532,7 @@ export default function DiabetePage() {
       trendArrow,
       mealTag,
       mealSize: mealTag ? mealSize : undefined,
+      carbsUncertain: carbsUncertain || undefined,
     });
 
     // ─── Programmer le rappel split dose ──────────
@@ -550,6 +559,31 @@ export default function DiabetePage() {
       );
     }
 
+    // ─── Rappel de confirmation des glucides (T+20 min) ──────────
+    // Inutile si la quantité est déjà déclarée incertaine — on ne va pas
+    // demander à Ethan de confirmer ce qu'il a lui-même dit ne pas savoir.
+    // Serveur UNIQUEMENT (pas de store Zustand local) : le useEffect de
+    // secours ci-dessous (tick 60s) construit une notif « fais XU pour
+    // couvrir les graisses/protéines » pour tout rappel `pending` du store
+    // local — un meal-confirm n'a rien à faire là, ça enverrait un ordre
+    // d'injection au lieu d'une demande de confirmation.
+    if (carbsGrams > 0 && !carbsUncertain) {
+      scheduleReminderOnServer({
+        // ID déterministe : permet d'annuler le rappel à la confirmation
+        // sans avoir à mémoriser son identifiant côté client.
+        id: `mc-${injectionId}`,
+        kind: "meal-confirm",
+        parentInjectionId: injectionId,
+        units: finalUnits,
+        triggerAt: new Date(Date.now() + 20 * 60_000).toISOString(),
+        createdAt: new Date().toISOString(),
+        mealLabel: mealTag,
+        carbsEstimated: carbsGrams,
+        status: "pending",
+      });
+    }
+
+    setCarbsUncertain(false);
     setUnitsOverride(null);
   }
 
@@ -1760,6 +1794,19 @@ export default function DiabetePage() {
           />
         </div>
 
+        <button
+          type="button"
+          onClick={() => setCarbsUncertain((v) => !v)}
+          className={`mt-2 flex items-center gap-1.5 text-xs tap-scale ${
+            carbsUncertain ? "text-warning" : "text-text-tertiary"
+          }`}
+        >
+          <HelpCircle className="w-3.5 h-3.5" />
+          {carbsUncertain
+            ? "Quantité incertaine — aucun conseil de dose ne sera donné"
+            : "Je ne suis pas sûr de la quantité"}
+        </button>
+
         {liveValueForBolus !== undefined && (liveValueForBolus !== currentGlucose || trendArrow !== liveTrend) && (
           <button
             type="button"
@@ -2450,6 +2497,16 @@ export default function DiabetePage() {
                           split
                         </Badge>
                       )}
+                      {log.parentInjectionId && !log.isSplitDose && (
+                        <Badge variant="warning" size="sm">
+                          appoint
+                        </Badge>
+                      )}
+                      {log.carbsUncertain && (
+                        <Badge variant="warning" size="sm">
+                          incertain
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="num text-[10px] text-text-tertiary">
@@ -2471,7 +2528,16 @@ export default function DiabetePage() {
                     </div>
                   </div>
                   <div className="num flex items-center gap-3 text-[11px] text-text-tertiary flex-wrap">
-                    <span>{log.carbsGrams}g gluc.</span>
+                    <span>
+                      {log.carbsConfirmedGrams ?? log.carbsGrams}g gluc.
+                      {log.carbsConfirmedGrams !== undefined &&
+                        log.carbsConfirmedGrams !== log.carbsGrams && (
+                          <span className="text-text-tertiary">
+                            {" "}
+                            (estimé {log.carbsGrams})
+                          </span>
+                        )}
+                    </span>
                     {(log.fatGrams || log.proteinGrams) && (
                       <span>
                         {log.fatGrams ?? 0}g lip · {log.proteinGrams ?? 0}g prot
