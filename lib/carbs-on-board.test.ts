@@ -185,6 +185,26 @@ test("excès d'insuline : glucides épuisés, IOB encore présent", () => {
   assert.ok(cob.balanceU >= 1);
 });
 
+test("dérive d'horloge : injection ~3 min dans le futur → pas de déficit fantôme", () => {
+  // Régression : buildCarbSources clampait minutesAgo à 0 (glucides comptés
+  // en entier dans insulinNeededU) alors que le filtre des bolus pour
+  // activeIOB rejetait la valeur NON clampée (minutesAgo < 0) → ses unités
+  // disparaissaient de insulinActiveU. Résultat : un repas fraîchement loggé
+  // avec une horloge client légèrement en avance déclenchait un
+  // "deficit" fantôme, qui sur cette app peut suggérer un appoint
+  // d'insuline injustifié.
+  const cob = computeCarbsOnBoard({
+    insulinLogs: [log(-3, { carbsGrams: 60, units: 6 })],
+    isf: ISF,
+    ratios: RATIOS,
+  });
+  assert.ok(cob.insulinActiveU > 0, "le bolus doit être vu par activeIOB malgré le timestamp futur");
+  assert.notEqual(cob.status, "deficit");
+  // Repas dosé pile au ratio midi (60g / 10 = 6U pour 6U injectées) : les
+  // deux moitiés du calcul doivent s'annuler, pas juste "ne pas être en déficit".
+  assert.ok(Math.abs(cob.balanceU) < 1, `balance attendue ~0, reçue ${cob.balanceU}`);
+});
+
 test("aucune donnée → idle, tous les compteurs à zéro", () => {
   const cob = computeCarbsOnBoard({ insulinLogs: [], isf: ISF, ratios: RATIOS });
   assert.equal(cob.status, "idle");

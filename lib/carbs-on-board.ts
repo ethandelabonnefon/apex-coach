@@ -255,18 +255,18 @@ export function computeCarbsOnBoard(
     if (s.uncertain) uncertain = true;
   }
 
-  const boluses: ActiveBolus[] = (opts.insulinLogs ?? [])
-    .map((log) => ({
-      units: log.units,
-      minutesAgo: (now - toMs(log.injectedAt)) / 60_000,
-    }))
-    .filter(
-      (b) =>
-        b.units > 0 &&
-        Number.isFinite(b.minutesAgo) &&
-        b.minutesAgo >= 0 &&
-        b.minutesAgo <= windowMin,
-    );
+  // Même fenêtre ET même clamp que buildCarbSources : un bolus horodaté
+  // jusqu'à 5 min dans le futur (dérive d'horloge client) doit être vu par
+  // les DEUX moitiés du calcul, sinon ses glucides comptent dans
+  // insulinNeededU pendant que ses unités sont écartées de insulinActiveU —
+  // ce qui fabrique un déficit fantôme juste après le log.
+  const boluses: ActiveBolus[] = [];
+  for (const log of opts.insulinLogs ?? []) {
+    if (!log || typeof log.units !== "number" || log.units <= 0) continue;
+    const minutesAgo = (now - toMs(log.injectedAt)) / 60_000;
+    if (!Number.isFinite(minutesAgo) || minutesAgo < -5 || minutesAgo > windowMin) continue;
+    boluses.push({ units: log.units, minutesAgo: Math.max(0, minutesAgo) });
+  }
   const insulinActiveU = activeIOB(boluses);
 
   const totalRemainingG = carbsRemainingG + fpuRemainingG;
