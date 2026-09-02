@@ -309,10 +309,27 @@ export const TOPUP_MIN_DEFICIT_U = BALANCE_THRESHOLD_U;
 export const TOPUP_MAX_UNITS = 4;
 /** En dessous de cette glycémie, aucun appoint n'est proposé (mg/dL). */
 export const TOPUP_MIN_GLUCOSE = 90;
+/**
+ * Au-delà de cet âge, une lecture de glycémie est considérée comme absente
+ * (min). Un garde-fou anti-hypo évalué sur une valeur périmée ne protège
+ * de rien : la glycémie a pu chuter depuis.
+ */
+export const TOPUP_MAX_GLUCOSE_AGE_MIN = 15;
 
 export interface TopUpContext {
-  /** Glycémie courante (mg/dL). */
-  currentGlucose: number;
+  /**
+   * Glycémie courante (mg/dL) — UNIQUEMENT une lecture réelle du capteur.
+   * `null` / `undefined` = pas de lecture : aucun appoint n'est proposé.
+   * Ne jamais y passer la valeur du champ du calculateur (initialisée à
+   * 120), sinon le garde-fou anti-hypo s'évalue sur un chiffre inventé.
+   */
+  currentGlucose: number | null | undefined;
+  /**
+   * Âge de cette lecture (min). Absent ou > TOPUP_MAX_GLUCOSE_AGE_MIN →
+   * la lecture est traitée comme absente. On ne dose pas sur une glycémie
+   * dont on ignore la fraîcheur.
+   */
+  glucoseAgeMin?: number | null;
   /** Trend Libre numérique Abbott (1 = ↓↓ … 5 = ↑↑). */
   trendArrow?: number;
   /**
@@ -323,7 +340,24 @@ export interface TopUpContext {
   lastOfferedDeficitU?: number;
 }
 
+/**
+ * Écart de glucides d'une injection confirmée : ce que le patient a
+ * réellement mangé, moins ce pour quoi il s'est injecté.
+ */
+export interface CarbDelta {
+  /** Injection concernée (pour la traçabilité de l'appoint). */
+  injectionId: string;
+  /** Grammes confirmés − grammes estimés. Positif = sous-dosé. */
+  extraCarbsG: number;
+  /** Ratio du créneau de ce repas (g par U). */
+  gramsPerU: number;
+  /** Le repas est-il marqué à quantité incertaine ? */
+  uncertain: boolean;
+}
+
 export interface TopUpSuggestion {
+  /** Injection à l'origine de l'appoint (traçabilité `parentInjectionId`). */
+  injectionId: string;
   /** Dose proposée (U entières — le stylo ne fait pas de demi-unités). */
   units: number;
   /** Déficit brut ayant motivé la proposition (U, valeur absolue). */
@@ -372,28 +406,50 @@ export function filterLearnableNightLogs<T extends { createdAt: string }>(
 }
 
 /**
- * Propose un appoint d'insuline quand les glucides restants ne sont pas
- * couverts. Ce n'est pas du stacking : c'est le complément du bolus repas
+ * Propose un appoint d'insuline pour l'écart de glucides d'une injection
+ * confirmée. Ce n'est pas du stacking : c'est le complément du bolus repas
  * (pratique MDI standard quand on a mangé plus que prévu).
+ *
+ * ⚠️ Ne PAS confondre avec le verdict de couverture de la tuile
+ * (`CarbsOnBoard.balanceU`). Celui-ci est un modèle de couverture ABSOLUE :
+ * il inclut les FPU, que `calculateBolus` diffère volontairement dans le
+ * split (décision de mai 2026, prise après une hypo terrain). Prescrire
+ * dessus reviendrait à réinjecter maintenant l'insuline que le moteur de
+ * dose a délibérément repoussée à T+2 h — exactement le mécanisme des
+ * hypoglycémies de 12h-14h. La tuile AFFICHE la couverture ; l'appoint
+ * PRESCRIT sur le seul delta glucides confirmés − estimés.
  *
  * Renvoie null dès qu'un garde-fou s'oppose. Aucune application
  * automatique : l'appelant DOIT afficher la proposition et attendre un
  * clic explicite de l'utilisateur.
  */
 export function suggestTopUp(
-  cob: CarbsOnBoard,
+  delta: CarbDelta | null,
   ctx: TopUpContext,
 ): TopUpSuggestion | null {
-  if (cob.status !== "deficit") return null;
+  if (!delta) return null;
 
   // Quantité de glucides non fiable → on ne dose pas sur du vent.
-  if (cob.uncertain) return null;
+  if (delta.uncertain) return null;
 
-  // Garde-fous anti-hypo.
-  if (ctx.currentGlucose < TOPUP_MIN_GLUCOSE) return null;
+  // Sans ratio valide, `extraCarbsG / gramsPerU` vaut ±Infinity ou NaN et
+  // traverse TOUS les seuils numériques ci-dessous (une comparaison avec
+  // NaN est toujours fausse) → une dose de 4 U sortirait de nulle part.
+  // Un delta ≤ 0 (confirmé ≤ estimé) est, lui, arrêté par le seuil de 1 U.
+  if (!Number.isFinite(delta.gramsPerU) || delta.gramsPerU <= 0) return null;
+  if (!Number.isFinite(delta.extraCarbsG)) return null;
+
+  // Garde-fous anti-hypo. Sans lecture capteur réelle ET fraîche, on ne
+  // peut pas les évaluer → on ne propose rien.
+  const glucose = ctx.currentGlucose;
+  if (typeof glucose !== "number" || !Number.isFinite(glucose)) return null;
+  const ageMin = ctx.glucoseAgeMin;
+  if (typeof ageMin !== "number" || !Number.isFinite(ageMin)) return null;
+  if (ageMin > TOPUP_MAX_GLUCOSE_AGE_MIN) return null;
+  if (glucose < TOPUP_MIN_GLUCOSE) return null;
   if (ctx.trendArrow === 1) return null;
 
-  const deficitU = Math.abs(cob.balanceU);
+  const deficitU = delta.extraCarbsG / delta.gramsPerU;
   if (deficitU < TOPUP_MIN_DEFICIT_U) return null;
 
   // Ne re-parle que si le déficit s'est creusé d'au moins 1 U de plus.
@@ -404,15 +460,22 @@ export function suggestTopUp(
     return null;
   }
 
+  // `raw >= 1` est garanti par le seuil ci-dessus (TOPUP_MIN_DEFICIT_U = 1,0
+  // et raw = floor(deficitU)) : pas de second test « units < 1 », qui serait
+  // du code mort qu'aucun test ne pourrait distinguer du seuil.
   const raw = Math.floor(deficitU);
   const units = Math.min(raw, TOPUP_MAX_UNITS);
-  if (units < 1) return null;
-
   const capped = raw > TOPUP_MAX_UNITS;
-  const grams = Math.round(cob.totalRemainingG);
+  const extra = Math.round(delta.extraCarbsG);
   const reason = capped
-    ? `Il reste ${grams} g à digérer et il manque environ ${deficitU.toFixed(1).replace(".", ",")} U. Proposition plafonnée à ${units} U par sécurité — re-vérifie ta glycémie dans 1 h.`
-    : `Il reste ${grams} g à digérer et l'insuline active ne les couvre pas. Il manque environ ${units} U.`;
+    ? `Tu as confirmé ${extra} g de plus que ce pour quoi tu t'es injecté. Il manque environ ${deficitU.toFixed(1).replace(".", ",")} U — proposition plafonnée à ${units} U par sécurité, re-vérifie ta glycémie dans 1 h.`
+    : `Tu as confirmé ${extra} g de plus que ce pour quoi tu t'es injecté. Il manque environ ${units} U pour couvrir la différence.`;
 
-  return { units, deficitU: round1(deficitU), capped, reason };
+  return {
+    injectionId: delta.injectionId,
+    units,
+    deficitU: round1(deficitU),
+    capped,
+    reason,
+  };
 }

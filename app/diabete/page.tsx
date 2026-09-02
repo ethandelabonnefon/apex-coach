@@ -11,7 +11,13 @@ import {
   inferMealTimeFromClock,
 } from "@/lib/insulin-calculator";
 import { activeIOB } from "@/lib/glucose-prediction";
-import { computeCarbsOnBoard, suggestTopUp, filterLearnableNightLogs } from "@/lib/carbs-on-board";
+import {
+  computeCarbsOnBoard,
+  suggestTopUp,
+  filterLearnableNightLogs,
+  resolveCarbs,
+  type CarbDelta,
+} from "@/lib/carbs-on-board";
 import { DIABETES_CONFIG } from "@/lib/constants";
 import type { InsulinLog, MealTime, SplitDoseReminder } from "@/types";
 import type { GlucoseTrend } from "@/lib/libre-link/utils";
@@ -46,7 +52,7 @@ import {
   resolveRecentExercise,
   type RecentExercise,
 } from "@/lib/exercise-insulin-adjustment";
-import { buildPredictionEvents } from "@/lib/prediction-inputs";
+import { buildPredictionEvents, ratioForMeal } from "@/lib/prediction-inputs";
 import { useWhoop } from "@/hooks/useWhoop";
 import NightBrain from "@/components/diabete/NightBrain";
 import { estimatePersonalGRG, classifyHypoContext } from "@/lib/hypo-resucrage";
@@ -606,17 +612,53 @@ export default function DiabetePage() {
   const liveValueForBolus = liveGlucose?.value;
   const liveTrend = trendStringToNumber(liveGlucose?.trend);
 
-  // ─── Appoint suggéré (glucides restants non couverts) ──────────────
+  // ─── Appoint suggéré (écart de glucides d'une injection confirmée) ──
+  // L'appoint NE se calcule PAS sur la couverture absolue de la tuile :
+  // celle-ci inclut les FPU que le split diffère volontairement, et
+  // prescrire dessus rejoue l'hypo de 12h-14h. Seul l'écart
+  // « confirmé − estimé » d'une injection donne lieu à une dose.
+  const carbDelta = useMemo<CarbDelta | null>(() => {
+    // `insulinLogs` est trié du plus récent au plus ancien.
+    const log = insulinLogs.find((l) => {
+      if (l.isSplitDose) return false;
+      if (!l.carbsConfirmedAt) return false;
+      const minutesAgo = (nowTick - new Date(l.injectedAt).getTime()) / 60_000;
+      if (!Number.isFinite(minutesAgo) || minutesAgo < 0 || minutesAgo > 180) return false;
+      // Un appoint enfant existe déjà pour ce repas → delta déjà servi.
+      return !insulinLogs.some(
+        (child) => child.parentInjectionId === l.id && !child.isSplitDose,
+      );
+    });
+    if (!log) return null;
+    return {
+      injectionId: log.id,
+      extraCarbsG: resolveCarbs(log) - (log.carbsGrams ?? 0),
+      gramsPerU: ratioForMeal(diabetesConfig.ratios, log.mealType),
+      uncertain: log.carbsUncertain === true,
+    };
+  }, [insulinLogs, nowTick, diabetesConfig.ratios]);
+
   // Placé après `liveGlucose` (déclaré ci-dessus) : suggestTopUp a besoin
-  // de la glycémie live la plus fraîche pour ses garde-fous anti-hypo.
+  // de la glycémie CAPTEUR la plus fraîche pour ses garde-fous anti-hypo.
+  // On ne lui passe jamais `currentGlucose` (champ du calculateur,
+  // initialisé à 120) : un garde-fou évalué sur une valeur inventée ne
+  // protège de rien.
+  const liveGlucoseAgeMin = useMemo(() => {
+    if (!liveGlucose) return undefined;
+    const ms = new Date(liveGlucose.date).getTime();
+    if (!Number.isFinite(ms)) return undefined;
+    return (nowTick - ms) / 60_000;
+  }, [liveGlucose, nowTick]);
+
   const topUp = useMemo(
     () =>
-      suggestTopUp(cob, {
-        currentGlucose: liveGlucose?.value ?? currentGlucose,
-        trendArrow: trendStringToNumber(liveGlucose?.trend) ?? trendArrow,
+      suggestTopUp(carbDelta, {
+        currentGlucose: liveGlucose?.value,
+        glucoseAgeMin: liveGlucoseAgeMin,
+        trendArrow: trendStringToNumber(liveGlucose?.trend),
         lastOfferedDeficitU: topUpDismissedDeficit,
       }),
-    [cob, liveGlucose, currentGlucose, trendArrow, topUpDismissedDeficit],
+    [carbDelta, liveGlucose, liveGlucoseAgeMin, topUpDismissedDeficit],
   );
 
   // Auto-refresh la glycémie live quand on active le briefing pré-sport
@@ -736,6 +778,7 @@ export default function DiabetePage() {
   }
 
   function handleAcceptTopUp(units: number) {
+    if (!topUp) return;
     if (
       typeof window !== "undefined" &&
       !window.confirm(`Enregistrer un appoint de ${units} U ?`)
@@ -751,9 +794,14 @@ export default function DiabetePage() {
       glucoseBefore: liveGlucose?.value ?? currentGlucose,
       notes: "appoint (glucides non couverts)",
       injectedAt: new Date(),
-      parentInjectionId: pendingConfirm?.id,
+      // Traçabilité : l'appoint pointe sur le repas qui l'a causé — c'est
+      // aussi ce qui marque ce delta comme servi (cf. `carbDelta`).
+      parentInjectionId: topUp.injectionId,
     });
-    setTopUpDismissedDeficit(undefined);
+    // NE PAS effacer la mémoire anti-répétition : sur un déficit plafonné
+    // à 4 U, l'effacer laissait la carte reproposer 4 U aussitôt →
+    // 8 U en deux clics, plafond contourné.
+    setTopUpDismissedDeficit(topUp.deficitU);
   }
 
   // ─── Sessions sport enrichies (Bloc 6.3) ──────────────────────────

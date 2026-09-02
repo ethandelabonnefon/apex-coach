@@ -14,7 +14,8 @@ import {
   computeCarbsOnBoard,
   suggestTopUp,
   filterLearnableNightLogs,
-  type CarbsOnBoard,
+  type CarbDelta,
+  type TopUpContext,
 } from "./carbs-on-board";
 import type { InsulinLog } from "@/types";
 
@@ -217,72 +218,145 @@ test("aucune donnée → idle, tous les compteurs à zéro", () => {
   assert.equal(cob.uncertain, false);
 });
 
-/** CarbsOnBoard synthétique pour tester les garde-fous isolément. */
-function cobWith(over: Partial<CarbsOnBoard> = {}): CarbsOnBoard {
+/** Écart de glucides synthétique pour tester les garde-fous isolément. */
+function deltaWith(over: Partial<CarbDelta> = {}): CarbDelta {
   return {
-    carbsRemainingG: 40,
-    fpuRemainingG: 0,
-    totalRemainingG: 40,
-    insulinNeededU: 4,
-    insulinActiveU: 0,
-    balanceU: -4,
-    status: "deficit",
+    injectionId: "inj-1",
+    extraCarbsG: 40,
+    gramsPerU: 10,
     uncertain: false,
-    sources: [],
     ...over,
   };
 }
 
-test("appoint : déficit de 4 U à glycémie normale → 4 U proposées", () => {
-  const s = suggestTopUp(cobWith(), { currentGlucose: 150 });
+/** Contexte nominal : lecture capteur réelle, fraîche, en plage. */
+const OK_CTX: TopUpContext = { currentGlucose: 150, glucoseAgeMin: 2 };
+
+test("appoint : delta de 40 g au ratio 10 → 4 U proposées", () => {
+  const s = suggestTopUp(deltaWith(), OK_CTX);
   assert.ok(s, "une suggestion est attendue");
   assert.equal(s.units, 4);
+  // Traçabilité : l'appoint sait toujours quel repas l'a causé.
+  assert.equal(s.injectionId, "inj-1");
 });
 
 test("appoint : dose arrondie à l'entier inférieur (stylo sans demi-unités)", () => {
-  const s = suggestTopUp(cobWith({ balanceU: -3.8 }), { currentGlucose: 150 });
+  const s = suggestTopUp(deltaWith({ extraCarbsG: 38 }), OK_CTX);
   assert.equal(s?.units, 3);
 });
 
-test("appoint : plafonné à 4 U même sur un gros déficit", () => {
-  const s = suggestTopUp(cobWith({ balanceU: -9 }), { currentGlucose: 200 });
+test("appoint : plafonné à 4 U même sur un gros écart", () => {
+  const s = suggestTopUp(deltaWith({ extraCarbsG: 90 }), {
+    currentGlucose: 200,
+    glucoseAgeMin: 2,
+  });
   assert.equal(s?.units, 4);
   assert.equal(s?.capped, true);
 });
 
 test("appoint : rien sous le seuil de 1 U", () => {
-  assert.equal(suggestTopUp(cobWith({ balanceU: -0.9 }), { currentGlucose: 150 }), null);
+  assert.equal(suggestTopUp(deltaWith({ extraCarbsG: 9 }), OK_CTX), null);
 });
 
 test("appoint : bloqué si glycémie < 90", () => {
-  assert.equal(suggestTopUp(cobWith(), { currentGlucose: 85 }), null);
+  assert.equal(
+    suggestTopUp(deltaWith(), { currentGlucose: 85, glucoseAgeMin: 2 }),
+    null,
+  );
 });
 
 test("appoint : bloqué si trend en chute rapide", () => {
   assert.equal(
-    suggestTopUp(cobWith(), { currentGlucose: 150, trendArrow: 1 }),
+    suggestTopUp(deltaWith(), { ...OK_CTX, trendArrow: 1 }),
     null,
   );
 });
 
-test("appoint : bloqué si une source est incertaine", () => {
+test("appoint : bloqué si le repas est marqué incertain", () => {
+  assert.equal(suggestTopUp(deltaWith({ uncertain: true }), OK_CTX), null);
+});
+
+test("appoint : aucun delta (pas d'injection confirmée) → null", () => {
+  assert.equal(suggestTopUp(null, OK_CTX), null);
+});
+
+test("appoint : delta nul ou négatif (confirmé ≤ estimé) → null", () => {
+  assert.equal(suggestTopUp(deltaWith({ extraCarbsG: 0 }), OK_CTX), null);
+  assert.equal(suggestTopUp(deltaWith({ extraCarbsG: -40 }), OK_CTX), null);
+});
+
+test("appoint : entrées non finies → null (pas de dose sortie de NaN)", () => {
+  // Un ratio à 0 donne extraCarbsG/0 = Infinity, un delta NaN donne NaN :
+  // les deux traversent tous les seuils (comparer avec NaN est toujours
+  // faux) et produiraient une dose plafonnée à 4 U sans aucun fondement.
+  assert.equal(suggestTopUp(deltaWith({ gramsPerU: 0 }), OK_CTX), null);
+  assert.equal(suggestTopUp(deltaWith({ gramsPerU: NaN }), OK_CTX), null);
+  assert.equal(suggestTopUp(deltaWith({ extraCarbsG: NaN }), OK_CTX), null);
+});
+
+test("appoint : gros FPU mais delta glucides nul → null (non-régression C1)", () => {
+  // Pâtes 100 g / 24 g lip / 40 g prot : `calculateBolus` diffère
+  // volontairement l'insuline FPU dans le split. Le patient confirme
+  // exactement les 100 g estimés → aucun appoint ne doit être proposé.
+  // Ce test échoue si le FPU (ou la couverture absolue de la tuile)
+  // revient dans le calcul de la dose d'appoint.
+  const cob = computeCarbsOnBoard({
+    insulinLogs: [
+      log(10, {
+        carbsGrams: 100,
+        carbsConfirmedGrams: 100,
+        carbsConfirmedAt: new Date().toISOString(),
+        fatGrams: 24,
+        proteinGrams: 40,
+        units: 10,
+      }),
+    ],
+    isf: ISF,
+    ratios: RATIOS,
+  });
+  // La tuile, elle, voit bien un déficit de couverture (FPU non couverts) :
+  // c'est justement ce chiffre qu'il ne faut pas prescrire.
+  assert.equal(cob.status, "deficit");
+  assert.ok(cob.balanceU < -1, `déficit de couverture attendu, reçu ${cob.balanceU}`);
+
+  const delta: CarbDelta = {
+    injectionId: "pates",
+    extraCarbsG: 100 - 100,
+    gramsPerU: 10,
+    uncertain: false,
+  };
+  assert.equal(suggestTopUp(delta, OK_CTX), null);
+});
+
+test("appoint : ne re-propose pas tant que l'écart ne s'est pas creusé d'1 U", () => {
+  const ctx: TopUpContext = { ...OK_CTX, lastOfferedDeficitU: 4 };
+  assert.equal(suggestTopUp(deltaWith({ extraCarbsG: 45 }), ctx), null);
+  const s = suggestTopUp(deltaWith({ extraCarbsG: 52 }), ctx);
+  assert.equal(s?.units, 4);
+});
+
+// ─── Garde-fous de fraîcheur / présence de la glycémie (C4) ───────────
+
+test("appoint : bloqué si aucune lecture de glycémie", () => {
+  assert.equal(suggestTopUp(deltaWith(), { currentGlucose: null }), null);
   assert.equal(
-    suggestTopUp(cobWith({ uncertain: true }), { currentGlucose: 150 }),
+    suggestTopUp(deltaWith(), { currentGlucose: undefined, glucoseAgeMin: 2 }),
     null,
   );
 });
 
-test("appoint : rien si le statut n'est pas 'deficit'", () => {
+test("appoint : bloqué si la lecture a plus de 15 min", () => {
   assert.equal(
-    suggestTopUp(cobWith({ status: "covered", balanceU: -4 }), { currentGlucose: 150 }),
+    suggestTopUp(deltaWith(), { currentGlucose: 150, glucoseAgeMin: 20 }),
     null,
   );
+  // Âge inconnu = traité comme absent (on ne dose pas sur une lecture
+  // dont on ignore la fraîcheur).
+  assert.equal(suggestTopUp(deltaWith(), { currentGlucose: 150 }), null);
 });
 
-test("appoint : ne re-propose pas tant que le déficit ne s'est pas creusé d'1 U", () => {
-  const ctx = { currentGlucose: 150, lastOfferedDeficitU: 4 };
-  assert.equal(suggestTopUp(cobWith({ balanceU: -4.5 }), ctx), null);
-  const s = suggestTopUp(cobWith({ balanceU: -5.2 }), ctx);
+test("appoint : lecture fraîche à 150 → suggestion", () => {
+  const s = suggestTopUp(deltaWith(), { currentGlucose: 150, glucoseAgeMin: 5 });
   assert.equal(s?.units, 4);
 });
 
