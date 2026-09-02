@@ -1943,6 +1943,7 @@ git commit -m "feat(diabete): repas à quantité incertaine + rappel de confirma
 **Files:**
 - Modify: `lib/meal-analytics.ts`
 - Modify: `lib/carbs-on-board.ts` (helper de filtrage des nuits)
+- Modify: `lib/night-brain.ts` (input `mealCoverage` : présente au lieu de recalculer)
 - Test: `lib/carbs-on-board.test.ts`
 - Modify: `app/diabete/page.tsx` (calibration nuit, night-brain)
 - Modify: `app/diabete/docteur/page.tsx:268`, `app/diabete/historique/page.tsx:330`
@@ -2099,20 +2100,64 @@ Ajouter dans les deux fichiers : `import { isLearnable } from "@/lib/carbs-on-bo
 
 - [ ] **Step 8: Rebrancher `mealCoverage` du Night Brain sur le vrai COB**
 
-Dans `app/diabete/page.tsx`, dans l'objet passé à `computeNightPlan` (chercher `mealCoverage` ou l'appel à `computeNightPlan`), ajouter :
+`night-brain.ts` recalcule aujourd'hui le déficit lui-même (`expected = carbsGrams / gramsPerU`), avec un ratio unique. Lui passer des grammes bruts ferait coexister deux calculs de couverture concurrents et divergents. Le moteur COB devient la seule source : night-brain n'est plus qu'un présentateur.
+
+Dans `lib/night-brain.ts`, remplacer la déclaration de l'input (~ligne 49) :
+
+```ts
+  /**
+   * Couverture du repas en cours, calculée par le moteur COB
+   * (lib/carbs-on-board.ts). Night Brain ne recalcule rien : il présente.
+   */
+  mealCoverage?: {
+    /** Glucides encore à absorber (g). */
+    carbsRemainingG: number;
+    /** Balance insuline active − besoin (U). Négatif = sous-dosé. */
+    balanceU: number;
+  };
+```
+
+Puis remplacer le corps du bloc `if (input.mealCoverage …)` (~ligne 147) :
+
+```ts
+  let coverageStep: NightStep | undefined;
+  if (input.mealCoverage) {
+    const { carbsRemainingG, balanceU } = input.mealCoverage;
+    const grams = Math.round(carbsRemainingG);
+    if (balanceU <= -1.5) {
+      coverageStep = {
+        id: "coverage",
+        order: 0,
+        kind: "coverage",
+        tone: "warning",
+        headline: `Attention, tu as peut-être trop mangé pour ton insuline`,
+        detail: `Il reste ~${grams}g de glucides à digérer et il manque ~${(-balanceU).toFixed(1).replace(".", ",")}U pour les couvrir → ça va te faire monter (vois le réveil prédit ci-dessous). Surveille, une correction sera peut-être conseillée plus bas.`,
+      };
+    } else if (balanceU >= 1.5) {
+      coverageStep = {
+        id: "coverage",
+        order: 0,
+        kind: "coverage",
+        tone: "info",
+        headline: `Tu as plus d'insuline active que nécessaire`,
+        detail: `Surplus ~${balanceU.toFixed(1).replace(".", ",")}U pour les ~${grams}g qu'il te reste à digérer → risque de baisse. Garde du sucre à portée et surveille.`,
+      };
+    }
+  }
+```
+
+Les seuils ±1,5 U sont conservés tels quels : le plan de la nuit reste volontairement plus prudent que la tuile (seuil 1,0 U), parce qu'une alerte nocturne engage plusieurs heures sans surveillance.
+
+Enfin, dans `app/diabete/page.tsx`, dans l'objet retourné par le memo `bedtimeInput` (à côté de `pendingSplitUnits`, ~ligne 922), ajouter :
 
 ```ts
       mealCoverage:
         cob.status === "idle" || cob.uncertain
           ? undefined
-          : {
-              carbsGrams: Math.round(cob.totalRemainingG),
-              insulinUnits: cob.insulinActiveU,
-              gramsPerU: diabetesConfig.ratios.dinner,
-            },
+          : { carbsRemainingG: cob.totalRemainingG, balanceU: cob.balanceU },
 ```
 
-Un repas incertain ne produit pas d'étape `coverage` : le plan de la nuit ne doit pas conseiller de dose sur une quantité inconnue.
+et ajouter `cob` au tableau de dépendances du memo. Un repas incertain ne produit pas d'étape `coverage` : le plan de la nuit ne conseille jamais de dose sur une quantité inconnue.
 
 - [ ] **Step 9: Supprimer le code mort `ManualDigestion`**
 
