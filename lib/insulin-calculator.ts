@@ -278,9 +278,15 @@ export function calculateBolus(
     );
   }
 
-  // Stylo Novorapid d'Ethan = pas de demi-unités. On arrondit au-dessus
-  // pour éviter de sous-doser (le risque "hyper" est plus prévisible que
-  // le risque "hypo brutal" en post-prandial avec une dose insuffisante).
+  // Stylo Novorapid d'Ethan = pas de demi-unités, il faut donc choisir un
+  // entier. ⚠️ FIX (sept 2026, retour terrain hypos fréquentes/sévères) :
+  // l'ancien choix — arrondir SYSTÉMATIQUEMENT au-dessus — ajoutait jusqu'à
+  // +0.9U d'insuline à chaque repas, toujours dans le sens qui fait
+  // descendre la glycémie. À l'ISF d'Ethan (100 mg/dL/U) ça représente
+  // jusqu'à 90 mg/dL d'insuline en trop, systématiquement. Pour un patient
+  // qui fait des hypos fréquentes (parfois sévères), c'est le mauvais
+  // arbitrage : mieux vaut arrondir au PLUS PROCHE (erreur max ±0.5U dans
+  // les deux sens) que de biaiser tout le monde vers le bas en continu.
   //
   // Seuils split dose (Phase 11, calibrage final mai 2026 basé sur les
   // guidelines NHS Cambridge / Whittington / ADA + Pankowska Warsaw method).
@@ -332,10 +338,15 @@ export function calculateBolus(
   const fpuBolusLater = useSplit ? fpuBolus : 0;
 
   const rawTotal = Math.max(0, carbBolus + correctionBolus + trendBolus + fpuBolusNow);
-  const totalBolus = Math.ceil(rawTotal);
-  if (rawTotal > 0 && totalBolus !== Math.round(rawTotal * 10) / 10) {
+  // Arrondi au PLUS PROCHE (pas systématiquement au-dessus, cf. commentaire
+  // au-dessus) — jamais négatif puisque rawTotal est déjà clampé à 0 par
+  // Math.max ci-dessus.
+  const totalBolus = Math.round(rawTotal);
+  const roundedRawTotal = Math.round(rawTotal * 10) / 10;
+  if (rawTotal > 0 && totalBolus !== roundedRawTotal) {
+    const direction = totalBolus > rawTotal ? "au-dessus" : "en dessous";
     reasoning.push(
-      `Arrondi au-dessus : ${rawTotal.toFixed(1).replace(".", ",")}U → ${totalBolus}U (stylo sans demi-unités)`
+      `Arrondi ${direction} : ${rawTotal.toFixed(1).replace(".", ",")}U → ${totalBolus}U (stylo sans demi-unités)`
     );
   }
 

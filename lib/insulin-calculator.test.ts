@@ -145,3 +145,64 @@ test("IOB : jamais soustrait du bolus repas (T1D-safe)", () => {
   assert.equal(withIob.carbBolus, withoutIob.carbBolus);
   assert.ok(withIob.carbBolus > 0);
 });
+
+// ─── Arrondi du bolus total : au plus proche, plus jamais systématiquement
+// au-dessus (sept 2026) ────────────────────────────────────────────────
+//
+// Retour terrain : l'ancien `Math.ceil` ajoutait jusqu'à +0.9U d'insuline à
+// CHAQUE repas, toujours dans le sens qui fait descendre la glycémie — chez
+// un patient qui fait des hypos fréquentes (parfois sévères), à ISF 100
+// mg/dL/U ça représente jusqu'à 90 mg/dL d'insuline en trop. Ratio midi par
+// défaut = 10g/U, donc `carbsGrams / 10` donne directement le rawTotal
+// voulu (pas de correction, pas de FPU, pas de trend → pas de bruit).
+//
+// Discriminance vérifiée manuellement : en repassant temporairement
+// `const totalBolus = Math.round(rawTotal)` à `Math.ceil(rawTotal)` dans
+// lib/insulin-calculator.ts, les tests "5,2U → 5U" et "message de
+// raisonnement" échouent bien (5.2 → 6 au lieu de 5 ; le message dit
+// "au-dessus" au lieu de "en dessous") — restauré ensuite à `Math.round`.
+
+test("arrondi au plus proche : 5,2U calculés → 5U injectés (pas 6, ancien Math.ceil)", () => {
+  // 52g / (10g/U) = 5.2U de bolus glucides, rien d'autre.
+  const result = calculateBolus(52, "lunch", 110, false, null, 0, undefined, 0);
+  assert.equal(result.carbBolus, 5.2);
+  assert.equal(result.totalBolus, 5);
+});
+
+test("arrondi au plus proche : 5,7U calculés → 6U injectés", () => {
+  // 57g / (10g/U) = 5.7U.
+  const result = calculateBolus(57, "lunch", 110, false, null, 0, undefined, 0);
+  assert.equal(result.carbBolus, 5.7);
+  assert.equal(result.totalBolus, 6);
+});
+
+test("arrondi au plus proche : 6,0U calculés exactement → 6U (pas de sur-arrondi)", () => {
+  // 60g / (10g/U) = 6.0U pile — aucun arrondi ne devrait être nécessaire.
+  const result = calculateBolus(60, "lunch", 110, false, null, 0, undefined, 0);
+  assert.equal(result.carbBolus, 6);
+  assert.equal(result.totalBolus, 6);
+  // Pas de message "Arrondi ..." dans le raisonnement quand rawTotal est déjà entier.
+  assert.ok(!result.reasoning.some((r) => r.startsWith("Arrondi")));
+});
+
+test("le total ne peut jamais être négatif (clamp Math.max(0, ...) avant arrondi)", () => {
+  // Petit bolus glucides (0.5U) + forte correction négative de tendance
+  // (trend ↓↓ = -1U) : la somme brute serait -0.5U avant clamp.
+  const result = calculateBolus(5, "lunch", 110, false, null, 0, undefined, 0, 0, 0, 1);
+  assert.ok(result.totalBolus >= 0, `totalBolus ne doit jamais être négatif, reçu ${result.totalBolus}`);
+  assert.equal(result.totalBolus, 0);
+});
+
+test("le message de raisonnement reflète le sens réel de l'arrondi (au-dessus/en dessous)", () => {
+  const up = calculateBolus(57, "lunch", 110, false, null, 0, undefined, 0); // 5.7 → 6
+  assert.ok(
+    up.reasoning.some((r) => r.includes("Arrondi au-dessus") && r.includes("5,7U") && r.includes("6U")),
+    `raisonnement attendu "Arrondi au-dessus", reçu ${JSON.stringify(up.reasoning)}`
+  );
+
+  const down = calculateBolus(52, "lunch", 110, false, null, 0, undefined, 0); // 5.2 → 5
+  assert.ok(
+    down.reasoning.some((r) => r.includes("Arrondi en dessous") && r.includes("5,2U") && r.includes("5U")),
+    `raisonnement attendu "Arrondi en dessous", reçu ${JSON.stringify(down.reasoning)}`
+  );
+});
