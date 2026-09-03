@@ -12,7 +12,7 @@
  */
 
 import { activeIOB, type ActiveBolus } from "./glucose-prediction";
-import { resolveCarbs } from "./insulin-log-values";
+import { isLearnable, resolveCarbs } from "./insulin-log-values";
 import type { InsulinLog } from "@/types";
 
 // ───────────────────────────────────────────────────────────────────────
@@ -193,7 +193,7 @@ export function selectEligibleMeals(
 
     // Ordre des exclusions : le premier motif rencontré est celui compté,
     // pour que la somme des motifs égale le nombre de repas écartés.
-    if (log.carbsUncertain === true) {
+    if (!isLearnable(log)) {
       bump("uncertain");
       continue;
     }
