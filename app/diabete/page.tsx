@@ -1406,14 +1406,17 @@ export default function DiabetePage() {
         </div>
       </section>
 
+      {/* ── AJOUTER DES GLUCIDES (geste d'urgence : re-sucrage, collation) ──
+          Volontairement juste sous les 3 tuiles du haut, avant la courbe 8h :
+          accessible sans défiler quand Ethan vient de se re-sucrer. Section
+          unique — ne pas en recréer une deuxième ailleurs. */}
+      <div className="mb-4">
+        <CarbEntryLogger />
+      </div>
+
       {/* ── COURBE 8H (capteur live) ── */}
       <div className="mb-4">
         <GlucoseChart />
-      </div>
-
-      {/* ── GLUCIDES SANS INSULINE (entrée pour le plan nuit) ── */}
-      <div className="mb-4">
-        <CarbEntryLogger />
       </div>
 
       {/* ── PATTERNS DÉTECTÉS (Phase 11 Bloc 3) ── */}

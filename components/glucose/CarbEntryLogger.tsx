@@ -8,6 +8,13 @@
  *
  * Remplace le bloc "Glucides sans insuline" qui vivait dans l'ancienne carte
  * "Prédiction 8h" (supprimée). Composant autonome, toujours visible.
+ *
+ * Fix sept. 2026 : renommé "Ajouter des glucides" (le titre technique
+ * "Glucides sans insuline" ne se reconnaissait pas comme le geste
+ * d'urgence cherché) et remonté sous les 3 tuiles du haut sur /diabete,
+ * avant la courbe 8h — Ethan doit pouvoir l'atteindre sans défiler quand
+ * il vient de se re-sucrer. Il n'y a et il ne doit y avoir qu'une seule
+ * section d'ajout de glucides dans l'app.
  */
 
 import { useState } from "react";
@@ -80,7 +87,7 @@ export default function CarbEntryLogger() {
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Apple className="w-4 h-4 text-diabete" />
-          <h2 className="text-base font-semibold text-text-primary">Glucides sans insuline</h2>
+          <h2 className="text-base font-semibold text-text-primary">Ajouter des glucides</h2>
         </div>
         {!showForm && (
           <button
@@ -94,8 +101,8 @@ export default function CarbEntryLogger() {
       </div>
 
       <p className="text-[11px] text-text-tertiary mt-1 leading-snug">
-        Pour ce que tu manges sans faire d&apos;insuline (re-sucrage, collation). Pris en
-        compte dans le plan nuit.
+        Glucides mangés sans injection : re-sucrage, compote, collation non bolussée.
+        Pris en compte dans le plan nuit.
       </p>
 
       {active.length > 0 && (
