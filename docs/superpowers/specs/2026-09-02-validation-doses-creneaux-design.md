@@ -91,6 +91,10 @@ seconde dose de split, et ne tombe sous **aucune** des quatre exclusions retenue
 | **Quantité incertaine** | `carbsUncertain === true` | Une hypo après un plat dont les glucides sont inconnus ne dit rien sur le ratio — elle dit que l'estimation était fausse. Réutilise `isLearnable()`. |
 | **Correction intercalée** | une injection de correction est loggée entre le repas et la fin de la fenêtre | L'hypo peut venir de cette seconde dose. |
 
+| **Fenêtre trop courte** | le prochain repas bolussé survient moins de 120 min après celui-ci, donc la fenêtre de jugement serait tronquée trop court (motif `short-window`) | La fenêtre d'observation est tronquée au prochain bolus portant des glucides : sans cela, la fenêtre du goûter de 17 h 30 engloberait le bolus du dîner de 19 h, et une hypo de 21 h 30 causée par le dîner serait imputée au ratio du goûter. Sous 120 min, ce qui reste ne prouve rien — un goûter muet est honnête, un goûter jugé sur l'insuline du dîner ne l'est pas. |
+| **Couverture capteur insuffisante** | `glucoseBefore` absent, ou moins de 60 % des points attendus dans la fenêtre (motif `no-coverage`) | Sans cette règle, une archive vide — KV non configuré, panne de lecture, trou de capteur — ne trouve aucune hypo et produit un verdict « correct » en vert sur trois créneaux. Un repas qu'on n'a pas mesuré ne prouve rien, ni dans un sens ni dans l'autre. |
+| **Glycémie déjà basse au repas** | `glucoseBefore < 80` (motif `low-at-meal`) | Le premier point sous 70 serait alors un état antérieur, pas un effet de la dose. C'est aussi la seule façon d'écarter un repas pris *pour traiter* une hypo. |
+
 Le nombre de repas écartés par chaque motif est conservé et affiché : si un créneau est muet,
 Ethan doit pouvoir voir *pourquoi* (« 6 repas écartés : 5 suivis de sport »). Sans ça, un créneau
 structurellement inanalysable ressemble à un bug.
@@ -99,7 +103,7 @@ structurellement inanalysable ressemble à un bug.
 
 ## 3. Le critère et le verdict
 
-**Une hypo** = un point capteur sous **70 mg/dL** dans les **5 h** suivant le bolus du repas.
+**Une hypo** = un point capteur sous **70 mg/dL** entre **45 min** et la fin de la fenêtre d'observation (5 h, ou moins si tronquée par le repas suivant). La latence de 45 min existe parce qu'un bolus ne peut pas causer d'hypoglycémie dans son premier quart d'heure : un point bas plus tôt mesure un état antérieur, pas l'effet de la dose.
 Une seule hypo est comptée par repas, même si la glycémie repasse sous le seuil plusieurs fois :
 on compte des repas fautifs, pas des points.
 
