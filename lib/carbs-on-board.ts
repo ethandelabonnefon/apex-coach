@@ -37,6 +37,10 @@ import {
   resolveFat,
   resolveProtein,
 } from "./insulin-log-values";
+// Seuil d'hypoglycémie — déjà défini pour la sélection des repas analysables
+// (`dose-validation.ts`). Même seuil, pas une seconde définition : importé,
+// jamais recopié.
+import { HYPO_THRESHOLD } from "./dose-validation";
 import type { CarbEntry, InsulinLog } from "@/types";
 
 // ───────────────────────────────────────────────────────────────────────
@@ -236,6 +240,14 @@ export interface CarbsOnBoard {
   status: CobStatus;
   /** Au moins une source à quantité incertaine. */
   uncertain: boolean;
+  /**
+   * Glycémie sous `HYPO_THRESHOLD` au moment du calcul (correction 2,
+   * septembre 2026). Ne change AUCUN calcul de couverture — seule
+   * `cobVerdict` s'en sert pour taire le verdict de déficit : afficher
+   * « il manque de l'insuline » pendant un re-sucrage revient à demander
+   * d'annuler le traitement de l'hypo en cours.
+   */
+  hypoActive: boolean;
   sources: ActiveCarbSource[];
 }
 
@@ -247,6 +259,15 @@ export interface ComputeCarbsOnBoardOptions extends BuildCarbSourcesOptions {
    * `NIGHT_BALANCE_THRESHOLD_U` (1,5) — même définition, seuil plus strict.
    */
   balanceThresholdU?: number;
+  /**
+   * Glycémie courante (mg/dL), pour la règle de silence en hypo
+   * (`hypoActive` → `cobVerdict`). Optionnelle et sans effet sur les
+   * grammes ou la couverture : `computeCarbsOnBoard` n'a pas besoin de la
+   * glycémie pour son calcul, seul l'affichage du verdict en a besoin.
+   * `null`/`undefined`/non-fini → `hypoActive` reste `false` (comportement
+   * inchangé pour tout appelant qui ne la fournit pas).
+   */
+  currentGlucose?: number | null;
 }
 
 /**
@@ -344,6 +365,11 @@ export function computeCarbsOnBoard(
     thresholdU: opts.balanceThresholdU,
   });
 
+  const hypoActive =
+    typeof opts.currentGlucose === "number" &&
+    Number.isFinite(opts.currentGlucose) &&
+    opts.currentGlucose < HYPO_THRESHOLD;
+
   return {
     carbsRemainingG: round1(carbsRemainingG),
     fpuRemainingG: round1(fpuRemainingG),
@@ -353,6 +379,7 @@ export function computeCarbsOnBoard(
     balanceU: round1(balanceU),
     status,
     uncertain,
+    hypoActive,
     sources,
   };
 }
@@ -380,6 +407,15 @@ export interface CobVerdict {
  * elle masquait « Insuline en excès ~7 U » — l'alerte hypo — derrière un
  * « Quantité incertaine ». Seul le verdict `deficit` (conseil de dose à la
  * hausse) est neutralisé sur une quantité inconnue.
+ *
+ * ⚠️ Correction 2 (production, septembre 2026) : en hypoglycémie réelle
+ * (`cob.hypoActive`), le verdict `deficit` ne dit plus « il manque de
+ * l'insuline » — l'utilisateur est justement en train de traiter un excès
+ * d'insuline avec du re-sucrage, et « il manque de l'insuline » revient à
+ * lui demander d'annuler son propre traitement. Les grammes restent
+ * affichés par la tuile (elle lit `cob.totalRemainingG`, pas ce verdict) :
+ * seule la phrase de couverture se tait. `excess`/`covered`/`idle` ne
+ * disent rien de contradictoire pendant une hypo — ils ne sont pas neutralisés.
  */
 export function cobVerdict(cob: CarbsOnBoard): CobVerdict {
   const suffix = cob.uncertain ? " · quantité incertaine" : "";
@@ -395,6 +431,13 @@ export function cobVerdict(cob: CarbsOnBoard): CobVerdict {
     };
   }
   if (cob.status === "deficit") {
+    if (cob.hypoActive) {
+      return {
+        text: "Resucrage en cours — pas de verdict de couverture",
+        tone: "info",
+        approximate: false,
+      };
+    }
     return cob.uncertain
       ? {
           text: "Quantité incertaine — pas de conseil de dose",

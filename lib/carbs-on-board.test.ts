@@ -24,6 +24,7 @@ import {
 } from "./carbs-on-board";
 import type { InsulinLog } from "@/types";
 import { buildHypoCarbEntry } from "./hypo-resucrage";
+import { HYPO_THRESHOLD } from "./dose-validation";
 
 const ISF = 100;
 const RATIOS = { morning: 6.7, lunch: 10, snack: 8.3, dinner: 10 };
@@ -712,4 +713,54 @@ test("jumeau : les mêmes 17 g saisis SANS hypoEventId (glucides ordinaires) com
     cob.insulinNeededU > 0,
     "17g ordinaires (sans hypoEventId) doivent générer un besoin d'insuline",
   );
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// Correction 2 (septembre 2026) : silence du verdict de déficit en hypo
+// ───────────────────────────────────────────────────────────────────────
+//
+// La correction 1 seule ne suffit pas : sur les 82 g de l'utilisateur,
+// seuls 17 venaient du resucrage, le reste d'un repas. La tuile aurait
+// encore affiché « il manque ~2,5 U » à 68 mg/dL — arithmétiquement vrai,
+// mais toujours la mauvaise phrase au pire moment. Sous `HYPO_THRESHOLD`,
+// `cobVerdict` remplace le conseil de déficit par un message neutre ; au
+// dessus, le verdict de déficit revient à l'identique.
+
+test("verdict : sous le seuil d'hypo, le déficit se tait — resucrage en cours, pas de conseil de dose", () => {
+  const cob = computeCarbsOnBoard({
+    insulinLogs: [log(20, { carbsGrams: 100, units: 0 })],
+    isf: ISF,
+    ratios: RATIOS,
+    currentGlucose: HYPO_THRESHOLD - 2, // 68 mg/dL, cas terrain
+  });
+  assert.equal(cob.status, "deficit");
+  assert.equal(cob.hypoActive, true);
+
+  const v = cobVerdict(cob);
+  assert.doesNotMatch(v.text, /il manque/i, `le verdict de déficit ne doit pas s'afficher, reçu « ${v.text} »`);
+  assert.match(v.text, /resucrage/i);
+});
+
+test("verdict : au-dessus du seuil d'hypo (même état sinon), le verdict de déficit revient", () => {
+  const cob = computeCarbsOnBoard({
+    insulinLogs: [log(20, { carbsGrams: 100, units: 0 })],
+    isf: ISF,
+    ratios: RATIOS,
+    currentGlucose: 120,
+  });
+  assert.equal(cob.status, "deficit");
+  assert.equal(cob.hypoActive, false);
+
+  const v = cobVerdict(cob);
+  assert.match(v.text, /il manque/i);
+});
+
+test("hypoActive : reste false par défaut si aucune glycémie n'est fournie (rétrocompat)", () => {
+  const cob = computeCarbsOnBoard({
+    insulinLogs: [log(20, { carbsGrams: 100, units: 0 })],
+    isf: ISF,
+    ratios: RATIOS,
+  });
+  assert.equal(cob.hypoActive, false);
+  assert.match(cobVerdict(cob).text, /il manque/i);
 });

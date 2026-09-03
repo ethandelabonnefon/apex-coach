@@ -358,21 +358,6 @@ export default function DiabetePage() {
     };
   }, [insulinLogs, nowTick]);
 
-  // ─── Glucides actifs (COB) ────────────────────────────────────────
-  // Même moteur d'absorption que la prédiction nuit → les deux vues ne
-  // peuvent pas se contredire.
-  const cob = useMemo(
-    () =>
-      computeCarbsOnBoard({
-        insulinLogs,
-        carbEntries,
-        isf: diabetesConfig.insulinSensitivityFactor,
-        ratios: diabetesConfig.ratios,
-        nowMs: nowTick,
-      }),
-    [insulinLogs, carbEntries, diabetesConfig, nowTick],
-  );
-
   // ─── Confirmation des glucides (T+15 → T+3h) ──────────────────────
   // État dérivé : la première injection avec glucides, ni confirmée ni
   // marquée incertaine, dans la fenêtre.
@@ -646,6 +631,26 @@ export default function DiabetePage() {
   const { current: liveGlucose, refetch: refetchGlucose, lastFetchedAt: lastLiveFetch } = useGlucose({ mode: "current" });
   const liveValueForBolus = liveGlucose?.value;
   const liveTrend = trendStringToNumber(liveGlucose?.trend);
+
+  // ─── Glucides actifs (COB) ────────────────────────────────────────
+  // Même moteur d'absorption que la prédiction nuit → les deux vues ne
+  // peuvent pas se contredire. `currentGlucose` (live si dispo, sinon
+  // manuel) alimente uniquement `hypoActive` (correction 2, septembre
+  // 2026) : sous le seuil d'hypo, la tuile tait son verdict de déficit —
+  // aucun calcul de couverture ni de grammes n'en dépend. Déclaré après
+  // `useGlucose` : dépend de `liveGlucose`.
+  const cob = useMemo(
+    () =>
+      computeCarbsOnBoard({
+        insulinLogs,
+        carbEntries,
+        isf: diabetesConfig.insulinSensitivityFactor,
+        ratios: diabetesConfig.ratios,
+        nowMs: nowTick,
+        currentGlucose: liveGlucose?.value ?? currentGlucose,
+      }),
+    [insulinLogs, carbEntries, diabetesConfig, nowTick, liveGlucose, currentGlucose],
+  );
 
   // ─── Appoint suggéré (écart de glucides d'une injection confirmée) ──
   // L'appoint NE se calcule PAS sur la couverture absolue de la tuile :
