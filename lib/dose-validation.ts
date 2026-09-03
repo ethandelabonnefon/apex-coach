@@ -250,3 +250,97 @@ export function selectEligibleMeals(
     windowDays: Math.min(MAX_WINDOW_DAYS, Math.ceil((now - third) / DAY_MS)),
   };
 }
+
+// ───────────────────────────────────────────────────────────────────────
+// Verdict
+// ───────────────────────────────────────────────────────────────────────
+
+/** Nombre minimal de repas avec hypo pour parler de sur-dosage. */
+export const OVER_BOLUS_MIN_HYPOS = 2;
+/** Taux minimal de repas avec hypo pour parler de sur-dosage. */
+export const OVER_BOLUS_MIN_RATE = 0.25;
+/** Pas de correction : −10 % sur l'insuline par gramme. */
+export const RATIO_STEP = 0.1;
+
+/** Créneaux analysés, dans l'ordre d'affichage. */
+export const MEAL_SLOTS = ["morning", "lunch", "snack", "dinner"] as const;
+
+export type SlotVerdict = "insufficient-data" | "ok" | "over-bolus";
+export type SlotConfidence = "provisoire" | "confirmé";
+
+export interface SlotAnalysis {
+  mealType: string;
+  verdict: SlotVerdict;
+  eligibleCount: number;
+  hypoCount: number;
+  hypoRate: number;
+  confidence: SlotConfidence;
+  windowDays: number;
+  excluded: Partial<Record<ExclusionReason, number>>;
+  /** Écart moyen glycémie à T+5h − glycémie avant repas (mg/dL). */
+  avgLandingDelta: number | null;
+  /** Ratios en g par U. `null` hors verdict `over-bolus`. */
+  proposedRatio: { current: number; proposed: number } | null;
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+export function analyzeSlot(
+  selection: SlotSelection,
+  currentRatio: number,
+  mealType: string,
+): SlotAnalysis {
+  const meals = selection.meals;
+  const eligibleCount = meals.length;
+  const hypoCount = meals.filter((m) => m.hadHypo).length;
+  const hypoRate = eligibleCount > 0 ? hypoCount / eligibleCount : 0;
+
+  const confirmedCount = meals.filter((m) => m.confirmed).length;
+  const confidence: SlotConfidence =
+    eligibleCount > 0 && confirmedCount / eligibleCount >= 0.5 ? "confirmé" : "provisoire";
+
+  const landings = meals
+    .filter((m) => m.glucoseBefore !== null && m.glucoseAfter5h !== null)
+    .map((m) => (m.glucoseAfter5h as number) - (m.glucoseBefore as number));
+  const avgLandingDelta =
+    landings.length > 0
+      ? Math.round(landings.reduce((s, v) => s + v, 0) / landings.length)
+      : null;
+
+  let verdict: SlotVerdict;
+  if (eligibleCount < MIN_ELIGIBLE_MEALS) {
+    verdict = "insufficient-data";
+  } else if (hypoCount >= OVER_BOLUS_MIN_HYPOS && hypoRate >= OVER_BOLUS_MIN_RATE) {
+    verdict = "over-bolus";
+  } else {
+    verdict = "ok";
+  }
+
+  // Le ratio est stocké en grammes par unité. Retirer 10 % d'insuline par
+  // gramme revient à AUGMENTER les grammes par unité : 10 g/U → 11,1 g/U.
+  const proposedRatio =
+    verdict === "over-bolus" && currentRatio > 0
+      ? { current: currentRatio, proposed: round1(currentRatio / (1 - RATIO_STEP)) }
+      : null;
+
+  return {
+    mealType,
+    verdict,
+    eligibleCount,
+    hypoCount,
+    hypoRate: round1(hypoRate * 100) / 100,
+    confidence,
+    windowDays: selection.windowDays,
+    excluded: selection.excluded,
+    avgLandingDelta,
+    proposedRatio,
+  };
+}
+
+export function analyzeAllSlots(input: DoseValidationInput): SlotAnalysis[] {
+  return MEAL_SLOTS.map((slot) =>
+    analyzeSlot(selectEligibleMeals(input, slot), input.ratios[slot], slot),
+  );
+}

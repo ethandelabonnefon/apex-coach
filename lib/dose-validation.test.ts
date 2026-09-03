@@ -9,9 +9,14 @@ import assert from "node:assert/strict";
 
 import {
   selectEligibleMeals,
+  analyzeSlot,
+  analyzeAllSlots,
   HYPO_THRESHOLD,
+  RATIO_STEP,
   type ArchivePoint,
   type DoseValidationInput,
+  type EligibleMeal,
+  type SlotSelection,
   type SportSession,
 } from "./dose-validation";
 import type { InsulinLog } from "@/types";
@@ -263,4 +268,97 @@ test("glycémie avant / à T+5h renseignées, glucides confirmés prioritaires",
 
 test("le seuil d'hypo est bien 70", () => {
   assert.equal(HYPO_THRESHOLD, 70);
+});
+
+// ─── Verdict ────────────────────────────────────────────────────────────
+
+/** Sélection synthétique : `n` repas, dont `hypos` avec hypo. */
+function selection(n: number, hypos: number, over: Partial<EligibleMeal> = {}): SlotSelection {
+  const meals: EligibleMeal[] = [];
+  for (let i = 0; i < n; i++) {
+    meals.push({
+      injectionId: `m${i}`,
+      mealType: "lunch",
+      injectedAt: NOW - (i + 1) * 3_600_000,
+      carbsGrams: 60,
+      units: 6,
+      confirmed: false,
+      glucoseBefore: 130,
+      glucoseAfter5h: 130,
+      hadHypo: i < hypos,
+      ...over,
+    });
+  }
+  return { meals, excluded: {}, windowDays: 7 };
+}
+
+test("verdict : moins de 3 repas éligibles → insufficient-data, même avec des hypos", () => {
+  const a = analyzeSlot(selection(2, 2), 10, "lunch");
+  assert.equal(a.verdict, "insufficient-data");
+  assert.equal(a.proposedRatio, null);
+});
+
+test("verdict : 2 hypos sur 4 repas (50 %) → over-bolus", () => {
+  const a = analyzeSlot(selection(4, 2), 10, "lunch");
+  assert.equal(a.verdict, "over-bolus");
+});
+
+test("verdict : 1 hypo sur 3 repas → ok (le seuil de 2 événements protège)", () => {
+  assert.equal(analyzeSlot(selection(3, 1), 10, "lunch").verdict, "ok");
+});
+
+test("verdict : 2 hypos sur 30 repas (6,7 %) → ok (le taux de 25 % protège)", () => {
+  assert.equal(analyzeSlot(selection(30, 2), 10, "lunch").verdict, "ok");
+});
+
+test("proposition : −10 % sur l'insuline par gramme, seulement sur over-bolus", () => {
+  const a = analyzeSlot(selection(4, 2), 10, "lunch");
+  assert.equal(a.proposedRatio?.current, 10);
+  // 0,10 U/g → 0,09 U/g ⇒ 11,1 g/U
+  assert.ok(
+    Math.abs((a.proposedRatio?.proposed ?? 0) - 11.1) < 0.05,
+    `attendu ~11,1 g/U, reçu ${a.proposedRatio?.proposed}`,
+  );
+  assert.equal(analyzeSlot(selection(4, 0), 10, "lunch").proposedRatio, null);
+});
+
+test("proposition : un seul pas, quelle que soit la sévérité", () => {
+  const modere = analyzeSlot(selection(4, 2), 10, "lunch");
+  const severe = analyzeSlot(selection(4, 4), 10, "lunch");
+  assert.equal(modere.proposedRatio?.proposed, severe.proposedRatio?.proposed);
+});
+
+test("confiance : bascule à « confirmé » à la moitié des repas confirmés", () => {
+  const s = selection(4, 0);
+  s.meals[0].confirmed = true;
+  s.meals[1].confirmed = true;
+  assert.equal(analyzeSlot(s, 10, "lunch").confidence, "confirmé");
+  s.meals[1].confirmed = false;
+  assert.equal(analyzeSlot(s, 10, "lunch").confidence, "provisoire");
+});
+
+test("atterrissage : moyenne sur les seuls repas ayant les deux mesures", () => {
+  const s = selection(3, 0);
+  s.meals[0].glucoseBefore = 130; s.meals[0].glucoseAfter5h = 85;   // −45
+  s.meals[1].glucoseBefore = 140; s.meals[1].glucoseAfter5h = 95;   // −45
+  s.meals[2].glucoseBefore = null; s.meals[2].glucoseAfter5h = 100; // ignoré
+  assert.equal(analyzeSlot(s, 10, "lunch").avgLandingDelta, -45);
+});
+
+test("atterrissage : null si aucun repas n'a les deux mesures", () => {
+  const s = selection(3, 0, { glucoseBefore: null });
+  assert.equal(analyzeSlot(s, 10, "lunch").avgLandingDelta, null);
+});
+
+test("analyzeAllSlots rend les 4 créneaux, même vides", () => {
+  const all = analyzeAllSlots(input());
+  assert.deepEqual(
+    all.map((a) => a.mealType),
+    ["morning", "lunch", "snack", "dinner"],
+  );
+  assert.ok(all.every((a) => a.verdict === "insufficient-data"));
+});
+
+test("le pas de correction est bien de 10 %", () => {
+  assert.equal(RATIO_STEP, 0.1);
 });
