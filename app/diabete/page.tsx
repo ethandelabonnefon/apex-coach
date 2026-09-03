@@ -57,6 +57,7 @@ import {
   type RecentExercise,
 } from "@/lib/exercise-insulin-adjustment";
 import { buildPredictionEvents } from "@/lib/prediction-inputs";
+import { capDoseByPrediction } from "@/lib/dose-capping";
 import { useWhoop } from "@/hooks/useWhoop";
 import NightBrain from "@/components/diabete/NightBrain";
 import { estimatePersonalGRG, classifyHypoContext, buildHypoCarbEntry } from "@/lib/hypo-resucrage";
@@ -409,6 +410,14 @@ export default function DiabetePage() {
   // Phase F2 — Hook Whoop (strain Whoop prime sur l'estimation interne)
   const whoop = useWhoop();
 
+  // ─── Raccourci "Utiliser la valeur live" pour le calculateur bolus ─────
+  // Déclaré ici (et non plus bas) : le plafonnement prédictif (cappedDose,
+  // ci-dessous) a besoin de `liveGlucose?.value` avant sa propre déclaration
+  // dans l'ordre du fichier — jamais de `currentGlucose` (état par défaut).
+  const { current: liveGlucose, refetch: refetchGlucose, lastFetchedAt: lastLiveFetch } = useGlucose({ mode: "current" });
+  const liveValueForBolus = liveGlucose?.value;
+  const liveTrend = trendStringToNumber(liveGlucose?.trend);
+
   // Phase F — Détection séance récente + ajustement post-exercice
   // Si Whoop est connecté ET a un workout dans les 24h, on utilise le
   // strain Whoop directement. Sinon, on estime depuis nos données.
@@ -448,6 +457,29 @@ export default function DiabetePage() {
     return computeExerciseAdjustment(recent, nowTick);
   }, [completedWorkouts, completedRunningSessions, nowTick, whoop.connected, whoop.snapshot]);
 
+  // La sensibilité post-exercice amplifie l'effet de l'insuline. Le
+  // plafonnement en a besoin ; le memo du plan de nuit le construisait
+  // 600 lignes plus bas, donc trop tard pour le calculateur.
+  const recentExercise = useMemo(
+    () =>
+      resolveRecentExercise({
+        nowMs: nowTick,
+        lastWhoopWorkout: whoop.connected ? whoop.snapshot?.lastWorkout ?? null : null,
+        completedWorkouts: completedWorkouts.map((w) => ({
+          id: w.id,
+          date: w.date,
+          duration: w.duration,
+        })),
+        completedRunningSessions: completedRunningSessions.map((r) => ({
+          id: r.id,
+          date: r.date,
+          actualDuration: r.actualDuration,
+          glucoseCheckpoints: r.glucoseCheckpoints,
+        })),
+      }),
+    [nowTick, whoop.connected, whoop.snapshot, completedWorkouts, completedRunningSessions],
+  );
+
   const bolusResult = useMemo(
     () =>
       calculateBolus(
@@ -482,6 +514,41 @@ export default function DiabetePage() {
     ]
   );
 
+  // Le calculateur produit une dose candidate ; le prédicteur la valide.
+  // Sans ce garde-fou, l'app propose des doses que son propre moteur
+  // annonce comme hypoglycémiantes (cas mesuré : 10 U → 40 mg/dL prédits).
+  const cappedDose = useMemo(
+    () =>
+      capDoseByPrediction(bolusResult.totalBolus, {
+        currentGlucose: liveGlucose?.value,
+        insulinLogs,
+        carbEntries,
+        pendingMeal: {
+          carbsGrams,
+          fatGrams,
+          proteinGrams,
+          mealType: mealTime,
+        },
+        isf: diabetesConfig.insulinSensitivityFactor,
+        ratios: diabetesConfig.ratios,
+        sport: recentExercise ?? undefined,
+        nowMs: nowTick,
+      }),
+    [
+      bolusResult.totalBolus,
+      recentExercise,
+      liveGlucose,
+      insulinLogs,
+      carbEntries,
+      carbsGrams,
+      fatGrams,
+      proteinGrams,
+      mealTime,
+      diabetesConfig,
+      nowTick,
+    ],
+  );
+
   // ─── Override manuel des unités ────────────────
   const [unitsOverride, setUnitsOverride] = useState<number | null>(null);
   useEffect(() => {
@@ -498,7 +565,7 @@ export default function DiabetePage() {
     proteinGrams,
     trendArrow,
   ]);
-  const finalUnits = unitsOverride ?? bolusResult.totalBolus;
+  const finalUnits = unitsOverride ?? cappedDose.units;
 
   // ─── Niveau de confiance des macros (Phase 11, mai 2026) ──────
   // - "precise" : l'utilisateur a saisi ses macros manuellement (Yazio)
@@ -521,10 +588,10 @@ export default function DiabetePage() {
 
   function handleLogInjection() {
     if (finalUnits <= 0) return;
-    const overridden = unitsOverride !== null && unitsOverride !== bolusResult.totalBolus;
+    const overridden = unitsOverride !== null && unitsOverride !== cappedDose.units;
     const baseNote = isPreWorkout ? `pré-${workoutType}` : "";
     const overrideNote = overridden
-      ? `manuel (calc proposait ${bolusResult.totalBolus}U)`
+      ? `manuel (calc proposait ${cappedDose.units}U)`
       : "";
     const splitNote = bolusResult.splitDose ? `split 1/2` : "";
     const notes = [baseNote, overrideNote, splitNote].filter(Boolean).join(" · ");
@@ -626,11 +693,6 @@ export default function DiabetePage() {
   const lastValue = lastGlucose?.value ?? currentGlucose;
   const iobTone: "info" | "warning" =
     iob.totalIOB > 2 ? "warning" : "info";
-
-  // ─── Raccourci "Utiliser la valeur live" pour le calculateur bolus ─────
-  const { current: liveGlucose, refetch: refetchGlucose, lastFetchedAt: lastLiveFetch } = useGlucose({ mode: "current" });
-  const liveValueForBolus = liveGlucose?.value;
-  const liveTrend = trendStringToNumber(liveGlucose?.trend);
 
   // ─── Glucides actifs (COB) ────────────────────────────────────────
   // Même moteur d'absorption que la prédiction nuit → les deux vues ne
@@ -1115,18 +1177,6 @@ export default function DiabetePage() {
       ratios: diabetesConfig.ratios,
       nowMs: nowTick,
     });
-    const sportExercise = resolveRecentExercise({
-      nowMs: nowTick,
-      lastWhoopWorkout: whoop.connected ? whoop.snapshot?.lastWorkout ?? null : null,
-      completedWorkouts: completedWorkouts.map((w) => ({ id: w.id, date: w.date, duration: w.duration })),
-      completedRunningSessions: completedRunningSessions.map((r) => ({
-        id: r.id,
-        date: r.date,
-        actualDuration: r.actualDuration,
-        glucoseCheckpoints: r.glucoseCheckpoints,
-      })),
-    });
-
     // Split en attente
     const upcomingSplit = splitDoseReminders
       .filter((r) => r.status === "pending")
@@ -1163,7 +1213,7 @@ export default function DiabetePage() {
       lastMealCarbs: mealCarbs,
       // Moteur unifié (consolidation) — prédictions = même moteur que la courbe 8h
       events,
-      sportExercise: sportExercise ?? undefined,
+      sportExercise: recentExercise ?? undefined,
       exerciseAdjustmentPct: exerciseAdjustment?.reductionPct,
       exerciseSource: exerciseAdjustment?.source as 'running' | 'muscu' | 'cardio-other' | undefined,
       exerciseHoursAgo: exerciseAdjustment?.hoursAgo,
@@ -1199,12 +1249,9 @@ export default function DiabetePage() {
     iob.totalIOB,
     diabetesConfig,
     exerciseAdjustment,
+    recentExercise,
     splitDoseReminders,
     carbEntries,
-    completedWorkouts,
-    completedRunningSessions,
-    whoop.connected,
-    whoop.snapshot,
     nightCalibration,
     cob,
     nowTick,
@@ -2425,6 +2472,35 @@ export default function DiabetePage() {
             </button>
           </div>
 
+          {/* Plafonnement prédictif (septembre 2026) */}
+          {cappedDose.capped && (
+            <div className="mt-3 rounded-xl border border-warning/25 bg-warning/5 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <ShieldAlert className="w-4 h-4 text-warning" />
+                <p className="text-sm font-semibold text-text-primary">
+                  Ramenée de {cappedDose.originalUnits} U à {cappedDose.units} U
+                </p>
+              </div>
+              <p className="text-xs text-text-secondary">
+                {cappedDose.reason}
+                {cappedDose.predictedMinMinute !== null && (
+                  <>
+                    {" "}
+                    Minimum prévu vers{" "}
+                    {new Date(nowTick + cappedDose.predictedMinMinute * 60_000).toLocaleTimeString(
+                      "fr-FR",
+                      { hour: "2-digit", minute: "2-digit" },
+                    )}
+                    .
+                  </>
+                )}
+              </p>
+            </div>
+          )}
+          {!cappedDose.capped && cappedDose.reason && (
+            <p className="mt-3 text-xs text-text-tertiary">{cappedDose.reason}</p>
+          )}
+
           {/* Split dose later */}
           {bolusResult.splitDose && (
             <div className="text-center mb-3 rounded-lg bg-accent-2/10 border border-accent-2/30 px-3 py-2">
@@ -2447,13 +2523,13 @@ export default function DiabetePage() {
 
           {/* Indicateur suggestion calc + reset si modifié */}
           <div className="text-center mb-4">
-            {unitsOverride !== null && unitsOverride !== bolusResult.totalBolus ? (
+            {unitsOverride !== null && unitsOverride !== cappedDose.units ? (
               <button
                 type="button"
                 onClick={() => setUnitsOverride(null)}
                 className="text-[11px] text-text-tertiary hover:text-diabete transition-colors underline-offset-2 hover:underline"
               >
-                Modifié — calc suggérait {bolusResult.totalBolus}U (cliquer pour rétablir)
+                Modifié — calc suggérait {cappedDose.units}U (cliquer pour rétablir)
               </button>
             ) : (
               <p className="text-[11px] text-text-tertiary">
