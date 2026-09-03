@@ -473,7 +473,13 @@ export function selectEligibleMeals(
   if (inSeven.length >= MIN_ELIGIBLE_MEALS) {
     windowDays = MIN_WINDOW_DAYS;
   } else if (eligible.length < MIN_ELIGIBLE_MEALS) {
-    const oldest = eligible.length > 0 ? eligible[eligible.length - 1].injectedAt : now;
+    // Aucun repas éligible : il n'y a pas d'ancre côté repas retenus. On
+    // retombe sur `floor`, le début réel de la recherche de candidats
+    // (borné à MAX_WINDOW_DAYS et à ratioChangedAt) — pas sur `now`, qui
+    // donnerait un repli arbitraire à MIN_WINDOW_DAYS et viderait les
+    // motifs d'exclusion de tout candidat plus vieux que 7 jours alors
+    // qu'ils ont bien été examinés.
+    const oldest = eligible.length > 0 ? eligible[eligible.length - 1].injectedAt : floor;
     const span = Math.ceil((now - oldest) / DAY_MS);
     windowDays = Math.min(MAX_WINDOW_DAYS, Math.max(MIN_WINDOW_DAYS, span));
   } else {

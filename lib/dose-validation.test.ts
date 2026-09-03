@@ -20,6 +20,7 @@ import {
   MIN_COVERAGE_RATIO,
   MIN_ELIGIBLE_MEALS,
   MIN_TRUNCATED_WINDOW_MIN,
+  MIN_WINDOW_DAYS,
   MUSCU_EXCLUSION_MIN_DURATION,
   RATIO_STEP,
   type ArchivePoint,
@@ -691,6 +692,27 @@ test("I3 — les exclusions sont comptées sur la MÊME fenêtre que les repas r
     sel.excluded.uncertain ?? 0,
     0,
     "10 repas écartés il y a deux mois ne s'affichent pas à côté d'une fenêtre de 7 jours",
+  );
+});
+
+// ─── Point 2 (re-revue) : le motif d'exclusion ne doit pas disparaître ──
+// quand un créneau n'a AUCUN repas éligible.
+
+test("Point 2 — créneau vide : les motifs restent visibles même si tous les candidats datent de plus de 7 jours", () => {
+  const old: InsulinLog[] = [];
+  for (let d = 20; d < 25; d++) {
+    old.push(meal(d, { id: `old-${d}`, carbsUncertain: true }));
+  }
+  const sel = selectEligibleMeals(input({ insulinLogs: old }), "lunch");
+  assert.equal(sel.meals.length, 0, "aucun repas éligible dans ce scénario");
+  assert.equal(
+    sel.excluded.uncertain,
+    5,
+    "les 5 candidats écartés doivent apparaître, pas être vidés par un repli à 7 jours",
+  );
+  assert.ok(
+    sel.windowDays > MIN_WINDOW_DAYS,
+    `windowDays (${sel.windowDays}) doit couvrir la fenêtre réellement examinée pour chercher des candidats, pas un repli arbitraire à MIN_WINDOW_DAYS`,
   );
 });
 
