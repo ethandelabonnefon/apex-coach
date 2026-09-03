@@ -11,8 +11,16 @@ import {
   selectEligibleMeals,
   analyzeSlot,
   analyzeAllSlots,
+  computeRatioStamps,
+  hasNewRatioStamps,
   formatRatio,
   HYPO_THRESHOLD,
+  HYPO_LATENCY_MIN,
+  LOW_AT_MEAL_THRESHOLD,
+  MIN_COVERAGE_RATIO,
+  MIN_ELIGIBLE_MEALS,
+  MIN_TRUNCATED_WINDOW_MIN,
+  MUSCU_EXCLUSION_MIN_DURATION,
   RATIO_STEP,
   type ArchivePoint,
   type DoseValidationInput,
@@ -65,6 +73,11 @@ function input(over: Partial<DoseValidationInput> = {}): DoseValidationInput {
   };
 }
 
+/** Cinq repas de contrôle anciens, sans interaction avec le cas testé. */
+function filler(): InsulinLog[] {
+  return [meal(30), meal(31), meal(32), meal(33), meal(34)];
+}
+
 test("repas sans glucides et secondes doses de split sont écartés", () => {
   const sel = selectEligibleMeals(
     input({
@@ -79,10 +92,12 @@ test("repas sans glucides et secondes doses de split sont écartés", () => {
   assert.deepEqual(sel.meals.map((m) => m.injectionId), ["c"]);
 });
 
-test("exclusion sport : séance dans la fenêtre d'observation", () => {
+// ─── Exclusion sport (décision produit D1 : la muscu courte n'exclut plus) ──
+
+test("exclusion sport : running dans la fenêtre d'observation", () => {
   const workouts: SportSession[] = [
     // séance 2 h APRÈS le repas de J-1 → dans la fenêtre de 5 h
-    { date: new Date(NOW - 1 * DAY + 120 * MIN).toISOString(), durationMin: 60 },
+    { date: new Date(NOW - 1 * DAY + 120 * MIN).toISOString(), durationMin: 30, type: "running" },
   ];
   const sel = selectEligibleMeals(
     input({ insulinLogs: [meal(1, { id: "a" }), meal(2), meal(3), meal(4)], workouts }),
@@ -92,9 +107,9 @@ test("exclusion sport : séance dans la fenêtre d'observation", () => {
   assert.equal(sel.excluded.sport, 1);
 });
 
-test("exclusion sport : séance dans les 4 h AVANT le repas", () => {
+test("exclusion sport : running dans les 4 h AVANT le repas", () => {
   const workouts: SportSession[] = [
-    { date: new Date(NOW - 1 * DAY - 180 * MIN).toISOString(), durationMin: 45 },
+    { date: new Date(NOW - 1 * DAY - 180 * MIN).toISOString(), durationMin: 45, type: "running" },
   ];
   const sel = selectEligibleMeals(
     input({ insulinLogs: [meal(1, { id: "a" }), meal(2), meal(3), meal(4)], workouts }),
@@ -106,7 +121,7 @@ test("exclusion sport : séance dans les 4 h AVANT le repas", () => {
 
 test("exclusion sport : séance hors fenêtre ne disqualifie pas", () => {
   const workouts: SportSession[] = [
-    { date: new Date(NOW - 1 * DAY + 8 * 60 * MIN).toISOString(), durationMin: 60 },
+    { date: new Date(NOW - 1 * DAY + 8 * 60 * MIN).toISOString(), durationMin: 60, type: "running" },
   ];
   const sel = selectEligibleMeals(
     input({ insulinLogs: [meal(1, { id: "a" }), meal(2), meal(3)], workouts }),
@@ -115,6 +130,93 @@ test("exclusion sport : séance hors fenêtre ne disqualifie pas", () => {
   assert.ok(sel.meals.some((m) => m.injectionId === "a"));
   assert.equal(sel.excluded.sport ?? 0, 0);
 });
+
+test("D1 — une muscu de 60 min n'écarte PAS le repas", () => {
+  const workouts: SportSession[] = [
+    { date: new Date(NOW - 1 * DAY + 120 * MIN).toISOString(), durationMin: 60, type: "muscu" },
+  ];
+  const sel = selectEligibleMeals(
+    input({ insulinLogs: [meal(1, { id: "a" }), ...filler()], workouts }),
+    "lunch",
+  );
+  assert.ok(
+    sel.meals.some((m) => m.injectionId === "a"),
+    "la muscu ne fait pas chuter la glycémie : la donnée reste valide",
+  );
+  assert.equal(sel.excluded.sport ?? 0, 0);
+});
+
+test("D1 — une muscu de 90 min écarte le repas", () => {
+  const workouts: SportSession[] = [
+    { date: new Date(NOW - 1 * DAY + 120 * MIN).toISOString(), durationMin: 90, type: "muscu" },
+  ];
+  const sel = selectEligibleMeals(
+    input({ insulinLogs: [meal(1, { id: "a" }), ...filler()], workouts }),
+    "lunch",
+  );
+  assert.ok(!sel.meals.some((m) => m.injectionId === "a"));
+  assert.equal(sel.excluded.sport, 1);
+});
+
+test("D1 — le seuil muscu est bien 75 min", () => {
+  assert.equal(MUSCU_EXCLUSION_MIN_DURATION, 75);
+  const at = new Date(NOW - 1 * DAY + 120 * MIN).toISOString();
+  const kept = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(1, { id: "a" }), ...filler()],
+      workouts: [{ date: at, durationMin: 75, type: "muscu" }],
+    }),
+    "lunch",
+  );
+  assert.ok(kept.meals.some((m) => m.injectionId === "a"), "75 min pile : gardé");
+  const dropped = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(1, { id: "a" }), ...filler()],
+      workouts: [{ date: at, durationMin: 76, type: "muscu" }],
+    }),
+    "lunch",
+  );
+  assert.ok(!dropped.meals.some((m) => m.injectionId === "a"), "76 min : écarté");
+});
+
+test("D1 — un running de 30 min écarte toujours", () => {
+  const workouts: SportSession[] = [
+    { date: new Date(NOW - 1 * DAY + 60 * MIN).toISOString(), durationMin: 30, type: "running" },
+  ];
+  const sel = selectEligibleMeals(
+    input({ insulinLogs: [meal(1, { id: "a" }), ...filler()], workouts }),
+    "lunch",
+  );
+  assert.ok(!sel.meals.some((m) => m.injectionId === "a"));
+  assert.equal(sel.excluded.sport, 1);
+});
+
+test("D1 — chevauchement : séance à H−260 min durant 60 min écarte le repas", () => {
+  // Le seul instant de DÉBUT est hors des 4 h précédentes (H−260), mais la
+  // séance déborde jusqu'à H−200 : elle chevauche bien la zone sensible.
+  const start = new Date(NOW - 1 * DAY - 260 * MIN).toISOString();
+  const overlapping = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(1, { id: "a" }), ...filler()],
+      workouts: [{ date: start, durationMin: 60, type: "running" }],
+    }),
+    "lunch",
+  );
+  assert.ok(!overlapping.meals.some((m) => m.injectionId === "a"));
+  assert.equal(overlapping.excluded.sport, 1);
+
+  // Contrôle : même début, séance de 5 min → aucun chevauchement.
+  const short = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(1, { id: "a" }), ...filler()],
+      workouts: [{ date: start, durationMin: 5, type: "running" }],
+    }),
+    "lunch",
+  );
+  assert.ok(short.meals.some((m) => m.injectionId === "a"));
+});
+
+// ─── Autres exclusions ─────────────────────────────────────────────────
 
 test("exclusion IOB : injection récente au moment du bolus", () => {
   const base = NOW - 1 * DAY;
@@ -173,47 +275,165 @@ test("exclusion correction intercalée, mais PAS le split du repas lui-même", (
   assert.equal(sel.excluded.correction, 1);
 });
 
-test("fenêtre : 7 jours si elle contient déjà 3 repas éligibles", () => {
-  const sel = selectEligibleMeals(
-    input({ insulinLogs: [meal(1), meal(2), meal(3), meal(20)] }),
-    "lunch",
-  );
-  assert.equal(sel.windowDays, 7);
-  assert.equal(sel.meals.length, 3);
-});
-
-test("fenêtre : s'étend en arrière jusqu'à réunir 3 repas éligibles", () => {
-  const sel = selectEligibleMeals(
-    input({ insulinLogs: [meal(1), meal(10), meal(12), meal(40)] }),
-    "lunch",
-  );
-  assert.equal(sel.meals.length, 3);
-  assert.equal(sel.windowDays, 12);
-  assert.ok(!sel.meals.some((m) => m.injectionId === "meal-40"));
-});
-
-test("fenêtre : plafonnée à 90 jours", () => {
-  const sel = selectEligibleMeals(
-    input({ insulinLogs: [meal(1), meal(95), meal(100)] }),
-    "lunch",
-  );
-  assert.equal(sel.meals.length, 1);
-  assert.ok(sel.windowDays <= 90);
-});
-
-test("fenêtre : ne remonte jamais avant ratioChangedAt", () => {
+test("C4 — un APPOINT (parentInjectionId sans isSplitDose) disqualifie son repas", () => {
+  const base = NOW - 1 * DAY;
   const sel = selectEligibleMeals(
     input({
-      insulinLogs: [meal(1), meal(5), meal(20), meal(30)],
-      ratioChangedAt: { lunch: new Date(NOW - 10 * DAY).toISOString() },
+      insulinLogs: [
+        meal(0, { id: "a", injectedAt: new Date(base) }),
+        // Appoint tel que le crée handleAcceptTopUp : mealType correction,
+        // 0 g de glucides, parentInjectionId renseigné, PAS de isSplitDose.
+        meal(0, {
+          id: "topup", units: 1, carbsGrams: 0, mealType: "correction",
+          parentInjectionId: "a", injectedAt: new Date(base + 100 * MIN),
+        }),
+        ...filler(),
+      ],
     }),
     "lunch",
   );
-  assert.equal(sel.meals.length, 2);
-  assert.ok(sel.meals.every((m) => m.injectedAt >= NOW - 10 * DAY));
+  assert.ok(
+    !sel.meals.some((m) => m.injectionId === "a"),
+    "l'appoint est une dose décidée après coup : il disqualifie le repas",
+  );
+  assert.equal(sel.excluded.correction, 1);
 });
 
-test("hypo : détectée dans les 5 h, une seule fois par repas", () => {
+// ─── C3 : troncature de la fenêtre au prochain bolus repas ──────────────
+
+test("C3 — goûter à H, dîner à H+90 min → fenêtre trop courte, exclu", () => {
+  const base = NOW - 1 * DAY;
+  const sel = selectEligibleMeals(
+    input({
+      insulinLogs: [
+        meal(0, { id: "snack-a", mealType: "snack", injectedAt: new Date(base) }),
+        meal(0, { id: "dinner-a", mealType: "dinner", injectedAt: new Date(base + 90 * MIN) }),
+      ],
+    }),
+    "snack",
+  );
+  assert.ok(!sel.meals.some((m) => m.injectionId === "snack-a"));
+  assert.equal(sel.excluded["short-window"], 1);
+  assert.equal(MIN_TRUNCATED_WINDOW_MIN, 120);
+});
+
+test("C3 — goûter à H, dîner à H+240 min → retenu, et l'hypo post-dîner ne compte pas", () => {
+  const base = NOW - 1 * DAY;
+  // Creux à H+280 min : APRÈS le bolus du dîner (H+240), donc imputable au
+  // dîner, pas au goûter.
+  const pts = flatPoints(130).map((p) => {
+    const dt = p.t - base;
+    return dt > 275 * MIN && dt < 295 * MIN ? { ...p, value: 60 } : p;
+  });
+  const logs = [
+    meal(0, { id: "snack-a", mealType: "snack", injectedAt: new Date(base) }),
+    meal(0, { id: "dinner-a", mealType: "dinner", injectedAt: new Date(base + 240 * MIN) }),
+  ];
+  const sel = selectEligibleMeals(input({ insulinLogs: logs, archivePoints: pts }), "snack");
+  const a = sel.meals.find((m) => m.injectionId === "snack-a");
+  assert.ok(a, "fenêtre de 240 min : le goûter reste analysable");
+  assert.equal(a?.windowMin, 240);
+  assert.equal(a?.hadHypo, false, "l'hypo post-dîner ne compte pas contre le goûter");
+
+  // Contrôle : sans le dîner, la fenêtre va jusqu'à H+300 et l'hypo compte.
+  const noDinner = selectEligibleMeals(
+    input({ insulinLogs: [logs[0]], archivePoints: pts }),
+    "snack",
+  );
+  assert.equal(noDinner.meals.find((m) => m.injectionId === "snack-a")?.hadHypo, true);
+});
+
+// ─── C2 : couverture capteur ───────────────────────────────────────────
+
+/** Six repas par créneau, décalés de 4 h, sur les six derniers jours. */
+function fourSlotsSample(): InsulinLog[] {
+  const slots = ["morning", "lunch", "snack", "dinner"];
+  const logs: InsulinLog[] = [];
+  for (let d = 1; d <= 6; d++) {
+    slots.forEach((slot, i) => {
+      logs.push(
+        meal(0, {
+          id: `${slot}-${d}`,
+          mealType: slot,
+          injectedAt: new Date(NOW - d * DAY + i * 240 * MIN),
+        }),
+      );
+    });
+  }
+  return logs;
+}
+
+test("C2 — archive VIDE : aucun créneau en « ok », tous en insufficient-data", () => {
+  const all = analyzeAllSlots(
+    input({ insulinLogs: fourSlotsSample(), archivePoints: [] }),
+  );
+  assert.equal(all.length, 4);
+  assert.ok(
+    all.every((a) => a.verdict === "insufficient-data"),
+    `aucun verdict ok sans mesure, reçu ${all.map((a) => a.verdict).join(", ")}`,
+  );
+  assert.ok(all.every((a) => (a.excluded["no-coverage"] ?? 0) > 0));
+});
+
+test("C2 — le MÊME échantillon avec capteur produit bien des verdicts", () => {
+  // Contre-preuve du test précédent : le silence vient de l'absence de
+  // mesure, pas d'un échantillon trop maigre.
+  const all = analyzeAllSlots(input({ insulinLogs: fourSlotsSample() }));
+  assert.ok(all.every((a) => a.verdict === "ok"), all.map((a) => a.verdict).join(", "));
+});
+
+test("C2 — couverture à 50 % de la fenêtre → exclu (no-coverage)", () => {
+  const base = NOW - 1 * DAY;
+  // On garde la première moitié de la fenêtre (10 points sur 20 attendus).
+  const pts = flatPoints(130).filter(
+    (p) => !(p.t > base + 150 * MIN && p.t <= base + 300 * MIN),
+  );
+  const sel = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(0, { id: "a", injectedAt: new Date(base) })],
+      archivePoints: pts,
+    }),
+    "lunch",
+  );
+  assert.ok(!sel.meals.some((m) => m.injectionId === "a"));
+  assert.equal(sel.excluded["no-coverage"], 1);
+});
+
+test("C2 — couverture à 80 % de la fenêtre → repas retenu", () => {
+  const base = NOW - 1 * DAY;
+  const pts = flatPoints(130).filter(
+    (p) => !(p.t > base + 240 * MIN && p.t <= base + 300 * MIN),
+  );
+  const sel = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(0, { id: "a", injectedAt: new Date(base) })],
+      archivePoints: pts,
+    }),
+    "lunch",
+  );
+  assert.ok(sel.meals.some((m) => m.injectionId === "a"));
+  assert.equal(sel.excluded["no-coverage"] ?? 0, 0);
+  assert.equal(MIN_COVERAGE_RATIO, 0.6);
+});
+
+test("C2 — glycémie avant repas non mesurée → exclu (no-coverage)", () => {
+  const base = NOW - 1 * DAY;
+  // Trou capteur de ±20 min autour du bolus : glucoseBefore reste null.
+  const pts = flatPoints(130).filter((p) => Math.abs(p.t - base) > 20 * MIN);
+  const sel = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(0, { id: "a", injectedAt: new Date(base) })],
+      archivePoints: pts,
+    }),
+    "lunch",
+  );
+  assert.ok(!sel.meals.some((m) => m.injectionId === "a"));
+  assert.equal(sel.excluded["no-coverage"], 1);
+});
+
+// ─── I5 : latence d'hypo et repas pris en hypo ─────────────────────────
+
+test("hypo : détectée dans la fenêtre, une seule fois par repas", () => {
   const base = NOW - 1 * DAY;
   const pts = flatPoints(130).map((p) => {
     // deux creux distincts dans la fenêtre du repas
@@ -250,7 +470,130 @@ test("hypo : un creux APRÈS la fenêtre de 5 h ne compte pas", () => {
   assert.equal(sel.meals.find((m) => m.injectionId === "a")?.hadHypo, false);
 });
 
-test("glycémie avant / à T+5h renseignées, glucides confirmés prioritaires", () => {
+test("I5 — un creux AVANT 45 min ne compte pas (un bolus ne fait pas ça)", () => {
+  const base = NOW - 1 * DAY;
+  const early = flatPoints(130).map((p) => {
+    const dt = p.t - base;
+    return dt > 10 * MIN && dt < 40 * MIN ? { ...p, value: 62 } : p;
+  });
+  const sel = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(0, { id: "a", injectedAt: new Date(base) }), ...filler()],
+      archivePoints: early,
+    }),
+    "lunch",
+  );
+  assert.equal(sel.meals.find((m) => m.injectionId === "a")?.hadHypo, false);
+  assert.equal(HYPO_LATENCY_MIN, 45);
+
+  // Contrôle : le même creux 30 min plus tard compte.
+  const late = flatPoints(130).map((p) => {
+    const dt = p.t - base;
+    return dt > 50 * MIN && dt < 80 * MIN ? { ...p, value: 62 } : p;
+  });
+  const sel2 = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(0, { id: "a", injectedAt: new Date(base) }), ...filler()],
+      archivePoints: late,
+    }),
+    "lunch",
+  );
+  assert.equal(sel2.meals.find((m) => m.injectionId === "a")?.hadHypo, true);
+});
+
+test("I5 — repas pris en dessous de 80 mg/dL → exclu (low-at-meal)", () => {
+  const base = NOW - 1 * DAY;
+  const pts = flatPoints(130).map((p) =>
+    Math.abs(p.t - base) < 8 * MIN ? { ...p, value: 75 } : p,
+  );
+  const sel = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(0, { id: "a", injectedAt: new Date(base) }), ...filler()],
+      archivePoints: pts,
+    }),
+    "lunch",
+  );
+  assert.ok(!sel.meals.some((m) => m.injectionId === "a"));
+  assert.equal(sel.excluded["low-at-meal"], 1);
+  assert.equal(LOW_AT_MEAL_THRESHOLD, 80);
+
+  // Contrôle : à 85 mg/dL le repas est gardé.
+  const ok = flatPoints(130).map((p) =>
+    Math.abs(p.t - base) < 8 * MIN ? { ...p, value: 85 } : p,
+  );
+  const sel2 = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(0, { id: "a", injectedAt: new Date(base) }), ...filler()],
+      archivePoints: ok,
+    }),
+    "lunch",
+  );
+  assert.ok(sel2.meals.some((m) => m.injectionId === "a"));
+});
+
+// ─── Fenêtre ───────────────────────────────────────────────────────────
+
+test("fenêtre : 7 jours si elle contient déjà assez de repas éligibles", () => {
+  const sel = selectEligibleMeals(
+    input({ insulinLogs: [meal(1), meal(2), meal(3), meal(4), meal(5), meal(20)] }),
+    "lunch",
+  );
+  assert.equal(sel.windowDays, 7);
+  assert.equal(sel.meals.length, MIN_ELIGIBLE_MEALS);
+});
+
+test("fenêtre : s'étend en arrière jusqu'à réunir MIN_ELIGIBLE_MEALS repas", () => {
+  const sel = selectEligibleMeals(
+    input({ insulinLogs: [meal(1), meal(10), meal(11), meal(12), meal(13), meal(40)] }),
+    "lunch",
+  );
+  assert.equal(sel.meals.length, 5);
+  assert.equal(sel.windowDays, 13);
+  assert.ok(!sel.meals.some((m) => m.injectionId === "meal-40"));
+});
+
+test("fenêtre : plafonnée à 90 jours", () => {
+  const sel = selectEligibleMeals(
+    input({ insulinLogs: [meal(1), meal(95), meal(100)] }),
+    "lunch",
+  );
+  assert.equal(sel.meals.length, 1);
+  assert.ok(sel.windowDays <= 90);
+});
+
+test("fenêtre : ne remonte jamais avant ratioChangedAt", () => {
+  const sel = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(1), meal(5), meal(20), meal(30)],
+      ratioChangedAt: { lunch: new Date(NOW - 10 * DAY).toISOString() },
+    }),
+    "lunch",
+  );
+  assert.equal(sel.meals.length, 2);
+  assert.ok(sel.meals.every((m) => m.injectedAt >= NOW - 10 * DAY));
+});
+
+test("I3 — les exclusions sont comptées sur la MÊME fenêtre que les repas retenus", () => {
+  const old: InsulinLog[] = [];
+  for (let d = 60; d < 70; d++) {
+    old.push(meal(d, { id: `old-${d}`, carbsUncertain: true }));
+  }
+  const sel = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(1), meal(2), meal(3), meal(4), meal(5), ...old],
+    }),
+    "lunch",
+  );
+  assert.equal(sel.windowDays, 7);
+  assert.equal(sel.meals.length, 5);
+  assert.equal(
+    sel.excluded.uncertain ?? 0,
+    0,
+    "10 repas écartés il y a deux mois ne s'affichent pas à côté d'une fenêtre de 7 jours",
+  );
+});
+
+test("glycémie avant / en fin de fenêtre, glucides confirmés prioritaires", () => {
   const sel = selectEligibleMeals(
     input({
       insulinLogs: [
@@ -264,7 +607,8 @@ test("glycémie avant / à T+5h renseignées, glucides confirmés prioritaires",
   assert.equal(a?.carbsGrams, 90);
   assert.equal(a?.confirmed, true);
   assert.equal(a?.glucoseBefore, 130);
-  assert.equal(a?.glucoseAfter5h, 130);
+  assert.equal(a?.glucoseAtWindowEnd, 130);
+  assert.equal(a?.windowMin, 300);
 });
 
 test("le seuil d'hypo est bien 70", () => {
@@ -285,7 +629,8 @@ function selection(n: number, hypos: number, over: Partial<EligibleMeal> = {}): 
       units: 6,
       confirmed: false,
       glucoseBefore: 130,
-      glucoseAfter5h: 130,
+      glucoseAtWindowEnd: 130,
+      windowMin: 300,
       hadHypo: i < hypos,
       ...over,
     });
@@ -293,19 +638,33 @@ function selection(n: number, hypos: number, over: Partial<EligibleMeal> = {}): 
   return { meals, excluded: {}, windowDays: 7 };
 }
 
-test("verdict : moins de 3 repas éligibles → insufficient-data, même avec des hypos", () => {
-  const a = analyzeSlot(selection(2, 2), 10, "lunch");
+test("D2 — le minimum de repas éligibles est bien 5", () => {
+  assert.equal(MIN_ELIGIBLE_MEALS, 5);
+});
+
+test("verdict : moins de 5 repas éligibles → insufficient-data, même avec des hypos", () => {
+  const a = analyzeSlot(selection(4, 4), 10, "lunch");
   assert.equal(a.verdict, "insufficient-data");
   assert.equal(a.proposedRatio, null);
 });
 
-test("verdict : 2 hypos sur 4 repas (50 %) → over-bolus", () => {
-  const a = analyzeSlot(selection(4, 2), 10, "lunch");
-  assert.equal(a.verdict, "over-bolus");
+test("borne — exactement MIN_ELIGIBLE_MEALS repas : le verdict est rendu", () => {
+  assert.equal(analyzeSlot(selection(5, 2), 10, "lunch").verdict, "over-bolus");
+  assert.equal(analyzeSlot(selection(5, 0), 10, "lunch").verdict, "ok");
+  // Un repas de moins et le créneau se tait.
+  assert.equal(analyzeSlot(selection(4, 2), 10, "lunch").verdict, "insufficient-data");
 });
 
-test("verdict : 1 hypo sur 3 repas → ok (le seuil de 2 événements protège)", () => {
-  assert.equal(analyzeSlot(selection(3, 1), 10, "lunch").verdict, "ok");
+test("borne — taux exactement à 25 % (2 hypos sur 8) → over-bolus", () => {
+  const a = analyzeSlot(selection(8, 2), 10, "lunch");
+  assert.equal(a.hypoRate, 0.25);
+  assert.equal(a.verdict, "over-bolus");
+  // Juste en dessous du seuil (2 sur 9 ≈ 22 %) → ok
+  assert.equal(analyzeSlot(selection(9, 2), 10, "lunch").verdict, "ok");
+});
+
+test("verdict : 1 hypo sur 5 repas → ok (le seuil de 2 événements protège)", () => {
+  assert.equal(analyzeSlot(selection(5, 1), 10, "lunch").verdict, "ok");
 });
 
 test("verdict : 2 hypos sur 30 repas (6,7 %) → ok (le taux de 25 % protège)", () => {
@@ -313,19 +672,25 @@ test("verdict : 2 hypos sur 30 repas (6,7 %) → ok (le taux de 25 % protège)",
 });
 
 test("proposition : −10 % sur l'insuline par gramme, seulement sur over-bolus", () => {
-  const a = analyzeSlot(selection(4, 2), 10, "lunch");
+  const a = analyzeSlot(selection(8, 2), 10, "lunch");
   assert.equal(a.proposedRatio?.current, 10);
   // 0,10 U/g → 0,09 U/g ⇒ 11,1 g/U
   assert.ok(
     Math.abs((a.proposedRatio?.proposed ?? 0) - 11.1) < 0.05,
     `attendu ~11,1 g/U, reçu ${a.proposedRatio?.proposed}`,
   );
-  assert.equal(analyzeSlot(selection(4, 0), 10, "lunch").proposedRatio, null);
+  assert.equal(analyzeSlot(selection(8, 0), 10, "lunch").proposedRatio, null);
+});
+
+test("borne — currentRatio = 0 : aucune proposition, même sur over-bolus", () => {
+  const a = analyzeSlot(selection(8, 4), 0, "lunch");
+  assert.equal(a.verdict, "over-bolus");
+  assert.equal(a.proposedRatio, null, "ne jamais diviser un ratio nul");
 });
 
 test("proposition : un seul pas, quelle que soit la sévérité", () => {
-  const modere = analyzeSlot(selection(4, 2), 10, "lunch");
-  const severe = analyzeSlot(selection(4, 4), 10, "lunch");
+  const modere = analyzeSlot(selection(8, 2), 10, "lunch");
+  const severe = analyzeSlot(selection(8, 8), 10, "lunch");
   assert.equal(modere.proposedRatio?.proposed, severe.proposedRatio?.proposed);
 });
 
@@ -340,9 +705,9 @@ test("confiance : bascule à « confirmé » à la moitié des repas confirmés"
 
 test("atterrissage : moyenne sur les seuls repas ayant les deux mesures", () => {
   const s = selection(3, 0);
-  s.meals[0].glucoseBefore = 130; s.meals[0].glucoseAfter5h = 85;   // −45
-  s.meals[1].glucoseBefore = 140; s.meals[1].glucoseAfter5h = 95;   // −45
-  s.meals[2].glucoseBefore = null; s.meals[2].glucoseAfter5h = 100; // ignoré
+  s.meals[0].glucoseBefore = 130; s.meals[0].glucoseAtWindowEnd = 85;   // −45
+  s.meals[1].glucoseBefore = 140; s.meals[1].glucoseAtWindowEnd = 95;   // −45
+  s.meals[2].glucoseBefore = null; s.meals[2].glucoseAtWindowEnd = 100; // ignoré
   assert.equal(analyzeSlot(s, 10, "lunch").avgLandingDelta, -45);
 });
 
@@ -362,6 +727,74 @@ test("analyzeAllSlots rend les 4 créneaux, même vides", () => {
 
 test("le pas de correction est bien de 10 %", () => {
   assert.equal(RATIO_STEP, 0.1);
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// C1 — tampons de changement de ratio (fonction pure appelée par les
+// trois setters du store)
+// ───────────────────────────────────────────────────────────────────────
+
+const ISO = "2026-09-02T12:00:00.000Z";
+
+test("C1 — un seul créneau change → un seul tampon", () => {
+  const stamps = computeRatioStamps(
+    { morning: 6.7, lunch: 10, snack: 8.3, dinner: 10 },
+    { morning: 6.7, lunch: 11.1, snack: 8.3, dinner: 10 },
+    ISO,
+  );
+  assert.deepEqual(stamps, { lunch: ISO });
+});
+
+test("C1 — aucun changement → objet vide", () => {
+  const ratios = { morning: 6.7, lunch: 10, snack: 8.3, dinner: 10 };
+  assert.deepEqual(computeRatioStamps(ratios, { ...ratios }, ISO), {});
+  assert.equal(hasNewRatioStamps(ratios, { ...ratios }), false);
+});
+
+test("C1 — les tampons existants des autres créneaux survivent", () => {
+  const stamps = computeRatioStamps(
+    { morning: 6.7, lunch: 10, snack: 8.3, dinner: 10 },
+    { morning: 6.7, lunch: 11.1, snack: 8.3, dinner: 10 },
+    ISO,
+    { dinner: "2026-08-01T00:00:00.000Z", snack: "2026-07-01T00:00:00.000Z" },
+  );
+  assert.deepEqual(stamps, {
+    dinner: "2026-08-01T00:00:00.000Z",
+    snack: "2026-07-01T00:00:00.000Z",
+    lunch: ISO,
+  });
+});
+
+test("C1 — bascule de profil changeant les quatre ratios → quatre tampons", () => {
+  const stamps = computeRatioStamps(
+    { morning: 6.7, lunch: 10, snack: 8.3, dinner: 10 },
+    { morning: 7.4, lunch: 11.1, snack: 9.1, dinner: 11.1 },
+    ISO,
+    { lunch: "2026-08-01T00:00:00.000Z" },
+  );
+  assert.deepEqual(stamps, {
+    morning: ISO, lunch: ISO, snack: ISO, dinner: ISO,
+  });
+  assert.equal(hasNewRatioStamps({ morning: 6.7 }, { morning: 7.4 }), true);
+});
+
+test("C1 — un tampon remet effectivement le créneau en reconstitution", () => {
+  // Bout-en-bout : les repas d'avant le tampon sortent de la fenêtre, donc
+  // le créneau ne peut pas proposer une seconde baisse sur les mêmes hypos.
+  const logs = [meal(1), meal(2), meal(3), meal(4), meal(5), meal(6)];
+  const before = analyzeSlot(
+    selectEligibleMeals(input({ insulinLogs: logs }), "lunch"), 10, "lunch",
+  );
+  assert.notEqual(before.verdict, "insufficient-data");
+
+  const stamps = computeRatioStamps({ lunch: 10 }, { lunch: 11.1 }, new Date(NOW).toISOString());
+  const after = analyzeSlot(
+    selectEligibleMeals(input({ insulinLogs: logs, ratioChangedAt: stamps }), "lunch"),
+    11.1,
+    "lunch",
+  );
+  assert.equal(after.verdict, "insufficient-data");
+  assert.equal(after.eligibleCount, 0);
 });
 
 // ───────────────────────────────────────────────────────────────────────

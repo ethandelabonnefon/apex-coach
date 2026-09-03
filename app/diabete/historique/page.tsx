@@ -41,6 +41,7 @@ import { isLearnable, resolveCarbs } from "@/lib/carbs-on-board";
 import type { SportSession } from "@/lib/sport-glucose-analytics";
 import {
   analyzeAllSlots,
+  formatRatio,
   type SlotAnalysis,
   type SportSession as DoseSportSession,
 } from "@/lib/dose-validation";
@@ -240,6 +241,9 @@ export default function DiabeteHistoriquePage() {
   // affichée). Fetch dédié, une seule fois au montage.
   const [validationPoints, setValidationPoints] = useState<{ t: number; value: number }[]>([]);
   const [validationLoading, setValidationLoading] = useState(true);
+  // Archive injoignable (HTTP KO, KV non configuré) : à distinguer d'une
+  // archive vide. Sans capteur, un créneau ne doit rien affirmer du tout.
+  const [validationArchiveError, setValidationArchiveError] = useState<string | null>(null);
 
   const insulinLogs = useStore((s) => s.insulinLogs);
   const diabetesConfig = useStore((s) => s.diabetesConfig);
@@ -283,14 +287,19 @@ export default function DiabeteHistoriquePage() {
   // Tâche 4 — verdict par créneau (matin/midi/goûter/soir). Fenêtre fixe
   // 90j (validationPoints), indépendante du sélecteur `days` de la page.
   const doseAnalyses: SlotAnalysis[] = useMemo(() => {
+    // Le type de séance conditionne l'exclusion : une muscu n'écarte un
+    // repas qu'au-delà de 75 min (cf. MUSCU_EXCLUSION_MIN_DURATION), un
+    // running écarte toujours.
     const workouts: DoseSportSession[] = [
       ...completedWorkouts.map((w) => ({
         date: w.date,
         durationMin: Math.round(w.duration ?? 60),
+        type: "muscu" as const,
       })),
       ...completedRunningSessions.map((r) => ({
         date: r.date,
         durationMin: Math.round(r.actualDuration ?? 45),
+        type: "running" as const,
       })),
     ];
     return analyzeAllSlots({
@@ -423,7 +432,7 @@ export default function DiabeteHistoriquePage() {
     if (
       typeof window !== "undefined" &&
       !window.confirm(
-        `Passer le ratio du ${label} de 1 U / ${a.proposedRatio.current} g à 1 U / ${a.proposedRatio.proposed} g ?`,
+        `Passer le ratio du ${label} de ${formatRatio(a.proposedRatio.current)} à ${formatRatio(a.proposedRatio.proposed)} ?`,
       )
     ) {
       return;
@@ -473,12 +482,29 @@ export default function DiabeteHistoriquePage() {
   useEffect(() => {
     let cancelled = false;
     fetch("/api/glucose/archive?days=90")
-      .then((r) => r.json())
-      .then((d) => {
-        if (!cancelled) setValidationPoints(d?.points ?? []);
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
       })
-      .catch(() => {
-        if (!cancelled) setValidationPoints([]);
+      .then((d) => {
+        if (cancelled) return;
+        // La route répond 200 avec `warning` et zéro point quand KV n'est
+        // pas configuré : c'est une archive indisponible, pas une absence
+        // de mesures.
+        if (d?.warning) {
+          setValidationPoints([]);
+          setValidationArchiveError("Archive glycémique non configurée.");
+          return;
+        }
+        setValidationPoints(d?.points ?? []);
+        setValidationArchiveError(null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setValidationPoints([]);
+        setValidationArchiveError(
+          err instanceof Error ? err.message : "archive injoignable",
+        );
       })
       .finally(() => {
         if (!cancelled) setValidationLoading(false);
@@ -752,6 +778,32 @@ export default function DiabeteHistoriquePage() {
       </section>
       {/* ──────────────────────────────────────────────────────────────── */}
 
+      {/* Tâche 4 — Validation des doses par créneau. Fenêtre fixe 90j et
+          fetch dédié : cette section ne dépend NI du sélecteur de période,
+          NI du fetch qui l'alimente, donc elle reste rendue même si celui-ci
+          échoue. */}
+      <section className="surface-1 rounded-2xl p-5 mb-4">
+        <div className="mb-1">
+          <h2 className="text-base font-semibold text-text-primary">
+            Validation des doses
+          </h2>
+          <p className="text-xs text-text-tertiary mt-0.5">
+            Hypoglycémies survenant entre 45 min et 5 h après chaque repas, la
+            fenêtre étant tronquée au repas suivant. Hors repas suivis de sport,
+            avec insuline résiduelle, à quantité incertaine, suivis d&apos;une
+            correction, mal couverts par le capteur ou pris en dessous de 80 mg/dL.
+          </p>
+        </div>
+        <div className="mt-4">
+          <DoseValidation
+            analyses={doseAnalyses}
+            onApply={handleApplyRatio}
+            loading={validationLoading}
+            archiveError={validationArchiveError}
+          />
+        </div>
+      </section>
+
       {/* Stats récap */}
       {loading ? (
         <div className="surface-1 rounded-3xl p-6 mb-4 animate-pulse">
@@ -901,27 +953,6 @@ export default function DiabeteHistoriquePage() {
 
           {/* Phase 11 Bloc 4.3 — Calendrier 30j */}
           <GlucoseCalendar points={data?.points ?? []} days={Math.min(30, days)} />
-
-          {/* Tâche 4 — Validation des doses par créneau (fenêtre fixe 90j) */}
-          <section className="surface-1 rounded-2xl p-5 mb-4">
-            <div className="mb-1">
-              <h2 className="text-base font-semibold text-text-primary">
-                Validation des doses
-              </h2>
-              <p className="text-xs text-text-tertiary mt-0.5">
-                Hypoglycémies dans les 5 h suivant chaque repas, hors repas suivis de
-                sport, avec insuline résiduelle, à quantité incertaine ou suivis d&apos;une
-                correction.
-              </p>
-            </div>
-            <div className="mt-4">
-              <DoseValidation
-                analyses={doseAnalyses}
-                onApply={handleApplyRatio}
-                loading={validationLoading}
-              />
-            </div>
-          </section>
 
           {/* Phase 11 Bloc 6 — Corrélation sport ↔ glycémie */}
           <SportGlucoseCorrelation

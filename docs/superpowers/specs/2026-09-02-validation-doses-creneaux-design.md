@@ -46,7 +46,7 @@ consulte quand Ethan ouvre la page.
 
 ### Fenêtre d'analyse
 
-La fenêtre démarre à **7 jours** et **s'étend en arrière jusqu'à réunir 3 repas éligibles** pour
+La fenêtre démarre à **7 jours** et **s'étend en arrière jusqu'à réunir 5 repas éligibles** pour
 le créneau considéré, plafonnée à **90 jours** (la rétention de l'archive). Chaque créneau a donc
 sa propre profondeur de fenêtre.
 
@@ -86,7 +86,7 @@ seconde dose de split, et ne tombe sous **aucune** des quatre exclusions retenue
 
 | Exclusion | Règle | Pourquoi |
 |---|---|---|
-| **Sport** | une séance muscu ou running est datée dans la fenêtre d'observation de 5 h, ou dans les 4 h précédant le repas | Le sport fait chuter la glycémie indépendamment du bolus, et la sensibilité post-exercice persiste. Sans cette exclusion, le créneau du soir — presque toujours suivi d'une séance vers 20 h — serait signalé en permanence. |
+| **Sport hypoglycémiant** | une séance de **running ou cardio** chevauche la fenêtre d'observation de 5 h ou les 4 h précédant le repas ; une séance de **musculation n'exclut que si elle dépasse 75 min**. Le chevauchement se calcule sur `[début, début + durationMin]`, pas sur le seul instant de début. | Le running fait chuter la glycémie indépendamment du bolus. **La musculation, non** : le calculateur de bolus de l'app n'applique déjà aucune réduction avant une muscu, au motif documenté qu'elle fait *monter* la glycémie (+45 mg/dL en moyenne), et le coefficient de sensibilité post-effort est de 0,1 sous 45 min contre 1,0 pour le running. Exclure les repas suivis de muscu jetterait donc de la donnée valide — une hypo après un dîner suivi de muscu est bien imputable au bolus. Le seuil de 75 min reprend celui de `getSportFactor` (`lib/exercise-insulin-adjustment.ts`), au-delà duquel la composante cardio d'une séance longue devient non négligeable (coefficient 0,5). |
 | **IOB résiduel** | IOB > 1,0 U au moment du bolus | Le goûter de 17h30 suivi du dîner de 19 h : l'hypo peut venir du cumul, pas du ratio du créneau. Seuil aligné sur celui qui déclenche déjà l'alerte de stacking dans l'UI. |
 | **Quantité incertaine** | `carbsUncertain === true` | Une hypo après un plat dont les glucides sont inconnus ne dit rien sur le ratio — elle dit que l'estimation était fausse. Réutilise `isLearnable()`. |
 | **Correction intercalée** | une injection de correction est loggée entre le repas et la fin de la fenêtre | L'hypo peut venir de cette seconde dose. |
@@ -107,7 +107,7 @@ Verdict par créneau :
 
 | Verdict | Condition |
 |---|---|
-| `insufficient-data` | moins de 3 repas éligibles |
+| `insufficient-data` | moins de 5 repas éligibles |
 | `over-bolus` | au moins **2** repas avec hypo **et** taux ≥ **25 %** des repas éligibles |
 | `ok` | tout le reste |
 
