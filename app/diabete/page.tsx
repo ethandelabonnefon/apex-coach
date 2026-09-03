@@ -2388,6 +2388,12 @@ export default function DiabetePage() {
                     ? `La correction est réduite anti-stacking : ${bolusResult.correctionBolus.toFixed(1).replace(".", ",")}U.`
                     : "Pas de correction nécessaire."}
                 </p>
+                {cappedDose.capped && (
+                  <p className="text-[11px] text-warning leading-relaxed">
+                    Détail du calcul avant plafonnement — la dose réellement retenue est{" "}
+                    {cappedDose.units}U (voir ci-dessous).
+                  </p>
+                )}
                 <p className="text-xs text-text-secondary leading-relaxed">
                   Total effectif avec IOB :{" "}
                   <span className="num font-semibold text-warning">
@@ -2538,6 +2544,21 @@ export default function DiabetePage() {
             )}
           </div>
 
+          {/* Rappel plafonnement — le détail ci-dessous porte sur la dose
+              CANDIDATE (avant plafonnement), jamais sur finalUnits. Sans ce
+              bandeau, le breakdown et le raisonnement affichent des chiffres
+              qui ne somment plus à la dose retenue. */}
+          {cappedDose.capped && (
+            <div className="mb-3 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2 flex items-start gap-2">
+              <ShieldAlert className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
+              <p className="text-[11px] text-text-secondary leading-snug">
+                Détail du calcul <span className="font-semibold text-warning">avant plafonnement</span>{" "}
+                ({cappedDose.originalUnits} U) — la dose à injecter reste{" "}
+                <span className="font-semibold text-warning">{cappedDose.units} U</span>, affichée ci-dessus.
+              </p>
+            </div>
+          )}
+
           {/* Breakdown */}
           <div className="grid grid-cols-2 gap-2 mb-4">
             <div className="bg-bg-tertiary rounded-lg px-3 py-2">
@@ -2649,6 +2670,15 @@ export default function DiabetePage() {
                 Voir le raisonnement
               </summary>
               <div className="mt-2 space-y-1 text-xs text-text-secondary">
+                {cappedDose.capped && (
+                  <div className="flex items-start gap-2 pb-1.5 mb-1.5 border-b border-border-subtle">
+                    <ShieldAlert className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
+                    <span className="text-warning">
+                      Raisonnement calculé pour {cappedDose.originalUnits} U (dose candidate,
+                      avant plafonnement) — la dose retenue est {cappedDose.units} U.
+                    </span>
+                  </div>
+                )}
                 {bolusResult.reasoning.map((r, i) => (
                   <div key={i} className="flex items-start gap-2">
                     <span className="text-diabete shrink-0">›</span>
