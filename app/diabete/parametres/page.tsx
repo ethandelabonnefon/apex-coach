@@ -179,9 +179,12 @@ export default function DiabeteParametresPage() {
     deleteRatioProfile,
     profile: userProfile,
     updateProfile: updateUserProfile,
+    hypoEvents,
+    clearHypoEvents,
   } = useStore();
   const [saved, setSaved] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [hypoCleared, setHypoCleared] = useState(false);
 
   // Profils (Phase 10a) ─────────────────────────────────────────────
   const profiles = diabetesConfig.profiles ?? [];
@@ -344,6 +347,23 @@ export default function DiabeteParametresPage() {
   const flash = () => {
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
+  };
+
+  // Remise à zéro de l'apprentissage hypo (sept. 2026) — périmètre STRICT :
+  // uniquement hypoEvents. confirm() natif obligatoire avant une suppression
+  // irréversible de données de santé.
+  const handleClearHypoEvents = () => {
+    const n = hypoEvents.length;
+    const confirmed = window.confirm(
+      `Effacer ${n} événement${n > 1 ? "s" : ""} d'hypoglycémie ?\n\n` +
+        "Ceci supprime définitivement ton historique d'hypos (glycémie de départ, glucides consommés, évaluation) — la donnée qui alimente ton GRG personnel appris.\n\n" +
+        "Ça ne touche à RIEN d'autre : tes injections, tes séances de sport, tes glucides, tes glycémies, tes repas et tes diagnostics restent intacts.\n\n" +
+        "Cette action est irréversible.",
+    );
+    if (!confirmed) return;
+    clearHypoEvents();
+    setHypoCleared(true);
+    setTimeout(() => setHypoCleared(false), 4000);
   };
 
   const isfInternal = diabetesConfig.insulinSensitivityFactor;
@@ -769,6 +789,41 @@ export default function DiabeteParametresPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* ── Zone dangereuse : remise à zéro de l'apprentissage hypo (sept. 2026) ──
+          Périmètre STRICT demandé par Ethan : UNIQUEMENT hypoEvents. Rien
+          d'autre (injections, sport, glucides, glycémies, repas,
+          diagnostics) n'est effacé. Pas d'option "tout effacer". */}
+      <section className="surface-1 rounded-3xl p-5 sm:p-6 mt-4 border border-error/25">
+        <div className="flex items-center gap-2 mb-2">
+          <AlertTriangle className="w-4 h-4 text-error" />
+          <h2 className="text-base font-semibold text-text-primary">Zone dangereuse</h2>
+        </div>
+        <p className="text-sm font-medium text-text-primary">
+          Réinitialiser l&apos;apprentissage des hypoglycémies
+        </p>
+        <p className="text-xs text-text-tertiary mt-1 leading-snug">
+          Efface définitivement tes {hypoEvents.length} événement
+          {hypoEvents.length > 1 ? "s" : ""} d&apos;hypoglycémie enregistré
+          {hypoEvents.length > 1 ? "s" : ""} (glycémie de départ, glucides consommés,
+          évaluation) — la donnée qui alimente ton GRG personnel appris. Ne touche à
+          rien d&apos;autre : injections, sport, glucides, glycémies, repas et
+          diagnostics restent intacts.
+        </p>
+        <button
+          type="button"
+          onClick={handleClearHypoEvents}
+          className="mt-3 flex items-center gap-1.5 bg-error/10 text-error text-xs font-semibold px-3 py-2 rounded-lg border border-error/30 hover:bg-error/20 transition-colors tap-scale"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+          Effacer l&apos;historique des hypoglycémies
+        </button>
+        {hypoCleared && (
+          <p className="text-xs text-success mt-2">
+            Historique des hypoglycémies effacé.
+          </p>
+        )}
       </section>
     </div>
   );

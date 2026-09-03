@@ -97,6 +97,10 @@ interface AppState {
   addHypoEvent: (event: HypoEvent) => void;
   updateHypoEvent: (id: string, updates: Partial<HypoEvent>) => void;
   removeHypoEvent: (id: string) => void;
+  /** Remise à zéro demandée par Ethan (sept. 2026) : vide UNIQUEMENT
+   * hypoEvents (données peu fiables, biaisaient durablement le GRG perso
+   * appris). N'affecte aucune autre donnée du store. */
+  clearHypoEvents: () => void;
 
   // Glucides sans insuline (re-sucrage course, collation non bolussée) — pour la prédiction 8h
   carbEntries: CarbEntry[];
@@ -422,6 +426,7 @@ export const useStore = create<AppState>()(
       removeHypoEvent: (id) => set((s) => ({
         hypoEvents: s.hypoEvents.filter((e) => e.id !== id),
       })),
+      clearHypoEvents: () => set({ hypoEvents: [] }),
 
       meals: [],
       addMeal: (meal) => set((s) => ({ meals: [meal, ...s.meals].slice(0, 500) })),
