@@ -256,6 +256,17 @@ export const useStore = create<AppState>()(
           // le changement même si ce setter est le seul à toucher le profil.
           const basalChanged =
             updates.basalDose !== undefined && updates.basalDose !== s.profile.basalDose;
+          // Créneaux dont le ratio change réellement (comparé à la valeur
+          // AVANT cette mise à jour), pour repartir d'une base propre.
+          const slots = ['morning', 'lunch', 'snack', 'dinner'] as const;
+          const stampedAt = new Date().toISOString();
+          const ratioStamps: Record<string, string> = {};
+          for (const slot of slots) {
+            const next = updates.ratios?.[slot];
+            if (next !== undefined && next !== s.diabetesConfig.ratios[slot]) {
+              ratioStamps[slot] = stampedAt;
+            }
+          }
           // Resync les miroirs pour le profil actif
           return {
             diabetesConfig: {
@@ -269,6 +280,9 @@ export const useStore = create<AppState>()(
               ...s.profile,
               basalDose: active.basalDose,
               ...(basalChanged ? { basalDoseChangedAt: new Date().toISOString() } : {}),
+              ...(Object.keys(ratioStamps).length > 0
+                ? { ratioChangedAt: { ...s.profile.ratioChangedAt, ...ratioStamps } }
+                : {}),
             },
           };
         }

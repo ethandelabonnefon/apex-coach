@@ -14,6 +14,13 @@ export interface UserProfile {
   /** ISO de la dernière fois où basalDose a réellement changé de valeur. Sert à
    * réinitialiser la calibration nuit (dérive/dawn/biais) — cf. lib/night-calibration.ts. */
   basalDoseChangedAt?: string;
+  /**
+   * Créneau → ISO du dernier changement de son ratio. La validation des
+   * doses (lib/dose-validation.ts) ne remonte jamais avant ce tampon :
+   * mélanger des repas d'avant et d'après un changement reviendrait à
+   * mesurer deux réglages dans le même échantillon.
+   */
+  ratioChangedAt?: Partial<Record<string, string>>;
   hasCGM: boolean;
   cgmType: string;
   vo2max: number;
