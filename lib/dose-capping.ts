@@ -188,16 +188,23 @@ export function capDoseByPrediction(
   candidateUnits: number,
   ctx: DoseCappingContext,
 ): CappedDose {
+  // Le contrat de CappedDose promet une dose ENTIÈRE (le stylo du patient
+  // n'a pas de demi-unités) — sans condition, sans compter sur la discipline
+  // de l'appelant. On arrondit donc dès l'entrée, au PLUS PROCHE : jamais
+  // systématiquement au-dessus (ce dépôt a déjà corrigé un Math.ceil qui
+  // ajoutait jusqu'à 0,9 U par repas chez un patient sujet aux hypoglycémies).
+  const candidate = Math.round(candidateUnits);
+
   // Rien à plafonner.
-  if (!(candidateUnits > 0)) {
-    return unchanged(Math.max(0, candidateUnits), null);
+  if (!(candidate > 0)) {
+    return unchanged(Math.max(0, candidate), null);
   }
 
   // Pas de mesure capteur → pas de point de départ crédible pour simuler.
   const glucose = ctx.currentGlucose;
   if (typeof glucose !== "number" || !Number.isFinite(glucose)) {
     return unchanged(
-      candidateUnits,
+      candidate,
       "Pas de mesure capteur — dose non vérifiée par la prédiction.",
     );
   }
@@ -210,23 +217,23 @@ export function capDoseByPrediction(
     nowMs: ctx.nowMs,
   });
 
-  const before = simulateMinAfterGrace(candidateUnits, ctx, baseEvents);
+  const before = simulateMinAfterGrace(candidate, ctx, baseEvents);
   if (before === null || before.min >= PREDICTION_SAFETY_LIMIT) {
-    return unchanged(candidateUnits, null, before);
+    return unchanged(candidate, null, before);
   }
 
   // La trajectoire plonge : on rabote d'une unité entière à la fois.
-  for (let units = candidateUnits - 1; units >= 0; units--) {
+  for (let units = candidate - 1; units >= 0; units--) {
     const after = simulateMinAfterGrace(units, ctx, baseEvents);
     if (after !== null && after.min >= PREDICTION_SAFETY_LIMIT) {
       return {
         units,
-        originalUnits: candidateUnits,
+        originalUnits: candidate,
         capped: true,
         predictedMinBefore: before.min,
         predictedMinAfter: after.min,
         predictedMinMinute: before.minute,
-        reason: `À ${candidateUnits} U, ta glycémie descendrait à ${before.min} mg/dL.`,
+        reason: `À ${candidate} U, ta glycémie descendrait à ${before.min} mg/dL.`,
       };
     }
   }
@@ -234,7 +241,7 @@ export function capDoseByPrediction(
   // Aucune dose ne tient : on ne propose rien.
   return {
     units: 0,
-    originalUnits: candidateUnits,
+    originalUnits: candidate,
     capped: true,
     predictedMinBefore: before.min,
     predictedMinAfter: null,

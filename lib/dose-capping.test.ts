@@ -106,6 +106,30 @@ test("la dose retenue est toujours un entier", () => {
   assert.equal(Number.isInteger(r.units), true, `dose non entière : ${r.units}`);
 });
 
+test("une candidate fractionnaire rend une dose entière — cas plafonné", () => {
+  // Le contrat de la fonction (pas celui de l'appelant) garantit l'entier :
+  // même un appelant qui oublierait d'arrondir en amont ne doit jamais
+  // recevoir une dose à demi-unité.
+  const r = capDoseByPrediction(10.4, ctx({
+    currentGlucose: 56,
+    insulinLogs: [pastBolus(90, 2.5)],
+    pendingMeal: { carbsGrams: 100, fatGrams: 0, proteinGrams: 0, mealType: "lunch" },
+  }));
+  assert.equal(Number.isInteger(r.units), true, `dose non entière : ${r.units}`);
+  assert.equal(Number.isInteger(r.originalUnits), true, `originalUnits non entier : ${r.originalUnits}`);
+  assert.equal(r.capped, true);
+});
+
+test("une candidate fractionnaire rend une dose entière — cas non plafonné", () => {
+  const r = capDoseByPrediction(6.4, ctx({
+    currentGlucose: 140,
+    pendingMeal: { carbsGrams: 60, fatGrams: 0, proteinGrams: 0, mealType: "lunch" },
+  }));
+  assert.equal(Number.isInteger(r.units), true, `dose non entière : ${r.units}`);
+  assert.equal(r.units, 6);
+  assert.equal(r.capped, false);
+});
+
 test("sans mesure capteur : aucun plafonnement, raison explicite", () => {
   const r = capDoseByPrediction(10, ctx({
     currentGlucose: null,
@@ -138,8 +162,8 @@ test("les glucides de resucrage en cours font monter, donc autorisent une dose p
     }],
   }));
   assert.ok(
-    avecResucrage.units >= sansResucrage.units,
-    `le resucrage doit autoriser au moins autant d'insuline (sans: ${sansResucrage.units}, avec: ${avecResucrage.units})`,
+    avecResucrage.units > sansResucrage.units,
+    `le resucrage doit autoriser STRICTEMENT plus d'insuline (sans: ${sansResucrage.units}, avec: ${avecResucrage.units}) — un '>=' laisserait passer un câblage cassé des carbEntries`,
   );
 });
 
