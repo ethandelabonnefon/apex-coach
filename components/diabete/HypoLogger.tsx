@@ -28,6 +28,7 @@ import {
   suggestCarbsForHypo,
   classifyHypoContext,
   explainHypoContext,
+  buildHypoCarbEntry,
 } from "@/lib/hypo-resucrage";
 import {
   AlertTriangle,
@@ -62,6 +63,7 @@ export default function HypoLogger({
 }: HypoLoggerProps) {
   const hypoEvents = useStore((s) => s.hypoEvents);
   const addHypoEvent = useStore((s) => s.addHypoEvent);
+  const addCarbEntry = useStore((s) => s.addCarbEntry);
 
   // GRG perso basé sur les hypos passées (over-bolus exclus auto)
   const grg = useMemo(() => estimatePersonalGRG(hypoEvents), [hypoEvents]);
@@ -96,8 +98,9 @@ export default function HypoLogger({
   function handleLogCarbs() {
     if (selectedCarbs <= 0) return;
     const now = new Date();
+    const hypoEventId = crypto.randomUUID();
     addHypoEvent({
-      id: crypto.randomUUID(),
+      id: hypoEventId,
       detectedAt: now.toISOString(),
       initialGlucose: currentGlucose,
       carbsConsumed: selectedCarbs,
@@ -115,6 +118,15 @@ export default function HypoLogger({
       context,
       excludeFromLearning: !includeInLearning,
     });
+    // Le HypoEvent seul est invisible pour computeCarbsOnBoard /
+    // buildPredictionEvents (ils lisent carbEntries, jamais hypoEvents) —
+    // sans ce CarbEntry, ces glucides n'existent pour aucun autre module.
+    const carbEntry = buildHypoCarbEntry({
+      hypoEventId,
+      carbsGrams: selectedCarbs,
+      consumedAt: now,
+    });
+    if (carbEntry) addCarbEntry(carbEntry);
     setLogged(true);
   }
 

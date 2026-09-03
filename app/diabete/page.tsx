@@ -59,7 +59,7 @@ import {
 import { buildPredictionEvents } from "@/lib/prediction-inputs";
 import { useWhoop } from "@/hooks/useWhoop";
 import NightBrain from "@/components/diabete/NightBrain";
-import { estimatePersonalGRG, classifyHypoContext } from "@/lib/hypo-resucrage";
+import { estimatePersonalGRG, classifyHypoContext, buildHypoCarbEntry } from "@/lib/hypo-resucrage";
 import {
   estimateNightDrift,
   estimateDawnCurve,
@@ -225,6 +225,7 @@ export default function DiabetePage() {
   const addHypoEvent = useStore((s) => s.addHypoEvent);
   // Glucides sans insuline (re-sucrage course, collation) — alimente la prédiction
   const carbEntries = useStore((s) => s.carbEntries);
+  const addCarbEntry = useStore((s) => s.addCarbEntry);
   // Boucle d'auto-apprentissage de la prédiction nuit (prédit vs réel)
   const nightPredictionLogs = useStore((s) => s.nightPredictionLogs);
   const addNightPredictionLog = useStore((s) => s.addNightPredictionLog);
@@ -1259,7 +1260,10 @@ export default function DiabetePage() {
   }, [insulinLogs, nowTick]);
 
   // Logge une prise de glucides d'hypo depuis le plan nuit → crée un
-  // HypoEvent (comme le HypoLogger) pour que le tracker apprenne le GRG.
+  // HypoEvent (comme le HypoLogger) pour que le tracker apprenne le GRG,
+  // ET un CarbEntry (buildHypoCarbEntry) pour que ces glucides soient vus
+  // par computeCarbsOnBoard / buildPredictionEvents — sinon le plan de nuit
+  // ignore l'effet de son propre conseil (bug production sept. 2026).
   function handleNightHypoCarbs(grams: number) {
     if (grams <= 0) return;
     const context = classifyHypoContext({
@@ -1267,8 +1271,9 @@ export default function DiabetePage() {
       lastBolusMinutesAgo: lastActiveInjection?.minutesAgo ?? null,
     });
     const now = new Date();
+    const hypoEventId = crypto.randomUUID();
     addHypoEvent({
-      id: crypto.randomUUID(),
+      id: hypoEventId,
       detectedAt: now.toISOString(),
       initialGlucose: liveGlucose?.value ?? currentGlucose,
       carbsConsumed: grams,
@@ -1285,6 +1290,12 @@ export default function DiabetePage() {
       context,
       excludeFromLearning: context === "over-bolus",
     });
+    const carbEntry = buildHypoCarbEntry({
+      hypoEventId,
+      carbsGrams: grams,
+      consumedAt: now,
+    });
+    if (carbEntry) addCarbEntry(carbEntry);
   }
 
   // Confirme (logge) le split en attente le plus proche depuis le plan nuit.

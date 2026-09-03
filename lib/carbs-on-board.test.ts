@@ -23,6 +23,7 @@ import {
   type TopUpContext,
 } from "./carbs-on-board";
 import type { InsulinLog } from "@/types";
+import { buildHypoCarbEntry } from "./hypo-resucrage";
 
 const ISF = 100;
 const RATIOS = { morning: 6.7, lunch: 10, snack: 8.3, dinner: 10 };
@@ -608,4 +609,39 @@ test("filterLearnableNightLogs : écarte les nuits précédées d'un repas incer
     injectedAt: new Date(nightAt - 12 * 3_600_000),
   });
   assert.equal(filterLearnableNightLogs(logs, [oldDinner]).length, 1);
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// Intégration fix resucrage (septembre 2026)
+// ───────────────────────────────────────────────────────────────────────
+//
+// Bug production : un re-sucrage n'écrivait qu'un HypoEvent. computeCarbsOnBoard
+// ne lit jamais hypoEvents — seulement carbEntries — donc les glucides du
+// re-sucrage étaient invisibles pour la tuile "Glucides actifs" ET pour la
+// prédiction nocturne. Le fix fait écrire un CarbEntry (via buildHypoCarbEntry)
+// en plus du HypoEvent. Ce test est la preuve de bout en bout côté lib : il
+// échoue si l'écriture du CarbEntry disparaît (vérifié manuellement en
+// retirant l'appel côté composant : cob.sources redevient vide).
+test("intégration : un CarbEntry de resucrage (buildHypoCarbEntry) vieux de 20 min apparaît dans computeCarbsOnBoard", () => {
+  const consumedAt = new Date(Date.now() - 20 * 60_000);
+  const entry = buildHypoCarbEntry({
+    hypoEventId: "hypo-integration-test",
+    carbsGrams: 13,
+    consumedAt,
+  });
+  assert.ok(entry, "buildHypoCarbEntry doit produire un CarbEntry pour 13g");
+
+  const cob = computeCarbsOnBoard({
+    insulinLogs: [],
+    carbEntries: [entry!],
+    isf: ISF,
+    ratios: RATIOS,
+  });
+
+  assert.equal(cob.sources.length, 1);
+  assert.equal(cob.sources[0].id, entry!.id);
+  assert.equal(cob.sources[0].label, "Resucrage");
+  assert.ok(cob.totalRemainingG > 0, "des glucides du resucrage doivent rester à digérer à T+20min");
+  assert.ok(cob.totalRemainingG < 13, "une partie du resucrage a déjà été absorbée à T+20min");
+  assert.notEqual(cob.status, "idle");
 });

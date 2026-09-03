@@ -220,6 +220,12 @@ export interface CarbEntry {
   insulinUnits?: number;
   /** ISO du moment de l'ingestion. */
   eatenAt: string;
+  /**
+   * Traçabilité vers le `HypoEvent` d'origine quand ce `CarbEntry` vient
+   * d'un re-sucrage (cf. `buildHypoCarbEntry` dans `lib/hypo-resucrage.ts`).
+   * Absent pour toute entrée saisie manuellement (CarbEntryLogger).
+   */
+  hypoEventId?: string;
 }
 
 /**

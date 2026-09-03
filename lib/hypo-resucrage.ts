@@ -19,7 +19,7 @@
  * ⚠️ Pure functions — aucun side-effect ni import serveur.
  */
 
-import type { HypoEvent } from "@/types";
+import type { CarbEntry, HypoEvent } from "@/types";
 
 /** GRG par défaut si pas assez de data perso (mg/dL par gramme). */
 const DEFAULT_GRG = 4.0;
@@ -29,6 +29,59 @@ const POST_HYPO_TARGET = 110;
 const MIN_CARBS = 8;
 /** Carbs maximum sans avis médical (anti-sur-sucrage). */
 const MAX_CARBS = 30;
+
+// ───────────────────────────────────────────────────────────────────────
+// Resucrage → CarbEntry (fix septembre 2026)
+// ───────────────────────────────────────────────────────────────────────
+//
+// Bug production : un re-sucrage n'écrivait qu'un `HypoEvent` (sert à
+// apprendre le GRG perso). Aucun `CarbEntry` n'était créé, donc
+// `computeCarbsOnBoard` et `buildPredictionEvents` — qui lisent
+// `carbEntries` mais jamais `hypoEvents` — ignoraient totalement les
+// glucides du re-sucrage. Conséquence : la tuile « Glucides actifs »
+// mentait, et le plan de nuit pouvait re-suggérer de manger alors que le
+// re-sucrage précédent n'avait pas encore fini d'agir.
+//
+// Fix : un re-sucrage écrit maintenant LES DEUX objets, à partir de cette
+// unique fonction pure — pour ne jamais dupliquer la construction du
+// `CarbEntry` dans les composants (HypoLogger.tsx et le plan de nuit dans
+// page.tsx) comme ça avait déjà causé un bug par le passé.
+
+export interface BuildHypoCarbEntryInput {
+  /** id du `HypoEvent` associé — traçabilité (`CarbEntry.hypoEventId`). */
+  hypoEventId: string;
+  /** Grammes réellement consommés au re-sucrage. */
+  carbsGrams: number;
+  /** Moment de la prise — DOIT être le même horodatage que `HypoEvent.consumedAt`. */
+  consumedAt: string | Date;
+}
+
+/**
+ * Construit le `CarbEntry` correspondant à un re-sucrage.
+ *
+ * Retourne `null` pour 0g ou une valeur négative — pas d'entrée fantôme
+ * dans le store pour un re-sucrage qui n'a pas eu lieu.
+ */
+export function buildHypoCarbEntry(
+  input: BuildHypoCarbEntryInput,
+): CarbEntry | null {
+  const { hypoEventId, carbsGrams, consumedAt } = input;
+  if (!Number.isFinite(carbsGrams) || carbsGrams <= 0) return null;
+
+  const eatenAt =
+    consumedAt instanceof Date ? consumedAt.toISOString() : consumedAt;
+
+  return {
+    // Id dérivé de l'id du HypoEvent — un même re-sucrage produit toujours
+    // le même id de CarbEntry (utile pour une future déduplication).
+    id: `hypo-${hypoEventId}`,
+    label: "Resucrage",
+    carbsGrams,
+    insulinUnits: 0,
+    eatenAt,
+    hypoEventId,
+  };
+}
 
 // ───────────────────────────────────────────────────────────────────────
 // Classification contexte d'une hypo (anti-pollution GRG)
