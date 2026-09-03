@@ -634,11 +634,22 @@ export default function DiabetePage() {
 
   // ─── Glucides actifs (COB) ────────────────────────────────────────
   // Même moteur d'absorption que la prédiction nuit → les deux vues ne
-  // peuvent pas se contredire. `currentGlucose` (live si dispo, sinon
-  // manuel) alimente uniquement `hypoActive` (correction 2, septembre
-  // 2026) : sous le seuil d'hypo, la tuile tait son verdict de déficit —
-  // aucun calcul de couverture ni de grammes n'en dépend. Déclaré après
-  // `useGlucose` : dépend de `liveGlucose`.
+  // peuvent pas se contredire. `currentGlucose` alimente uniquement
+  // `hypoActive`/`glucoseUnknown` (correction 2, septembre 2026) : sous le
+  // seuil d'hypo — ou glycémie inconnue — la tuile tait son verdict de
+  // déficit. Aucun calcul de couverture ni de grammes n'en dépend.
+  // Déclaré après `useGlucose` : dépend de `liveGlucose`.
+  //
+  // ⚠️ UNIQUEMENT `liveGlucose?.value`, jamais `?? currentGlucose` : ce
+  // dernier est l'état du champ du calculateur, `useState(120)` — une
+  // valeur fabriquée que l'utilisateur n'a pas forcément saisie. Repasser
+  // ce défaut ici masquerait un capteur en panne (changement de Libre,
+  // LibreLink indisponible) PENDANT une vraie hypo : `hypoActive` se
+  // calculerait sur 120 mg/dL inventés au lieu de se déclarer inconnu.
+  // Même défaut déjà trouvé et corrigé sur `TopUpContext.currentGlucose`
+  // (`suggestTopUp`) — la correction retenue à l'époque est la même ici :
+  // ne passer que la lecture capteur réelle, traiter son absence comme un
+  // blocage (`glucoseUnknown`), pas comme une glycémie normale.
   const cob = useMemo(
     () =>
       computeCarbsOnBoard({
@@ -647,9 +658,9 @@ export default function DiabetePage() {
         isf: diabetesConfig.insulinSensitivityFactor,
         ratios: diabetesConfig.ratios,
         nowMs: nowTick,
-        currentGlucose: liveGlucose?.value ?? currentGlucose,
+        currentGlucose: liveGlucose?.value,
       }),
-    [insulinLogs, carbEntries, diabetesConfig, nowTick, liveGlucose, currentGlucose],
+    [insulinLogs, carbEntries, diabetesConfig, nowTick, liveGlucose],
   );
 
   // ─── Appoint suggéré (écart de glucides d'une injection confirmée) ──

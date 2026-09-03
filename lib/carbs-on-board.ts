@@ -245,9 +245,23 @@ export interface CarbsOnBoard {
    * septembre 2026). Ne change AUCUN calcul de couverture — seule
    * `cobVerdict` s'en sert pour taire le verdict de déficit : afficher
    * « il manque de l'insuline » pendant un re-sucrage revient à demander
-   * d'annuler le traitement de l'hypo en cours.
+   * d'annuler le traitement de l'hypo en cours. `false` dès que la
+   * glycémie est inconnue (`glucoseUnknown`) — jamais déduite d'une valeur
+   * fabriquée.
    */
   hypoActive: boolean;
+  /**
+   * Aucune lecture de glycémie exploitable au moment du calcul (correction
+   * 1 du round 2, septembre 2026). Distincte de `hypoActive: false` :
+   * celle-ci dit « on sait que ce n'est pas une hypo », celle-là dit
+   * « on ne sait rien ». `cobVerdict` traite les deux comme un motif de
+   * taire le verdict de déficit — on ne peut pas exclure une hypo en cours
+   * sans mesure — mais avec un message différent (absence de mesure, pas
+   * resucrage). Bug évité : un `useState(120)` de calculateur passé en
+   * repli (déjà vu sur `suggestTopUp` — cf. `TopUpContext.currentGlucose`)
+   * masquerait silencieusement un capteur en panne PENDANT une vraie hypo.
+   */
+  glucoseUnknown: boolean;
   sources: ActiveCarbSource[];
 }
 
@@ -260,11 +274,14 @@ export interface ComputeCarbsOnBoardOptions extends BuildCarbSourcesOptions {
    */
   balanceThresholdU?: number;
   /**
-   * Glycémie courante (mg/dL), pour la règle de silence en hypo
-   * (`hypoActive` → `cobVerdict`). Optionnelle et sans effet sur les
-   * grammes ou la couverture : `computeCarbsOnBoard` n'a pas besoin de la
-   * glycémie pour son calcul, seul l'affichage du verdict en a besoin.
-   * `null`/`undefined`/non-fini → `hypoActive` reste `false` (comportement
+   * Glycémie courante (mg/dL) — UNIQUEMENT une lecture réelle du capteur,
+   * jamais la valeur d'un champ de calculateur initialisée à une constante
+   * (même motif de garde-fou que `TopUpContext.currentGlucose` dans
+   * `suggestTopUp`, déjà corrigé pour la même raison). Alimente
+   * `hypoActive`/`glucoseUnknown` → `cobVerdict`. Optionnelle et sans effet
+   * sur les grammes ou la couverture : `computeCarbsOnBoard` n'a pas besoin
+   * de la glycémie pour son calcul, seul l'affichage du verdict en a
+   * besoin. `null`/`undefined`/non-fini → `glucoseUnknown` (comportement
    * inchangé pour tout appelant qui ne la fournit pas).
    */
   currentGlucose?: number | null;
@@ -365,10 +382,12 @@ export function computeCarbsOnBoard(
     thresholdU: opts.balanceThresholdU,
   });
 
-  const hypoActive =
-    typeof opts.currentGlucose === "number" &&
-    Number.isFinite(opts.currentGlucose) &&
-    opts.currentGlucose < HYPO_THRESHOLD;
+  // Glycémie exploitable seulement si c'est un nombre fini réel — jamais
+  // déduite d'un défaut absent (`null`/`undefined`/NaN). `glucoseUnknown`
+  // couvre tous les cas où on ne PEUT PAS établir qu'il n'y a pas d'hypo.
+  const glucoseUnknown =
+    typeof opts.currentGlucose !== "number" || !Number.isFinite(opts.currentGlucose);
+  const hypoActive = !glucoseUnknown && (opts.currentGlucose as number) < HYPO_THRESHOLD;
 
   return {
     carbsRemainingG: round1(carbsRemainingG),
@@ -380,6 +399,7 @@ export function computeCarbsOnBoard(
     status,
     uncertain,
     hypoActive,
+    glucoseUnknown,
     sources,
   };
 }
@@ -416,6 +436,17 @@ export interface CobVerdict {
  * affichés par la tuile (elle lit `cob.totalRemainingG`, pas ce verdict) :
  * seule la phrase de couverture se tait. `excess`/`covered`/`idle` ne
  * disent rien de contradictoire pendant une hypo — ils ne sont pas neutralisés.
+ *
+ * ⚠️ Round 2 de la correction 2 (production, septembre 2026) : le site
+ * d'appel repassait un `useState(120)` de calculateur en repli quand la
+ * glycémie live était absente (capteur en panne, changement de Libre…) —
+ * exactement le même défaut déjà trouvé et corrigé sur `suggestTopUp`. Une
+ * glycémie inconnue (`cob.glucoseUnknown`) est traitée comme `hypoActive` :
+ * on ne peut pas exclure une hypo sans mesure, et le verdict de déficit est
+ * purement informatif — le taire coûte une info, l'afficher à tort pendant
+ * une hypo réelle non détectée peut pousser à injecter. Message distinct
+ * (`glucoseUnknown` ≠ `hypoActive`) : ce n'est pas un resucrage en cours,
+ * c'est l'absence de mesure — dire l'un pour l'autre serait faux.
  */
 export function cobVerdict(cob: CarbsOnBoard): CobVerdict {
   const suffix = cob.uncertain ? " · quantité incertaine" : "";
@@ -434,6 +465,13 @@ export function cobVerdict(cob: CarbsOnBoard): CobVerdict {
     if (cob.hypoActive) {
       return {
         text: "Resucrage en cours — pas de verdict de couverture",
+        tone: "info",
+        approximate: false,
+      };
+    }
+    if (cob.glucoseUnknown) {
+      return {
+        text: "Glycémie inconnue — pas de verdict de couverture",
         tone: "info",
         approximate: false,
       };

@@ -273,10 +273,14 @@ test("verdict : repas incertain avec insuline en excès → alerte hypo toujours
 });
 
 test("verdict : repas incertain en déficit → aucun conseil de dose à la hausse", () => {
+  // currentGlucose: 120 — glycémie connue et hors hypo — pour isoler la
+  // branche testée ici (quantité incertaine) de la règle de glycémie
+  // inconnue (round 2, testée séparément plus bas).
   const cob = computeCarbsOnBoard({
     insulinLogs: [log(20, { carbsGrams: 100, units: 0, carbsUncertain: true })],
     isf: ISF,
     ratios: RATIOS,
+    currentGlucose: 120,
   });
   assert.equal(cob.status, "deficit");
   const v = cobVerdict(cob);
@@ -285,10 +289,12 @@ test("verdict : repas incertain en déficit → aucun conseil de dose à la haus
 });
 
 test("verdict : déficit certain → nombre d'unités manquantes affiché", () => {
+  // currentGlucose: 120 — même remarque que ci-dessus.
   const cob = computeCarbsOnBoard({
     insulinLogs: [log(20, { carbsGrams: 100, units: 0 })],
     isf: ISF,
     ratios: RATIOS,
+    currentGlucose: 120,
   });
   assert.equal(cob.status, "deficit");
   const v = cobVerdict(cob);
@@ -755,12 +761,83 @@ test("verdict : au-dessus du seuil d'hypo (même état sinon), le verdict de dé
   assert.match(v.text, /il manque/i);
 });
 
-test("hypoActive : reste false par défaut si aucune glycémie n'est fournie (rétrocompat)", () => {
+test("hypoActive : reste false si aucune glycémie n'est fournie (ce n'est pas une hypo confirmée)", () => {
+  // Round 2 (septembre 2026) : `hypoActive` reste strictement « on sait que
+  // ce n'est pas une hypo », jamais déduit d'une absence de mesure. Voir le
+  // test suivant pour ce que devient le verdict dans ce cas (silence quand
+  // même, mais pour une autre raison : `glucoseUnknown`).
   const cob = computeCarbsOnBoard({
     insulinLogs: [log(20, { carbsGrams: 100, units: 0 })],
     isf: ISF,
     ratios: RATIOS,
   });
   assert.equal(cob.hypoActive, false);
-  assert.match(cobVerdict(cob).text, /il manque/i);
+  assert.equal(cob.glucoseUnknown, true);
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// Round 2 de la correction 2 (septembre 2026) : glycémie inconnue = silence
+// ───────────────────────────────────────────────────────────────────────
+//
+// Trouvaille en vérifiant le câblage : le site d'appel (app/diabete/page.tsx)
+// passait `liveGlucose?.value ?? currentGlucose` — `currentGlucose` est
+// l'état du champ du calculateur, `useState(120)`, une valeur fabriquée
+// jamais saisie par l'utilisateur. Si le capteur décroche PENDANT une
+// hypoglycémie réelle, `hypoActive` se calculait sur 120 mg/dL inventés et
+// la tuile remettait « il manque X U » à quelqu'un qui peut être à 60. Même
+// motif déjà trouvé et corrigé sur `TopUpContext.currentGlucose`
+// (`suggestTopUp`) : ne jamais passer un défaut fabriqué à un garde-fou de
+// sécurité, traiter l'absence de mesure comme un blocage.
+//
+// La lib ne peut pas connaître cette confusion — elle reçoit fidèlement ce
+// qu'on lui donne — donc la correction est double : (1) le site d'appel ne
+// transmet plus que la lecture capteur réelle (voir app/diabete/page.tsx),
+// et (2) la lib elle-même ne produit plus de verdict de déficit quand la
+// glycémie est absente, par défense en profondeur.
+
+test("verdict : glycémie inconnue + déficit → aucun verdict de déficit, message d'absence de mesure", () => {
+  const cob = computeCarbsOnBoard({
+    insulinLogs: [log(20, { carbsGrams: 100, units: 0 })],
+    isf: ISF,
+    ratios: RATIOS,
+    // Pas de currentGlucose du tout — c'est le point du test.
+  });
+  assert.equal(cob.status, "deficit");
+  assert.equal(cob.glucoseUnknown, true);
+  assert.equal(cob.hypoActive, false, "hypoActive ne doit PAS être déduit d'une absence de mesure");
+
+  const v = cobVerdict(cob);
+  assert.doesNotMatch(v.text, /il manque/i, `le verdict de déficit ne doit pas s'afficher, reçu « ${v.text} »`);
+  assert.doesNotMatch(v.text, /resucrage/i, `l'absence de mesure n'est pas un resucrage, reçu « ${v.text} »`);
+  assert.match(v.text, /glyc[ée]mie inconnue/i, `le message doit dire vrai (absence de mesure), reçu « ${v.text} »`);
+});
+
+test("verdict : glycémie inconnue + excès → le verdict d'excès reste affiché", () => {
+  // Bolus de 8 U il y a 60 min pour seulement 20 g de glucides (même
+  // scénario que le test d'excès plus haut), sans currentGlucose.
+  const cob = computeCarbsOnBoard({
+    insulinLogs: [log(60, { carbsGrams: 20, units: 8 })],
+    isf: ISF,
+    ratios: RATIOS,
+  });
+  assert.equal(cob.status, "excess");
+  assert.equal(cob.glucoseUnknown, true);
+
+  const v = cobVerdict(cob);
+  assert.match(v.text, /excès/i, `l'excès n'est pas neutralisé par une glycémie inconnue, reçu « ${v.text} »`);
+});
+
+test("verdict : glycémie fournie à 120 + déficit → verdict de déficit normal (preuve que c'est l'absence, pas une valeur, qui déclenche la règle)", () => {
+  const cob = computeCarbsOnBoard({
+    insulinLogs: [log(20, { carbsGrams: 100, units: 0 })],
+    isf: ISF,
+    ratios: RATIOS,
+    currentGlucose: 120,
+  });
+  assert.equal(cob.status, "deficit");
+  assert.equal(cob.glucoseUnknown, false);
+  assert.equal(cob.hypoActive, false);
+
+  const v = cobVerdict(cob);
+  assert.match(v.text, /il manque/i);
 });
