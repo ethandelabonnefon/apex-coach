@@ -645,3 +645,71 @@ test("intégration : un CarbEntry de resucrage (buildHypoCarbEntry) vieux de 20 
   assert.ok(cob.totalRemainingG < 13, "une partie du resucrage a déjà été absorbée à T+20min");
   assert.notEqual(cob.status, "idle");
 });
+
+// ───────────────────────────────────────────────────────────────────────
+// Correction 1 (septembre 2026) : le resucrage sort du besoin d'insuline
+// ───────────────────────────────────────────────────────────────────────
+//
+// Bug production : l'utilisateur était à 68 mg/dL, a mangé 17 g de
+// resucrage sur recommandation de l'app, et la tuile a affiché « 82 g · il
+// manque ~4,2 U ». Compter le resucrage dans le besoin d'insuline revient à
+// demander d'annuler le traitement de l'hypo en cours. Le marqueur fiable
+// est `CarbEntry.hypoEventId` (posé par `buildHypoCarbEntry`) → `isRescue`
+// sur `ActiveCarbSource`, exclu de `insulinNeededU` mais PAS de
+// `carbsRemainingG`/`totalRemainingG` (grammes affichés + prédiction nuit,
+// qui n'est pas concernée par ce champ).
+
+test("resucrage : 17 g n'ajoutent rien à insulinNeededU, mais alimentent bien carbsRemainingG", () => {
+  const consumedAt = new Date(Date.now() - 10 * 60_000);
+  const entry = buildHypoCarbEntry({
+    hypoEventId: "hypo-correction-1",
+    carbsGrams: 17,
+    consumedAt,
+  });
+  assert.ok(entry, "buildHypoCarbEntry doit produire un CarbEntry pour 17g");
+
+  const cob = computeCarbsOnBoard({
+    insulinLogs: [],
+    carbEntries: [entry!],
+    isf: ISF,
+    ratios: RATIOS,
+  });
+
+  assert.equal(cob.sources[0].isRescue, true, "la source doit être marquée resucrage");
+  assert.equal(
+    cob.insulinNeededU,
+    0,
+    "un re-sucrage ne doit jamais générer de besoin d'insuline",
+  );
+  assert.ok(
+    cob.carbsRemainingG > 0 && cob.carbsRemainingG < 17,
+    `les grammes du resucrage doivent rester visibles, partiellement absorbés à T+10min (reçu ${cob.carbsRemainingG})`,
+  );
+});
+
+test("jumeau : les mêmes 17 g saisis SANS hypoEventId (glucides ordinaires) comptent dans insulinNeededU", () => {
+  // Preuve que la distinction porte sur le marqueur `hypoEventId`, pas sur
+  // le label, les grammes ou une autre heuristique : ce test échoue si
+  // `isRescue` se met à dépendre d'autre chose que ce champ. Si la règle de
+  // la correction 1 disparaît (le filtre `!s.isRescue` sauté), ce test-ci
+  // continue de passer — c'est le test précédent qui échoue alors, la
+  // preuve que le comportement dépend bien du marqueur et non de la valeur.
+  const cob = computeCarbsOnBoard({
+    insulinLogs: [],
+    carbEntries: [
+      {
+        id: "c-ordinaire",
+        carbsGrams: 17,
+        eatenAt: new Date(Date.now() - 10 * 60_000).toISOString(),
+      },
+    ],
+    isf: ISF,
+    ratios: RATIOS,
+  });
+
+  assert.equal(cob.sources[0].isRescue, false, "aucun hypoEventId → pas resucrage");
+  assert.ok(
+    cob.insulinNeededU > 0,
+    "17g ordinaires (sans hypoEventId) doivent générer un besoin d'insuline",
+  );
+});
