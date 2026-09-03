@@ -40,6 +40,12 @@ import { usePatternDetection } from "@/hooks/usePatternDetection";
 import { isLearnable, resolveCarbs } from "@/lib/carbs-on-board";
 import type { SportSession } from "@/lib/sport-glucose-analytics";
 import {
+  analyzeAllSlots,
+  type SlotAnalysis,
+  type SportSession as DoseSportSession,
+} from "@/lib/dose-validation";
+import { DoseValidation } from "@/components/diabete/DoseValidation";
+import {
   ArrowLeft,
   AlertTriangle,
   TrendingUp,
@@ -229,11 +235,20 @@ export default function DiabeteHistoriquePage() {
   // Phase 11 Bloc 4 — toggle Vue courbe vs Vue AGP pour la section line chart
   const [chartView, setChartView] = useState<"line" | "agp">("line");
 
+  // Tâche 4 — validation des doses : fenêtre fixe 90j, indépendante du
+  // sélecteur `days` de la page (sinon le verdict changerait selon la vue
+  // affichée). Fetch dédié, une seule fois au montage.
+  const [validationPoints, setValidationPoints] = useState<{ t: number; value: number }[]>([]);
+  const [validationLoading, setValidationLoading] = useState(true);
+
   const insulinLogs = useStore((s) => s.insulinLogs);
   const diabetesConfig = useStore((s) => s.diabetesConfig);
   // Phase 11 Bloc 5 — sources de contexte enrichi pour le bilan IA
   const completedWorkouts = useStore((s) => s.completedWorkouts);
   const completedRunningSessions = useStore((s) => s.completedRunningSessions);
+  // Tâche 4 — validation des doses par créneau
+  const profile = useStore((s) => s.profile);
+  const updateRatioProfile = useStore((s) => s.updateRatioProfile);
   const { patterns: detectedPatterns } = usePatternDetection({
     insulinLogs,
     diabetesConfig,
@@ -264,6 +279,35 @@ export default function DiabeteHistoriquePage() {
         glucoseCheckpoints: r.glucoseCheckpoints,
       }));
   }, [completedRunningSessions, days]);
+
+  // Tâche 4 — verdict par créneau (matin/midi/goûter/soir). Fenêtre fixe
+  // 90j (validationPoints), indépendante du sélecteur `days` de la page.
+  const doseAnalyses: SlotAnalysis[] = useMemo(() => {
+    const workouts: DoseSportSession[] = [
+      ...completedWorkouts.map((w) => ({
+        date: w.date,
+        durationMin: Math.round(w.duration ?? 60),
+      })),
+      ...completedRunningSessions.map((r) => ({
+        date: r.date,
+        durationMin: Math.round(r.actualDuration ?? 45),
+      })),
+    ];
+    return analyzeAllSlots({
+      insulinLogs,
+      archivePoints: validationPoints,
+      workouts,
+      ratios: diabetesConfig.ratios,
+      ratioChangedAt: profile.ratioChangedAt ?? {},
+    });
+  }, [
+    insulinLogs,
+    validationPoints,
+    completedWorkouts,
+    completedRunningSessions,
+    diabetesConfig.ratios,
+    profile.ratioChangedAt,
+  ]);
 
   // ─── État Bilan IA (Phase 10c) ────────────────────────────────────────
   const [insight, setInsight] = useState<InsightOutput | null>(null);
@@ -369,6 +413,29 @@ export default function DiabeteHistoriquePage() {
     }
   };
 
+  // Tâche 4 — applique la baisse de ratio proposée pour un créneau. Aucune
+  // écriture sans clic explicite + confirmation native : c'est la seule
+  // action de ce type dans toute la page.
+  function handleApplyRatio(a: SlotAnalysis) {
+    if (!a.proposedRatio) return;
+    const slot = a.mealType as "morning" | "lunch" | "snack" | "dinner";
+    const label = { morning: "matin", lunch: "midi", snack: "goûter", dinner: "soir" }[slot];
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        `Passer le ratio du ${label} de 1 U / ${a.proposedRatio.current} g à 1 U / ${a.proposedRatio.proposed} g ?`,
+      )
+    ) {
+      return;
+    }
+    const activeId = diabetesConfig.activeProfileId;
+    const active = diabetesConfig.profiles.find((p) => p.id === activeId);
+    if (!active) return;
+    updateRatioProfile(activeId, {
+      ratios: { ...active.ratios, [slot]: a.proposedRatio.proposed },
+    });
+  }
+
   // Reset l'insight si on change de période
   useEffect(() => {
     setInsight(null);
@@ -400,6 +467,26 @@ export default function DiabeteHistoriquePage() {
       cancelled = true;
     };
   }, [days]);
+
+  // Tâche 4 — fetch dédié 90j pour la validation des doses, indépendant du
+  // sélecteur de période ci-dessus. Une seule fois au montage.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/glucose/archive?days=90")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled) setValidationPoints(d?.points ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setValidationPoints([]);
+      })
+      .finally(() => {
+        if (!cancelled) setValidationLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const points = data?.points ?? [];
   const overallStats = useMemo(() => stats(points), [points]);
@@ -814,6 +901,27 @@ export default function DiabeteHistoriquePage() {
 
           {/* Phase 11 Bloc 4.3 — Calendrier 30j */}
           <GlucoseCalendar points={data?.points ?? []} days={Math.min(30, days)} />
+
+          {/* Tâche 4 — Validation des doses par créneau (fenêtre fixe 90j) */}
+          <section className="surface-1 rounded-2xl p-5 mb-4">
+            <div className="mb-1">
+              <h2 className="text-base font-semibold text-text-primary">
+                Validation des doses
+              </h2>
+              <p className="text-xs text-text-tertiary mt-0.5">
+                Hypoglycémies dans les 5 h suivant chaque repas, hors repas suivis de
+                sport, avec insuline résiduelle, à quantité incertaine ou suivis d&apos;une
+                correction.
+              </p>
+            </div>
+            <div className="mt-4">
+              <DoseValidation
+                analyses={doseAnalyses}
+                onApply={handleApplyRatio}
+                loading={validationLoading}
+              />
+            </div>
+          </section>
 
           {/* Phase 11 Bloc 6 — Corrélation sport ↔ glycémie */}
           <SportGlucoseCorrelation
