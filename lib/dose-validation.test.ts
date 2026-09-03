@@ -11,6 +11,7 @@ import {
   selectEligibleMeals,
   analyzeSlot,
   analyzeAllSlots,
+  formatRatio,
   HYPO_THRESHOLD,
   RATIO_STEP,
   type ArchivePoint,
@@ -361,4 +362,32 @@ test("analyzeAllSlots rend les 4 créneaux, même vides", () => {
 
 test("le pas de correction est bien de 10 %", () => {
   assert.equal(RATIO_STEP, 0.1);
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// formatRatio — Round de correction 1 (trouvaille reviewer, contre-preuve
+// coordinateur) : fige le comportement pour ne plus dépendre d'une
+// relecture de l'idiome de formatage.
+// ───────────────────────────────────────────────────────────────────────
+
+test("formatRatio : entiers, pas de virgule orpheline", () => {
+  assert.equal(formatRatio(20), "1 U / 20 g");
+  assert.equal(formatRatio(10), "1 U / 10 g");
+  assert.equal(formatRatio(100), "1 U / 100 g");
+  assert.equal(formatRatio(1), "1 U / 1 g");
+  assert.equal(formatRatio(0), "1 U / 0 g");
+});
+
+test("formatRatio : décimales, virgule française", () => {
+  assert.equal(formatRatio(11.1), "1 U / 11,1 g");
+  assert.equal(formatRatio(20.5), "1 U / 20,5 g");
+  assert.equal(formatRatio(0.5), "1 U / 0,5 g");
+  assert.equal(formatRatio(200.1), "1 U / 200,1 g");
+});
+
+test("formatRatio : ratios réels du profil (6,7 / 8,3 / 10 / 11,1)", () => {
+  assert.equal(formatRatio(6.7), "1 U / 6,7 g");
+  assert.equal(formatRatio(8.3), "1 U / 8,3 g");
+  assert.equal(formatRatio(10), "1 U / 10 g");
+  assert.equal(formatRatio(11.1), "1 U / 11,1 g");
 });

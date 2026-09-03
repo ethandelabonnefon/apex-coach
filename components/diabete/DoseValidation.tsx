@@ -11,7 +11,7 @@
 import { AlertTriangle, CheckCircle2, HelpCircle, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import type { SlotAnalysis } from "@/lib/dose-validation";
+import { formatRatio, type SlotAnalysis } from "@/lib/dose-validation";
 
 const SLOT_LABELS: Record<string, string> = {
   morning: "Matin",
@@ -26,11 +26,6 @@ const EXCLUSION_LABELS: Record<string, string> = {
   uncertain: "à quantité incertaine",
   correction: "suivis d'une correction",
 };
-
-/** Ratio interne (g par U) → format naturel « 1 U / 10 g ». */
-function formatRatio(gPerU: number): string {
-  return `1 U / ${gPerU.toFixed(1).replace(".", ",").replace(",0", "")} g`;
-}
 
 function SlotCard({
   analysis,

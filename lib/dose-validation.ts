@@ -287,6 +287,20 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
+/**
+ * Ratio interne (g par U) → format naturel « 1 U / 10 g ».
+ *
+ * Vit ici (et pas dans le composant d'affichage) parce que c'est le module
+ * qui produit les ratios, et parce qu'un idiome de formatage de dosage doit
+ * être testable par `npm test` sans passer par le rendu React.
+ */
+export function formatRatio(gPerU: number): string {
+  const value = Number.isInteger(gPerU)
+    ? String(gPerU)
+    : gPerU.toFixed(1).replace(".", ",");
+  return `1 U / ${value} g`;
+}
+
 export function analyzeSlot(
   selection: SlotSelection,
   currentRatio: number,
