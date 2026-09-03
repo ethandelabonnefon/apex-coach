@@ -224,11 +224,11 @@ page, seul endroit qui appelle `updateRatioProfile`.
 - Sélection : chacune des quatre exclusions écarte bien le repas visé, et **seulement** lui
   (un test par motif, chacun devant échouer si son exclusion disparaît)
 - Sélection : un repas sans glucides, une seconde dose de split → écartés
-- Fenêtre : s'étend au-delà de 7 jours jusqu'à 3 repas éligibles ; s'arrête à 90 jours
+- Fenêtre : s'étend au-delà de 7 jours jusqu'à 5 repas éligibles ; s'arrête à 90 jours
 - Fenêtre : ne remonte jamais avant `ratioChangedAt`
-- Verdict : 2 repas éligibles → `insufficient-data` quel que soit le nombre d'hypos
+- Verdict : 4 repas éligibles → `insufficient-data` quel que soit le nombre d'hypos (le minimum est 5)
 - Verdict : 2 hypos sur 4 repas (50 %) → `over-bolus`
-- Verdict : 1 hypo sur 3 repas → `ok` (le seuil de 2 événements protège)
+- Verdict : 1 hypo sur 5 repas → `ok` (le seuil de 2 événements protège)
 - Verdict : 2 hypos sur 30 repas (6,7 %) → `ok` (le taux de 25 % protège)
 - Hypo : plusieurs passages sous 70 dans la fenêtre → comptés comme un seul repas fautif
 - Confiance : bascule à `confirmé` à la moitié des repas confirmés
