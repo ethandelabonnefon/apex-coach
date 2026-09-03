@@ -216,6 +216,107 @@ test("D1 — chevauchement : séance à H−260 min durant 60 min écarte le rep
   assert.ok(short.meals.some((m) => m.injectionId === "a"));
 });
 
+// ─── Point 1 (re-revue) : bornes AVANT/APRÈS des prédicats d'exclusion ──
+//
+// La fenêtre de jugement d'un repas est tronquée au prochain bolus repas
+// (cf. C3 plus haut). `hasSportAround` et `hasInterveningCorrection`
+// doivent chercher vers l'AVANT sur `windowEnd` (tronqué) : un événement
+// tombé après la fin réellement jugée n'a pas pu influencer les hypos
+// mesurées pour CE repas. La borne ARRIÈRE du sport (SPORT_BEFORE_MIN),
+// elle, reste pleine — asymétrie à préserver.
+
+test("Point 1 — running APRÈS la fin tronquée de la fenêtre n'exclut plus le repas", () => {
+  const base = NOW - 1 * DAY;
+  const logs = [
+    meal(0, { id: "snack-a", mealType: "snack", injectedAt: new Date(base) }),
+    meal(0, { id: "dinner-a", mealType: "dinner", injectedAt: new Date(base + 240 * MIN) }),
+  ];
+  // Fenêtre du goûter tronquée à H+240 (dîner). Running à H+260 : après la
+  // fin tronquée, mais toujours dans les 300 min pleines d'OBSERVATION_WINDOW_MIN
+  // — c'est exactement le cas que l'ancien code excluait à tort.
+  const workouts: SportSession[] = [
+    { date: new Date(base + 260 * MIN).toISOString(), durationMin: 20, type: "running" },
+  ];
+  const sel = selectEligibleMeals(input({ insulinLogs: logs, workouts }), "snack");
+  assert.ok(
+    sel.meals.some((m) => m.injectionId === "snack-a"),
+    "un running tombé après la fin tronquée du goûter n'a pas pu causer les hypos qu'on lui impute",
+  );
+  assert.equal(sel.excluded.sport ?? 0, 0);
+});
+
+test("Point 1 — running DANS la fenêtre tronquée exclut toujours le repas", () => {
+  const base = NOW - 1 * DAY;
+  const logs = [
+    meal(0, { id: "snack-a", mealType: "snack", injectedAt: new Date(base) }),
+    meal(0, { id: "dinner-a", mealType: "dinner", injectedAt: new Date(base + 240 * MIN) }),
+  ];
+  // Running à H+200 : avant la fin tronquée (H+240) → exclusion toujours due.
+  const workouts: SportSession[] = [
+    { date: new Date(base + 200 * MIN).toISOString(), durationMin: 20, type: "running" },
+  ];
+  const sel = selectEligibleMeals(input({ insulinLogs: logs, workouts }), "snack");
+  assert.ok(!sel.meals.some((m) => m.injectionId === "snack-a"));
+  assert.equal(sel.excluded.sport, 1);
+});
+
+test("Point 1 — correction injectée APRÈS la fin tronquée n'exclut plus le repas", () => {
+  const base = NOW - 1 * DAY;
+  const logs = [
+    meal(0, { id: "snack-a", mealType: "snack", injectedAt: new Date(base) }),
+    meal(0, { id: "dinner-a", mealType: "dinner", injectedAt: new Date(base + 240 * MIN) }),
+    meal(0, {
+      id: "corr",
+      units: 1,
+      carbsGrams: 0,
+      mealType: "correction",
+      injectedAt: new Date(base + 260 * MIN),
+    }),
+  ];
+  const sel = selectEligibleMeals(input({ insulinLogs: logs }), "snack");
+  assert.ok(
+    sel.meals.some((m) => m.injectionId === "snack-a"),
+    "une correction tombée après la fin tronquée du goûter n'a pas pu causer les hypos qu'on lui impute",
+  );
+  assert.equal(sel.excluded.correction ?? 0, 0);
+});
+
+test("Point 1 — correction DANS la fenêtre tronquée exclut toujours le repas", () => {
+  const base = NOW - 1 * DAY;
+  const logs = [
+    meal(0, { id: "snack-a", mealType: "snack", injectedAt: new Date(base) }),
+    meal(0, { id: "dinner-a", mealType: "dinner", injectedAt: new Date(base + 240 * MIN) }),
+    meal(0, {
+      id: "corr",
+      units: 1,
+      carbsGrams: 0,
+      mealType: "correction",
+      injectedAt: new Date(base + 200 * MIN),
+    }),
+  ];
+  const sel = selectEligibleMeals(input({ insulinLogs: logs }), "snack");
+  assert.ok(!sel.meals.some((m) => m.injectionId === "snack-a"));
+  assert.equal(sel.excluded.correction, 1);
+});
+
+test("Point 1 — la borne arrière du sport reste SPORT_BEFORE_MIN plein malgré la troncature", () => {
+  const base = NOW - 1 * DAY;
+  const logs = [
+    meal(0, { id: "snack-a", mealType: "snack", injectedAt: new Date(base) }),
+    // Fenêtre du goûter tronquée très court (H+130), sans rapport avec la
+    // borne arrière du sport.
+    meal(0, { id: "dinner-a", mealType: "dinner", injectedAt: new Date(base + 130 * MIN) }),
+  ];
+  // Running débutant 235 min avant le repas : dans les 240 min pleines de
+  // SPORT_BEFORE_MIN, qui ne dépendent jamais de la troncature avant.
+  const workouts: SportSession[] = [
+    { date: new Date(base - 235 * MIN).toISOString(), durationMin: 10, type: "running" },
+  ];
+  const sel = selectEligibleMeals(input({ insulinLogs: logs, workouts }), "snack");
+  assert.ok(!sel.meals.some((m) => m.injectionId === "snack-a"));
+  assert.equal(sel.excluded.sport, 1);
+});
+
 // ─── Autres exclusions ─────────────────────────────────────────────────
 
 test("exclusion IOB : injection récente au moment du bolus", () => {

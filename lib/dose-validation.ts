@@ -240,27 +240,34 @@ function sessionExcludes(w: SportSession): boolean {
 
 /**
  * L'intervalle [début, début + durée] de la séance chevauche-t-il la zone
- * sensible [repas − 4 h, repas + 5 h] ?
+ * sensible [repas − 4 h, fin de la fenêtre d'observation] ?
  *
  * On raisonne sur l'intervalle et pas sur le seul instant de début : une
  * séance commencée 4 h 20 avant le repas mais longue d'une heure déborde
  * dans les 4 h précédentes.
  *
- * La zone reste calée sur OBSERVATION_WINDOW_MIN, jamais sur la fenêtre
- * tronquée : écarter un repas dont le sport tombe après la troncature est
- * un excès de prudence sans conséquence (le créneau se tait), alors que
- * l'inverse imputerait au ratio une hypo causée par le sport.
+ * La borne AVANT reste calée sur SPORT_BEFORE_MIN plein (240 min), jamais
+ * sur la fenêtre tronquée : une séance antérieure agit par la sensibilité
+ * post-effort, qui ne dépend pas de la troncature. La borne APRÈS, elle,
+ * est calée sur `windowEnd` (déjà tronqué au prochain bolus repas) et non
+ * sur OBSERVATION_WINDOW_MIN plein : un événement tombant après la fin de
+ * la fenêtre jugée n'a pas pu influencer les hypos qu'on impute à CE repas
+ * — l'inclure écarterait un repas sans hypo pour un motif sans effet
+ * possible sur le taux du créneau.
  */
-function hasSportAround(workouts: SportSession[], mealMs: number): boolean {
+function hasSportAround(
+  workouts: SportSession[],
+  mealMs: number,
+  windowEnd: number,
+): boolean {
   const from = mealMs - SPORT_BEFORE_MIN * MIN_MS;
-  const to = mealMs + OBSERVATION_WINDOW_MIN * MIN_MS;
   return workouts.some((w) => {
     if (!w || !sessionExcludes(w)) return false;
     const start = toMs(w.date);
     if (!Number.isFinite(start)) return false;
     const dur = Number.isFinite(w.durationMin) && w.durationMin > 0 ? w.durationMin : 0;
     const end = start + dur * MIN_MS;
-    return end >= from && start <= to;
+    return end >= from && start <= windowEnd;
   });
 }
 
@@ -289,20 +296,24 @@ function iobBefore(logs: InsulinLog[], mealMs: number, selfId: string): number {
  * littéralement la correction intercalée que la règle veut écarter — une
  * dose supplémentaire décidée après coup, donc le candidat le plus probable
  * pour causer l'hypo. D'où le prédicat sur `isSplitDose === true`.
+ *
+ * Bornée sur `windowEnd` (déjà tronqué au prochain bolus repas), pas sur
+ * OBSERVATION_WINDOW_MIN plein : une correction tombée après la fin de la
+ * fenêtre jugée n'a pas pu influencer les hypos mesurées pour CE repas.
  */
 function hasInterveningCorrection(
   logs: InsulinLog[],
   mealMs: number,
   mealId: string,
+  windowEnd: number,
 ): boolean {
-  const to = mealMs + OBSERVATION_WINDOW_MIN * MIN_MS;
   return logs.some((l) => {
     if (l.id === mealId) return false;
     if (!(l.units > 0)) return false;
     if (resolveCarbs(l) > 0) return false;
     if (l.isSplitDose === true && l.parentInjectionId === mealId) return false;
     const t = toMs(l.injectedAt);
-    return Number.isFinite(t) && t > mealMs && t <= to;
+    return Number.isFinite(t) && t > mealMs && t <= windowEnd;
   });
 }
 
@@ -382,13 +393,23 @@ export function selectEligibleMeals(
   for (const log of candidates) {
     const t = toMs(log.injectedAt);
 
+    // Fenêtre d'observation tronquée au prochain bolus repas — calculée
+    // AVANT les prédicats d'exclusion qui regardent devant le repas (sport,
+    // correction), pour qu'ils ne cherchent jamais au-delà de ce qui a pu
+    // influencer les hypos réellement mesurées pour ce repas.
+    const nextMeal = nextMealBolusAfter(logs, t, log.id);
+    const windowEnd = Math.min(
+      t + OBSERVATION_WINDOW_MIN * MIN_MS,
+      nextMeal ?? Number.POSITIVE_INFINITY,
+    );
+
     // Ordre des exclusions : le premier motif rencontré est celui compté,
     // pour que la somme des motifs égale le nombre de repas écartés.
     if (!isLearnable(log)) {
       bump("uncertain", t);
       continue;
     }
-    if (hasSportAround(input.workouts ?? [], t)) {
+    if (hasSportAround(input.workouts ?? [], t, windowEnd)) {
       bump("sport", t);
       continue;
     }
@@ -396,17 +417,11 @@ export function selectEligibleMeals(
       bump("iob", t);
       continue;
     }
-    if (hasInterveningCorrection(logs, t, log.id)) {
+    if (hasInterveningCorrection(logs, t, log.id, windowEnd)) {
       bump("correction", t);
       continue;
     }
 
-    // Fenêtre d'observation tronquée au prochain bolus repas.
-    const nextMeal = nextMealBolusAfter(logs, t, log.id);
-    const windowEnd = Math.min(
-      t + OBSERVATION_WINDOW_MIN * MIN_MS,
-      nextMeal ?? Number.POSITIVE_INFINITY,
-    );
     const windowMin = (windowEnd - t) / MIN_MS;
     if (windowMin < MIN_TRUNCATED_WINDOW_MIN) {
       // Un goûter muet est honnête ; un goûter jugé sur l'insuline du dîner
