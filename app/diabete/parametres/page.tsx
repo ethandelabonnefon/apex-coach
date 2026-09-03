@@ -804,12 +804,17 @@ export default function DiabeteParametresPage() {
           Réinitialiser l&apos;apprentissage des hypoglycémies
         </p>
         <p className="text-xs text-text-tertiary mt-1 leading-snug">
-          Efface définitivement tes {hypoEvents.length} événement
-          {hypoEvents.length > 1 ? "s" : ""} d&apos;hypoglycémie enregistré
-          {hypoEvents.length > 1 ? "s" : ""} (glycémie de départ, glucides consommés,
-          évaluation) — la donnée qui alimente ton GRG personnel appris. Ne touche à
-          rien d&apos;autre : injections, sport, glucides, glycémies, repas et
-          diagnostics restent intacts.
+          {/* Phrase assemblée en une fois : le découpage JSX autour des
+              expressions de pluriel avalait l'espace au saut de ligne
+              (« 0 événementd'hypoglycémie »). Sur l'étiquette d'une
+              suppression définitive, la typo doit être irréprochable. */}
+          {`Efface définitivement ${
+            hypoEvents.length > 1
+              ? `tes ${hypoEvents.length} événements d'hypoglycémie enregistrés`
+              : hypoEvents.length === 1
+                ? "ton événement d'hypoglycémie enregistré"
+                : "l'historique d'hypoglycémie (actuellement vide)"
+          } (glycémie de départ, glucides consommés, évaluation) — la donnée qui alimente ton GRG personnel appris. Ne touche à rien d'autre : injections, sport, glucides, glycémies, repas et diagnostics restent intacts.`}
         </p>
         <button
           type="button"
