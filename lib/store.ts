@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { USER_PROFILE, DIABETES_CONFIG, DIABETES_PROFILES_DEFAULT, MUSCU_PROGRAM } from './constants';
 import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile, SplitDoseReminder, HypoEvent, CarbEntry } from '@/types';
 import type { NightPredictionRecord } from '@/lib/night-calibration';
+import { computeRatioStamps, hasNewRatioStamps } from '@/lib/dose-validation';
 
 interface CompletedWorkout {
   id: string;
@@ -207,6 +208,26 @@ export const useStore = create<AppState>()(
               : p,
           );
         }
+        // Tampon anti-double-baisse : c'est par ICI que passent les deux
+        // chemins réels de modification d'un ratio (Paramètres et Le
+        // Docteur). Sans ce tampon, la validation des doses continuerait à
+        // analyser les repas d'AVANT le changement — soit en reproposant
+        // une seconde baisse, soit en validant « correct » un créneau qui
+        // vient d'être renforcé.
+        if (hasNewRatioStamps(s.diabetesConfig.ratios, updates.ratios)) {
+          return {
+            diabetesConfig: next,
+            profile: {
+              ...s.profile,
+              ratioChangedAt: computeRatioStamps(
+                s.diabetesConfig.ratios,
+                updates.ratios,
+                new Date().toISOString(),
+                s.profile.ratioChangedAt,
+              ),
+            },
+          };
+        }
         return { diabetesConfig: next };
       }),
 
@@ -221,6 +242,13 @@ export const useStore = create<AppState>()(
         // Changement réel de basale (bascule vers un profil à dose différente)
         // → reset de la calibration nuit, cf. updateRatioProfile ci-dessous.
         const basalChanged = target.basalDose !== s.profile.basalDose;
+        // Une bascule de profil remplace les quatre ratios d'un coup : on
+        // tamponne chaque créneau réellement modifié, sinon la validation
+        // des doses jugerait le nouveau profil sur les repas de l'ancien.
+        const ratioStampsChanged = hasNewRatioStamps(
+          s.diabetesConfig.ratios,
+          target.ratios,
+        );
         return {
           diabetesConfig: {
             ...s.diabetesConfig,
@@ -233,6 +261,16 @@ export const useStore = create<AppState>()(
             ...s.profile,
             basalDose: target.basalDose,
             ...(basalChanged ? { basalDoseChangedAt: new Date().toISOString() } : {}),
+            ...(ratioStampsChanged
+              ? {
+                  ratioChangedAt: computeRatioStamps(
+                    s.diabetesConfig.ratios,
+                    target.ratios,
+                    new Date().toISOString(),
+                    s.profile.ratioChangedAt,
+                  ),
+                }
+              : {}),
           },
         };
       }),
@@ -258,15 +296,10 @@ export const useStore = create<AppState>()(
             updates.basalDose !== undefined && updates.basalDose !== s.profile.basalDose;
           // Créneaux dont le ratio change réellement (comparé à la valeur
           // AVANT cette mise à jour), pour repartir d'une base propre.
-          const slots = ['morning', 'lunch', 'snack', 'dinner'] as const;
-          const stampedAt = new Date().toISOString();
-          const ratioStamps: Record<string, string> = {};
-          for (const slot of slots) {
-            const next = updates.ratios?.[slot];
-            if (next !== undefined && next !== s.diabetesConfig.ratios[slot]) {
-              ratioStamps[slot] = stampedAt;
-            }
-          }
+          const ratioStampsChanged = hasNewRatioStamps(
+            s.diabetesConfig.ratios,
+            updates.ratios,
+          );
           // Resync les miroirs pour le profil actif
           return {
             diabetesConfig: {
@@ -280,8 +313,15 @@ export const useStore = create<AppState>()(
               ...s.profile,
               basalDose: active.basalDose,
               ...(basalChanged ? { basalDoseChangedAt: new Date().toISOString() } : {}),
-              ...(Object.keys(ratioStamps).length > 0
-                ? { ratioChangedAt: { ...s.profile.ratioChangedAt, ...ratioStamps } }
+              ...(ratioStampsChanged
+                ? {
+                    ratioChangedAt: computeRatioStamps(
+                      s.diabetesConfig.ratios,
+                      updates.ratios,
+                      new Date().toISOString(),
+                      s.profile.ratioChangedAt,
+                    ),
+                  }
                 : {}),
             },
           };
