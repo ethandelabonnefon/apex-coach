@@ -550,11 +550,18 @@ export default function DiabetePage() {
         pendingSplit: bolusResult.splitDose
           ? { units: bolusResult.splitDose.later, minutesUntil: bolusResult.splitDose.delayMinutes }
           : undefined,
+        // Règle 2 (sept 2026) : plancher de sécurité — le plafond ne
+        // descend jamais sous ce bolus glucides moins CARB_BOLUS_FLOOR_MARGIN.
+        // Même valeur que celle utilisée par `calculateBolus` ci-dessus
+        // (déjà réduite par pré-sport / sensibilité post-exercice le cas
+        // échéant), pas redérivée depuis `carbsGrams` pour ne pas diverger.
+        carbBolusUnits: bolusResult.carbBolus,
         nowMs: nowTick,
       }),
     [
       bolusResult.totalBolus,
       bolusResult.splitDose,
+      bolusResult.carbBolus,
       recentExercise,
       glucoseForBolus,
       liveGlucoseAgeMin,

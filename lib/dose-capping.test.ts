@@ -11,8 +11,10 @@ import {
   capDoseByPrediction,
   PREDICTION_SAFETY_LIMIT,
   CAPPING_GRACE_MIN,
+  CARB_BOLUS_FLOOR_MARGIN,
   type DoseCappingContext,
 } from "./dose-capping";
+import { calculateBolus } from "./insulin-calculator";
 import { TOPUP_MAX_GLUCOSE_AGE_MIN } from "./carbs-on-board";
 import type { InsulinLog } from "@/types";
 
@@ -360,4 +362,102 @@ test("mineur : candidate négative ET currentGlucose NaN → renvoyée à 0 sans
   const r = capDoseByPrediction(-3, ctx({ currentGlucose: NaN }));
   assert.equal(r.units, 0, `attendu 0, reçu ${r.units}`);
   assert.equal(r.capped, false);
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Règle 2 — sept 2026, décision utilisateur : le plafond ne descend
+// jamais sous « bolus glucides − 2 U ». Mesuré : sur 60 g (bolus glucides
+// 6 U) avec de l'insuline encore active, la boucle de décrément pouvait
+// aller jusqu'à 0 U — défendable pour le prédicteur, garantie
+// d'hyperglycémie sur un vrai repas.
+// ─────────────────────────────────────────────────────────────────────
+
+test("plancher : 60g à 70 mg/dL avec de l'insuline active → 4U (bolus glucides 6U − 2U) et non 0", () => {
+  // Sans le plancher (carbBolusUnits absent), ce scénario exact ramène la
+  // dose à 0 — c'est le trou de sécurité que la règle comble. Avec lui,
+  // la dose s'arrête à 4U et la raison le dit explicitement.
+  const base = {
+    currentGlucose: 70,
+    // 4U injectées il y a 45min ≈ 3,08U encore actives (décroissance
+    // linéaire sur 195min) — le « 3 U actives » de la spec.
+    insulinLogs: [pastBolus(45, 4)],
+    pendingMeal: { carbsGrams: 60, fatGrams: 0, proteinGrams: 0, mealType: "lunch" },
+  };
+  const sansPlancher = capDoseByPrediction(6, ctx(base));
+  assert.equal(sansPlancher.units, 0, `attendu 0U sans plancher (le trou de sécurité), reçu ${sansPlancher.units}`);
+
+  const avecPlancher = capDoseByPrediction(6, ctx({ ...base, carbBolusUnits: 6 }));
+  assert.equal(avecPlancher.units, 4, `attendu 4U (6 − 2), reçu ${avecPlancher.units}`);
+  assert.equal(avecPlancher.capped, true);
+  assert.ok(
+    avecPlancher.reason && /maintenue|plancher|minimum/i.test(avecPlancher.reason) && avecPlancher.reason.includes("4"),
+    `raison attendue signalant le plancher, reçu : ${avecPlancher.reason}`,
+  );
+  // predictedMinAfter reflète la trajectoire À LA DOSE RETENUE (4U), qui
+  // reste sous la limite — pas une valeur qui donnerait l'illusion que
+  // 4U tient la limite de sécurité.
+  assert.ok(
+    avecPlancher.predictedMinAfter !== null && avecPlancher.predictedMinAfter < PREDICTION_SAFETY_LIMIT,
+    `predictedMinAfter doit refléter la vraie trajectoire sous la limite, reçu ${avecPlancher.predictedMinAfter}`,
+  );
+});
+
+test("plancher : trajectoire qui tient déjà au-dessus du plancher → comportement inchangé", () => {
+  const r = capDoseByPrediction(6, ctx({
+    currentGlucose: 140,
+    pendingMeal: { carbsGrams: 60, fatGrams: 0, proteinGrams: 0, mealType: "lunch" },
+    carbBolusUnits: 6,
+  }));
+  assert.equal(r.units, 6);
+  assert.equal(r.capped, false);
+  assert.equal(r.reason, null);
+});
+
+test("plancher : jamais négatif sur un très petit repas (bolus glucides < 2U)", () => {
+  // carbBolusUnits = 0,5U → plancher = max(0, round(0,5) − 2) = 0, pas -1,5.
+  const r = capDoseByPrediction(1, ctx({
+    currentGlucose: 56,
+    insulinLogs: [pastBolus(90, 2.5)],
+    pendingMeal: { carbsGrams: 5, fatGrams: 0, proteinGrams: 0, mealType: "lunch" },
+    carbBolusUnits: 0.5,
+  }));
+  assert.ok(r.units >= 0, `le plancher ne doit jamais rendre une dose négative, reçu ${r.units}`);
+});
+
+test("plancher : le plafond n'augmente jamais au-dessus de la candidate, même avec un carbBolusUnits incohérent", () => {
+  // carbBolusUnits (10) largement au-dessus de la candidate (2) : le
+  // plancher théorique (8) doit être écrêté à la candidate, jamais
+  // au-dessus — l'invariant « le plafond ne peut que réduire » doit tenir.
+  const r = capDoseByPrediction(2, ctx({
+    currentGlucose: 70,
+    insulinLogs: [pastBolus(45, 4)],
+    pendingMeal: { carbsGrams: 60, fatGrams: 0, proteinGrams: 0, mealType: "lunch" },
+    carbBolusUnits: 10,
+  }));
+  assert.ok(r.units <= 2, `units (${r.units}) ne doit jamais dépasser la candidate (2)`);
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Interaction règle 1 (insulin-calculator) × règle 2 (dose-capping) —
+// elles ne doivent PAS se cumuler mécaniquement : le plafond ne retire
+// davantage que si la prédiction l'exige ENCORE, après que la règle 1 a
+// déjà réduit la candidate.
+// ─────────────────────────────────────────────────────────────────────
+
+test("interaction règles 1×2 : 70 mg/dL, 60g, sans insuline active → 5U final (−1 règle 1, rien de plus du plafond)", () => {
+  const bolus = calculateBolus(60, "lunch", 70, false, null, 0, undefined, 0);
+  assert.equal(bolus.carbBolus, 6, "bolus glucides brut avant la règle 1");
+  assert.equal(bolus.totalBolus, 5, "règle 1 : −1U appliquée par calculateBolus");
+
+  const capped = capDoseByPrediction(bolus.totalBolus, ctx({
+    currentGlucose: 70,
+    insulinLogs: [],
+    pendingMeal: { carbsGrams: 60, fatGrams: 0, proteinGrams: 0, mealType: "lunch" },
+    carbBolusUnits: bolus.carbBolus,
+  }));
+  assert.equal(
+    capped.units, 5,
+    `attendu 5U (les deux couches ne se cumulent pas), reçu ${capped.units} — si ce n'est pas 5, les deux couches se cumulent : problème de conception à remonter, ne pas ajuster une constante pour faire passer ce test`,
+  );
+  assert.equal(capped.capped, false, "trajectoire déjà saine à 5U : le plafond ne doit rien retirer de plus");
 });
