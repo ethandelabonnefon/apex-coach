@@ -372,7 +372,18 @@ export default function DiabeteParametresPage() {
   // l'état vit dans localStorage. On l'exporte tel quel : c'est ce qui en
   // fait une vraie sauvegarde. Forme du fichier = contrat consommé par le
   // backtest (Task 5) : { exportedAt, version, state }.
-  const handleExportData = () => {
+  //
+  // Fix round 1 (sept. 2026) : Ethan utilise l'app surtout en PWA installée
+  // sur iPhone. En mode standalone iOS, un <a download> sur une URL blob est
+  // peu fiable (rien ne se passe, ou le fichier s'ouvre dans un visualiseur
+  // sans bouton "Enregistrer"). Le chemin fiable sur Safari iOS 15+ est la
+  // Web Share API avec fichier (feuille de partage native → Fichiers,
+  // AirDrop, Mail). On tente le partage natif quand la plateforme peut
+  // spécifiquement partager CE fichier, et on retombe sur le téléchargement
+  // classique sinon (desktop, ou tout échec de partage autre qu'une
+  // annulation utilisateur).
+  const handleExportData = async () => {
+    let payload: { exportedAt: string; version: number; state: unknown };
     try {
       const raw = localStorage.getItem("apex-coach-storage");
       if (!raw) {
@@ -380,25 +391,45 @@ export default function DiabeteParametresPage() {
         return;
       }
       const parsed = JSON.parse(raw) as { state?: unknown; version?: number };
-      const payload = {
+      payload = {
         exportedAt: new Date().toISOString(),
         version: parsed.version ?? 3,
         state: parsed.state ?? null,
       };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `apex-coach-export-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
     } catch {
       alert("Export impossible — les données locales sont illisibles.");
+      return;
     }
+
+    const filename = `apex-coach-export-${new Date().toISOString().slice(0, 10)}.json`;
+    const json = JSON.stringify(payload, null, 2);
+    const file = new File([json], filename, { type: "application/json" });
+
+    // navigator.canShare({ files }) — pas juste navigator.share, qui existe
+    // sur des plateformes incapables de partager des fichiers — confirme que
+    // CE fichier est partageable avant de tenter le partage natif.
+    if (navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: "Export Apex Coach" });
+        return;
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          // Utilisateur a fermé/annulé la feuille de partage : pas une erreur.
+          return;
+        }
+        // Tout autre échec du partage : on continue vers le téléchargement classique.
+      }
+    }
+
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const isfInternal = diabetesConfig.insulinSensitivityFactor;
