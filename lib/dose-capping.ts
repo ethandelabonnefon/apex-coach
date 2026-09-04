@@ -161,7 +161,25 @@ export interface CappedDose {
   units: number;
   /** Dose candidate avant plafonnement. */
   originalUnits: number;
+  /**
+   * STRICTEMENT « la dose a été réduite » — vrai UNIQUEMENT si
+   * `units < originalUnits`. Ne pas confondre avec `heldAtFloor` : le
+   * plancher (règle 2) peut se déclencher SANS aucune réduction quand la
+   * candidate est déjà au niveau du plancher (bug fixé sept 2026 : cette
+   * fonction rapportait `capped: true` avec `units === originalUnits`,
+   * ce qui faisait afficher « Ramenée de 4 U à 4 U » côté UI — rien n'avait
+   * pourtant été rabot).
+   */
   capped: boolean;
+  /**
+   * Vrai quand la prédiction réclamait une dose plus basse que `units`,
+   * mais que le plancher de sécurité (`carbBolusUnits - CARB_BOLUS_FLOOR_MARGIN`)
+   * a empêché de descendre plus loin. INDÉPENDANT de `capped` : peut être
+   * vrai alors que `capped` est faux (la candidate était déjà AU plancher,
+   * donc aucune réduction n'a eu lieu, mais l'avertissement — « surveille
+   * ta glycémie » — doit rester visible malgré tout).
+   */
+  heldAtFloor: boolean;
   /** Minimum au-delà de la fenêtre de grâce, avec la dose candidate. */
   predictedMinBefore: number | null;
   /** Idem, avec la dose retenue. */
@@ -260,6 +278,7 @@ function unchanged(
     units,
     originalUnits: units,
     capped: false,
+    heldAtFloor: false,
     predictedMinBefore: min?.min ?? null,
     predictedMinAfter: min?.min ?? null,
     predictedMinMinute: min?.minute ?? null,
@@ -347,6 +366,7 @@ export function capDoseByPrediction(
         units,
         originalUnits: candidate,
         capped: true,
+        heldAtFloor: false,
         predictedMinBefore: before.min,
         predictedMinAfter: after.min,
         predictedMinMinute: before.minute,
@@ -362,12 +382,23 @@ export function capDoseByPrediction(
   // tient » : `predictedMinAfter` reflète la trajectoire à la dose
   // RÉELLEMENT retenue (le plancher), pas une valeur qui tiendrait la
   // limite.
+  //
+  // ⚠️ Fix (bug reproduit sept 2026, round 1) : quand `floor === candidate`
+  // (ex. la règle hypo simple + un trend descendant ont déjà réduit la
+  // candidate jusqu'au plancher AVANT même d'appeler cette fonction), la
+  // boucle ci-dessus ne s'exécute jamais (`candidate - 1 < floor`) — on
+  // tombe directement ici SANS AVOIR RIEN RÉDUIT. `capped` doit refléter
+  // ça : `units === originalUnits`, donc `capped: false`. Le message
+  // d'avertissement reste néanmoins affiché via `heldAtFloor`, qui lui est
+  // vrai dans les deux cas (réduit jusqu'au plancher, ou déjà au plancher).
   if (floor > 0) {
     const atFloor = simulateMinAfterGrace(floor, ctx, baseEvents);
+    const reduced = floor < candidate;
     return {
       units: floor,
       originalUnits: candidate,
-      capped: true,
+      capped: reduced,
+      heldAtFloor: true,
       predictedMinBefore: before.min,
       predictedMinAfter: atFloor?.min ?? null,
       predictedMinMinute: before.minute,
@@ -381,6 +412,7 @@ export function capDoseByPrediction(
     units: 0,
     originalUnits: candidate,
     capped: true,
+    heldAtFloor: false,
     predictedMinBefore: before.min,
     predictedMinAfter: null,
     predictedMinMinute: before.minute,
