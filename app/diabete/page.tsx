@@ -50,11 +50,8 @@ import {
   cancelReminderOnServer,
 } from "@/lib/reminders/client";
 import {
-  findMostRecentExercise,
   computeExerciseAdjustment,
-  classifySport,
   resolveRecentExercise,
-  type RecentExercise,
 } from "@/lib/exercise-insulin-adjustment";
 import { buildPredictionEvents } from "@/lib/prediction-inputs";
 import { capDoseByPrediction } from "@/lib/dose-capping";
@@ -418,48 +415,51 @@ export default function DiabetePage() {
   const liveValueForBolus = liveGlucose?.value;
   const liveTrend = trendStringToNumber(liveGlucose?.trend);
 
-  // Phase F — Détection séance récente + ajustement post-exercice
-  // Si Whoop est connecté ET a un workout dans les 24h, on utilise le
-  // strain Whoop directement. Sinon, on estime depuis nos données.
-  const exerciseAdjustment = useMemo(() => {
-    // Cas 1 : strain Whoop dispo (last workout < 24h)
-    if (whoop.connected && whoop.snapshot?.lastWorkout) {
-      const lw = whoop.snapshot.lastWorkout;
-      const endedAtMs = new Date(lw.endedAt).getTime();
-      if (!Number.isNaN(endedAtMs) && nowTick - endedAtMs < 24 * 3_600_000) {
-        const durationMin = Math.round(
-          (endedAtMs - new Date(lw.startedAt).getTime()) / 60_000,
-        );
-        // Classification fine du sport (Yardley 2013 : muscu ≠ cardio)
-        const whoopExercise: RecentExercise = {
-          source: classifySport(lw.sport),
-          endedAtMs,
-          durationMin,
-          strain: lw.strain,
-          strainSource: "whoop",
-        };
-        return computeExerciseAdjustment(whoopExercise, nowTick);
-      }
-    }
-    // Cas 2 : fallback estimation depuis nos données
-    const recent = findMostRecentExercise(
-      completedWorkouts.map((w) => ({ id: w.id, date: w.date, duration: w.duration ?? 60 })),
-      completedRunningSessions.map((r) => ({
-        id: r.id,
-        date: r.date,
-        actualDuration: r.actualDuration ?? 45,
-        glucoseCheckpoints: r.glucoseCheckpoints,
-        gpsPoints: r.gpsPoints?.map((p) => ({ ...p, speed: null })),
-      })),
-      undefined,
-      nowTick,
-    );
-    return computeExerciseAdjustment(recent, nowTick);
-  }, [completedWorkouts, completedRunningSessions, nowTick, whoop.connected, whoop.snapshot]);
+  // Âge (min) de la lecture live. Déclaré ici (déplacé depuis plus bas,
+  // revue finale I3) : `cappedDose` en a besoin — une lecture périmée et
+  // HAUTE simule une trajectoire saine, donc aucun plafonnement, en
+  // silence. `suggestTopUp` (plus bas) et `cappedDose` partagent ce calcul.
+  const liveGlucoseAgeMin = useMemo(() => {
+    if (!liveGlucose) return undefined;
+    const ms = new Date(liveGlucose.date).getTime();
+    if (!Number.isFinite(ms)) return undefined;
+    return (nowTick - ms) / 60_000;
+  }, [liveGlucose, nowTick]);
 
-  // La sensibilité post-exercice amplifie l'effet de l'insuline. Le
-  // plafonnement en a besoin ; le memo du plan de nuit le construisait
-  // 600 lignes plus bas, donc trop tard pour le calculateur.
+  // ─── I2 (revue finale) : source UNIQUE de glycémie pour les DEUX moitiés
+  // du calcul de dose (calculateBolus ET capDoseByPrediction). Avant : le
+  // calculateur lisait `currentGlucose` (champ, `useState(120)`) pendant
+  // que le plafond lisait `liveGlucose?.value` (capteur seul) — deux
+  // chiffres différents pouvaient alimenter le MÊME nombre affiché en
+  // hero (capteur à 56 + champ à 120 → la candidate ignorait l'hypo que
+  // le plafond voyait ; champ à 60 + capteur figé à 200 → l'inverse).
+  //
+  // Motif déjà établi ailleurs dans ce fichier pour les actions d'écriture
+  // EXPLICITES (lignes ~839, ~909, ~1268 : `liveGlucose?.value ??
+  // currentGlucose`) — PAS le motif « live seul, jamais de repli » réservé
+  // aux garde-fous SILENCIEUX (`cob`/`topUp`, cf. commentaire ~705) : ici
+  // le champ est la valeur que le patient voit, édite et valide
+  // explicitement avant de cliquer « Enregistrer l'injection » — un repli
+  // dessus n'invente rien, il respecte une correction manuelle d'un live
+  // mort ou décalé (capteur en panne, changement de Libre).
+  const glucoseForBolus = liveValueForBolus ?? currentGlucose;
+
+  // Phase F — Détection séance récente + ajustement post-exercice.
+  //
+  // I5 (revue finale) : `recentExercise` est LA SEULE résolution de séance
+  // récente — `resolveRecentExercise` centralise déjà le Whoop-first-sinon-
+  // estimation (avec les bons gardes : `endedAtMs <= nowMs` et
+  // `Math.max(1, durationMin)`, cf. exercise-insulin-adjustment.ts:354-358).
+  // Avant : un memo inline ICI réimplémentait la branche Whoop SANS ces
+  // deux gardes, pendant qu'un second memo plus bas (`recentExercise`)
+  // utilisait la version correcte — les deux alimentaient le MÊME chiffre
+  // de dose (candidate ET simulation du plafond) avec des résultats qui
+  // pouvaient diverger (ex. un workout Whoop daté dans le futur — fuseaux,
+  // sync différée — que le calculateur réduisait pour une séance que le
+  // plafond ignorait). `gpsPoints`, seul argument supplémentaire de
+  // l'ancienne version inline, est vérifié inutilisé dans
+  // `findMostRecentExercise` (jamais lu dans le corps de la fonction) —
+  // safe à perdre.
   const recentExercise = useMemo(
     () =>
       resolveRecentExercise({
@@ -480,12 +480,19 @@ export default function DiabetePage() {
     [nowTick, whoop.connected, whoop.snapshot, completedWorkouts, completedRunningSessions],
   );
 
+  // Réduction du bolus : dérivée de la MÊME résolution que la simulation du
+  // plafond (`recentExercise` ci-dessus) — plus de 2e résolution divergente.
+  const exerciseAdjustment = useMemo(
+    () => computeExerciseAdjustment(recentExercise, nowTick),
+    [recentExercise, nowTick],
+  );
+
   const bolusResult = useMemo(
     () =>
       calculateBolus(
         carbsGrams,
         mealTime,
-        currentGlucose,
+        glucoseForBolus,
         isPreWorkout,
         workoutType,
         minutesUntilWorkout,
@@ -500,7 +507,7 @@ export default function DiabetePage() {
     [
       carbsGrams,
       mealTime,
-      currentGlucose,
+      glucoseForBolus,
       isPreWorkout,
       workoutType,
       minutesUntilWorkout,
@@ -520,7 +527,10 @@ export default function DiabetePage() {
   const cappedDose = useMemo(
     () =>
       capDoseByPrediction(bolusResult.totalBolus, {
-        currentGlucose: liveGlucose?.value,
+        // I2 : même source que `calculateBolus` ci-dessus (`glucoseForBolus`)
+        // — voir le commentaire à sa déclaration pour le choix.
+        currentGlucose: glucoseForBolus,
+        glucoseAgeMin: liveGlucoseAgeMin,
         insulinLogs,
         carbEntries,
         pendingMeal: {
@@ -532,12 +542,22 @@ export default function DiabetePage() {
         isf: diabetesConfig.insulinSensitivityFactor,
         ratios: diabetesConfig.ratios,
         sport: recentExercise ?? undefined,
+        // C1 : le split FPU programmé par le MÊME clic « Enregistrer
+        // l'injection » (cf. handleLogInjection plus bas) doit être vu par
+        // le plafond — sinon il valide une dose que l'app reprogramme
+        // aussitôt après (final-fix-brief.md, C1). `splitDose.later` n'est
+        // JAMAIS modifié ici, seulement rendu visible à la simulation.
+        pendingSplit: bolusResult.splitDose
+          ? { units: bolusResult.splitDose.later, minutesUntil: bolusResult.splitDose.delayMinutes }
+          : undefined,
         nowMs: nowTick,
       }),
     [
       bolusResult.totalBolus,
+      bolusResult.splitDose,
       recentExercise,
-      liveGlucose,
+      glucoseForBolus,
+      liveGlucoseAgeMin,
       insulinLogs,
       carbEntries,
       carbsGrams,
@@ -602,7 +622,7 @@ export default function DiabetePage() {
       insulinType: profile.insulinRapid,
       mealType: mealTime,
       carbsGrams,
-      glucoseBefore: currentGlucose,
+      glucoseBefore: glucoseForBolus,
       notes,
       injectedAt: new Date(),
       fatGrams: fatGrams > 0 ? fatGrams : undefined,
@@ -735,18 +755,11 @@ export default function DiabetePage() {
     [insulinLogs, nowTick, diabetesConfig.ratios],
   );
 
-  // Placé après `liveGlucose` (déclaré ci-dessus) : suggestTopUp a besoin
-  // de la glycémie CAPTEUR la plus fraîche pour ses garde-fous anti-hypo.
-  // On ne lui passe jamais `currentGlucose` (champ du calculateur,
-  // initialisé à 120) : un garde-fou évalué sur une valeur inventée ne
-  // protège de rien.
-  const liveGlucoseAgeMin = useMemo(() => {
-    if (!liveGlucose) return undefined;
-    const ms = new Date(liveGlucose.date).getTime();
-    if (!Number.isFinite(ms)) return undefined;
-    return (nowTick - ms) / 60_000;
-  }, [liveGlucose, nowTick]);
-
+  // `liveGlucoseAgeMin` : déclaré plus haut (déplacé, I3) — suggestTopUp a
+  // besoin de la glycémie CAPTEUR la plus fraîche pour ses garde-fous
+  // anti-hypo. On ne lui passe jamais `currentGlucose` (champ du
+  // calculateur, initialisé à 120) : un garde-fou évalué sur une valeur
+  // inventée ne protège de rien.
   const topUp = useMemo(
     () =>
       suggestTopUp(carbDelta, {
