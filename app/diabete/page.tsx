@@ -610,11 +610,22 @@ export default function DiabetePage() {
     if (finalUnits <= 0) return;
     const overridden = unitsOverride !== null && unitsOverride !== cappedDose.units;
     const baseNote = isPreWorkout ? `pré-${workoutType}` : "";
+    // I4 (revue finale) : le calculateur proposait la CANDIDATE
+    // (`cappedDose.originalUnits`), pas la dose déjà plafonnée
+    // (`cappedDose.units`) — la note d'override pointait sur le mauvais
+    // chiffre.
     const overrideNote = overridden
-      ? `manuel (calc proposait ${cappedDose.units}U)`
+      ? `manuel (calc proposait ${cappedDose.originalUnits}U)`
+      : "";
+    // I4 : trace le plafonnement dans l'historique — sans ça, ni Le
+    // Docteur, ni le bilan hebdo, ni un futur backtest ne peuvent
+    // distinguer un repas plafonné d'un repas normal (c'est justement le
+    // corpus qui doit calibrer la limite de 80).
+    const cappedNote = cappedDose.capped
+      ? `plafonné ${cappedDose.originalUnits}→${cappedDose.units}U`
       : "";
     const splitNote = bolusResult.splitDose ? `split 1/2` : "";
-    const notes = [baseNote, overrideNote, splitNote].filter(Boolean).join(" · ");
+    const notes = [baseNote, cappedNote, overrideNote, splitNote].filter(Boolean).join(" · ");
     const injectionId = crypto.randomUUID();
     addInsulinLog({
       id: injectionId,
