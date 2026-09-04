@@ -29,6 +29,7 @@ import {
   carbSensitivity,
   predictGlucoseCurve,
   type PredictionEvent,
+  type PendingSplit,
 } from "./glucose-prediction";
 import {
   buildPredictionEvents,
@@ -36,6 +37,7 @@ import {
   type MealRatios,
 } from "./prediction-inputs";
 import type { RecentExercise } from "./exercise-insulin-adjustment";
+import { TOPUP_MAX_GLUCOSE_AGE_MIN } from "./carbs-on-board";
 import type { CarbEntry, InsulinLog } from "@/types";
 
 // ───────────────────────────────────────────────────────────────────────
@@ -61,7 +63,15 @@ export const PREDICTION_SAFETY_LIMIT = 80;
  */
 export const CAPPING_GRACE_MIN = 60;
 
-/** Horizon de simulation (min) : DIA 195 + absorption glucides 195. */
+/**
+ * Horizon de simulation (min) : DIA 195 + absorption glucides 195.
+ *
+ * Étendu quand un split (2e dose FPU) est en attente — voir
+ * `simulateMinAfterGrace`. Cette constante reste la valeur du cas SANS
+ * split ; ne pas la modifier ici pour couvrir le cas split (cf. brief
+ * final-fix-brief.md C1 : « ne change pas le comportement du cas sans
+ * split »).
+ */
 export const CAPPING_HORIZON_MIN = 300;
 
 /** Pas de simulation (min) — même granularité que le reste du moteur. */
@@ -82,6 +92,19 @@ export interface PendingMeal {
 export interface DoseCappingContext {
   /** Lecture capteur RÉELLE. `null`/`undefined` = pas de mesure → pas de plafonnement. */
   currentGlucose: number | null | undefined;
+  /**
+   * Âge (min) de `currentGlucose`. Une lecture périmée et HAUTE simule une
+   * trajectoire saine (rien à raboter) — c'est le seul sens dans lequel une
+   * lecture périmée est dangereuse ici (une lecture périmée basse
+   * capitulerait déjà côté "avant" en refusant la dose complète, ce qui
+   * reste sûr). Au-delà de `TOPUP_MAX_GLUCOSE_AGE_MIN` (seuil déjà utilisé
+   * par `suggestTopUp`, pas réinventé ici), on refuse de plafonner — on ne
+   * DÉSACTIVE PAS la vérification, on le dit explicitement (`reason`).
+   * `undefined`/`null` = fraîcheur inconnue → comportement historique
+   * conservé (pas de refus), pour ne pas casser les appelants qui ne la
+   * renseignent pas encore.
+   */
+  glucoseAgeMin?: number | null;
   insulinLogs: InsulinLog[];
   carbEntries: CarbEntry[];
   pendingMeal: PendingMeal;
@@ -94,6 +117,16 @@ export interface DoseCappingContext {
    * le fait qu'elle agit plus fort.
    */
   sport?: RecentExercise;
+  /**
+   * 2e dose (split FPU) programmée par le MÊME clic « Enregistrer
+   * l'injection ». Le plafond doit la voir : sans elle, il valide une dose
+   * que l'app reprogramme aussitôt après coup (C1, final-fix-brief.md) —
+   * mesuré : badge « ta trajectoire tient » affiché pendant que la
+   * trajectoire réelle (candidate + split) descend à 67 mg/dL. Ce n'est PAS
+   * un plafonnement du split : `splitDose.later` n'est jamais modifié ici,
+   * seulement rendu visible à la simulation.
+   */
+  pendingSplit?: PendingSplit;
   nowMs?: number;
 }
 
@@ -144,12 +177,36 @@ function simulateMinAfterGrace(
     },
   ];
 
+  // Horizon étendu si un split est en attente. La 2e dose continue de
+  // baisser la glycémie jusqu'à DIA (195 min) APRÈS SON PROPRE
+  // déclenchement — donc jusqu'à `pendingSplit.minutesUntil + 195` au-delà
+  // de maintenant, ce qui dépasse l'horizon standard (300 min) dès qu'un
+  // split est prévu à plus de ~105 min (le calibrage actuel va jusqu'à
+  // 150 min, cf. lib/insulin-calculator.ts).
+  //
+  // Vérifié empiriquement (pas une hypothèse) : sans extension, un cas
+  // réaliste — glycémie 120, split de 8U à +150min (borne haute du
+  // calibrage) — est déclaré sûr par l'horizon standard (creux 151 mg/dL,
+  // au bord de l'horizon) alors que le vrai creux, 40 minutes plus tard,
+  // descend à 78 mg/dL, sous la limite. C'est un FAUX NÉGATIF de sécurité,
+  // pas seulement un problème d'affichage.
+  //
+  // Balayage des repas split-worthy réels de l'app (pâtes énorme, pizza,
+  // viande+accompagnement, cas Ethan 152g) × glycémies 90 à 220 mg/dL, sans
+  // sport ni IOB additionnel : l'extension ne change la dose retenue dans
+  // AUCUN de ces cas — elle ne rend donc pas le plafonnement systématique
+  // en usage normal, elle ferme seulement le trou de sécurité ci-dessus.
+  const horizonMinutes = ctx.pendingSplit
+    ? Math.max(CAPPING_HORIZON_MIN, ctx.pendingSplit.minutesUntil + CAPPING_HORIZON_MIN)
+    : CAPPING_HORIZON_MIN;
+
   const prediction = predictGlucoseCurve({
     currentGlucose: ctx.currentGlucose as number,
     events,
     isf: ctx.isf,
     sport: ctx.sport,
-    horizonMinutes: CAPPING_HORIZON_MIN,
+    pendingSplit: ctx.pendingSplit,
+    horizonMinutes,
     stepMinutes: CAPPING_STEP_MIN,
     nowMs: ctx.nowMs,
   });
@@ -190,14 +247,21 @@ export function capDoseByPrediction(
 ): CappedDose {
   // Le contrat de CappedDose promet une dose ENTIÈRE (le stylo du patient
   // n'a pas de demi-unités) — sans condition, sans compter sur la discipline
-  // de l'appelant. On arrondit donc dès l'entrée, au PLUS PROCHE : jamais
-  // systématiquement au-dessus (ce dépôt a déjà corrigé un Math.ceil qui
-  // ajoutait jusqu'à 0,9 U par repas chez un patient sujet aux hypoglycémies).
-  const candidate = Math.round(candidateUnits);
+  // de l'appelant. On tronque donc dès l'entrée avec Math.floor plutôt que
+  // Math.round : un round (ex. 7,6 → 8) rendrait une dose SUPÉRIEURE à la
+  // candidate, ce qui contredit l'invariant « ne jamais augmenter » (le
+  // chemin réel arrondit déjà en amont, donc c'est un no-op ici — mais
+  // strictement plus sûr si un futur appelant oublie d'arrondir). Ce dépôt
+  // a aussi déjà corrigé un Math.ceil qui ajoutait jusqu'à 0,9 U par repas
+  // chez un patient sujet aux hypoglycémies — même famille de bug.
+  const candidate = Math.floor(candidateUnits);
 
   // Rien à plafonner.
   if (!(candidate > 0)) {
-    return unchanged(Math.max(0, candidate), null);
+    // Math.floor(NaN) = NaN, donc Math.max(0, candidate) resterait NaN sans
+    // ce garde — le clamp défensif n'en serait pas un, et une dose NaN
+    // pourrait redescendre jusqu'à l'UI (bouton actif, écriture possible).
+    return unchanged(Number.isFinite(candidate) ? Math.max(0, candidate) : 0, null);
   }
 
   // Pas de mesure capteur → pas de point de départ crédible pour simuler.
@@ -206,6 +270,24 @@ export function capDoseByPrediction(
     return unchanged(
       candidate,
       "Pas de mesure capteur — dose non vérifiée par la prédiction.",
+    );
+  }
+
+  // Lecture périmée : une lecture bloquée HAUTE pendant que la vraie
+  // glycémie descend simule une trajectoire saine → aucun plafonnement,
+  // en silence. On refuse explicitement plutôt que de laisser filer.
+  // Seuil réutilisé de suggestTopUp (TOPUP_MAX_GLUCOSE_AGE_MIN), pas
+  // réinventé. `glucoseAgeMin` absent = fraîcheur inconnue → pas de refus
+  // (comportement historique conservé).
+  const ageMin = ctx.glucoseAgeMin;
+  if (
+    typeof ageMin === "number" &&
+    Number.isFinite(ageMin) &&
+    ageMin > TOPUP_MAX_GLUCOSE_AGE_MIN
+  ) {
+    return unchanged(
+      candidate,
+      `Lecture capteur périmée (${Math.round(ageMin)} min) — dose non vérifiée par la prédiction.`,
     );
   }
 

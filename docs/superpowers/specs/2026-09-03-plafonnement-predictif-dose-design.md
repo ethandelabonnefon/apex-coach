@@ -85,13 +85,21 @@ Le résultat porte la dose retenue, la dose d'origine, le minimum prédit avant 
 
 **Pas de plancher.** Le plafond peut descendre jusqu'à 0 si la trajectoire l'exige. Ajouter un plancher réintroduirait précisément le risque qu'on cherche à écarter. La conséquence — une hyperglycémie post-prandiale — est le compromis explicitement accepté par la méthode de Loop.
 
-## 3. Ce que le plafond ne voit pas
+## 3. Le split dose à venir (correction post-revue, 3 septembre 2026)
 
-**Le split dose à venir n'entre pas dans la prédiction.** Les événements sont construits depuis les injections **déjà faites** ; une seconde dose programmée dans 2 h 30 n'y figure pas, et le moteur ne sait pas modéliser une insuline future (`iobRemainingFraction` d'un `minutesAgo` négatif renvoie 1, c'est-à-dire « pleinement active maintenant » — faux).
+**Cette section affirmait initialement que le moteur ne sait pas modéliser une insuline future** (« `iobRemainingFraction` d'un `minutesAgo` négatif renvoie 1 — faux »), et que c'était une limitation acceptée par Ethan. **C'était factuellement faux**, et l'arbitrage n'a donc jamais eu lieu sur les bonnes bases : la revue finale a trouvé `PredictGlucoseInput.pendingSplit` déjà présent dans `predictGlucoseCurve` (`lib/glucose-prediction.ts`), appliqué avec la sémantique correcte (une 2ᵉ dose à `minutesUntil` minutes est traitée comme injectée depuis `minutesAhead − minutesUntil` minutes, une fois ce délai dépassé). Le plan de nuit (`bedtime-advisor.ts`) et le plan de nuit unifié de `page.tsx` l'utilisaient déjà pour modéliser exactement ce cas.
 
-Conséquence : sur un repas à split, le plafond protège la fenêtre du bolus initial mais ignore les unités qui arriveront ensuite. Il est donc **trop indulgent** sur cette partie.
+**Le vrai défaut (C1, Critical) n'était donc pas une limitation du moteur, mais un oubli de câblage** : `capDoseByPrediction` ne recevait jamais le split programmé par le même clic « Enregistrer l'injection ». Mesuré : 56 mg/dL, 2,5 U actives, repas 100 g/35 g lip/45 g prot → `calculateBolus` proposait 10 U + split `{later: 3, delayMinutes: 150}` ; sans voir ce split, le plafond validait 9 U (« ta trajectoire tient ») alors que la trajectoire réelle (9 U + le split) descendait à 67 mg/dL dans l'horizon standard, et à 58 mg/dL au-delà. **Le plafond rendait donc ce chemin plus dangereux qu'avant la branche** : sans lui, le patient voyait la dose pleine et se méfiait ; avec lui, il voyait une validation qui n'en était pas une.
 
-**Limitation acceptée par Ethan**, qui a précisé que l'enjeu est la dose du moment, pas l'horizon long. Le split conserve ses propres garde-fous — briefing pré-sport et plan de nuit. À rouvrir si le besoin se manifeste en usage réel.
+**Correction appliquée** :
+- `DoseCappingContext` gagne un champ optionnel `pendingSplit?: { units: number; minutesUntil: number }`, du même type que `PredictGlucoseInput.pendingSplit`.
+- `app/diabete/page.tsx` le renseigne depuis `bolusResult.splitDose` (`{ units: splitDose.later, minutesUntil: splitDose.delayMinutes }`) — le MÊME split que celui programmé à l'enregistrement.
+- `simulateMinAfterGrace` le transmet tel quel à `predictGlucoseCurve`.
+- Ce n'est **pas** un plafonnement du split : `splitDose.later` n'est jamais modifié, il est seulement rendu visible à la simulation. Sa quantité reste validée terrain par l'utilisateur, hors périmètre (§8).
+
+**Horizon étendu en présence d'un split.** La 2ᵉ dose continue de baisser la glycémie jusqu'à DIA (195 min) après **son propre** déclenchement, donc jusqu'à `pendingSplit.minutesUntil + 195` au-delà de maintenant — au-delà de l'horizon standard (300 min) dès qu'un split est prévu à plus de ~105 min (le calibrage actuel va jusqu'à 150 min). Vérifié empiriquement : sans extension, un cas réaliste (glycémie 120 mg/dL, split de 8 U à +150 min — bornes hautes du calibrage) est déclaré sûr par l'horizon standard (creux vu : 151 mg/dL) alors que le vrai creux, 40 minutes plus tard, descend à 78 mg/dL — un faux négatif de sécurité de 73 mg/dL, pas seulement un problème d'affichage.
+
+`CAPPING_HORIZON_MIN` (300, cas sans split) est donc étendu à `max(300, pendingSplit.minutesUntil + 300)` **uniquement quand un split est présent** — jamais pour le cas sans split, qui garde le comportement exact d'avant cette correction. Un balayage des repas split-worthy réels de l'app (pâtes énorme, pizza, viande+accompagnement, cas Ethan 152 g) × glycémies 90–220 mg/dL, sans sport ni IOB additionnel, montre que cette extension ne change la dose retenue dans **aucun** de ces cas : elle ne rend donc pas le plafonnement systématique en usage normal, elle ferme uniquement le trou de sécurité ci-dessus.
 
 ## 4. Architecture
 
@@ -104,12 +112,19 @@ export const CAPPING_GRACE_MIN = 60;
 
 export interface DoseCappingContext {
   currentGlucose: number | null | undefined;
+  /** Âge (min) de `currentGlucose` — I3, revue finale. Reprend le seuil
+   *  de `suggestTopUp` (`TOPUP_MAX_GLUCOSE_AGE_MIN`, 15 min). Périmé →
+   *  refus explicite de plafonner (pas de désactivation silencieuse). */
+  glucoseAgeMin?: number | null;
   insulinLogs: InsulinLog[];
   carbEntries: CarbEntry[];
   /** Repas en cours de saisie, pas encore enregistré. */
   pendingMeal: { carbsGrams: number; fatGrams: number; proteinGrams: number; mealType: string };
   isf: number;
   ratios: MealRatios;
+  sport?: RecentExercise;
+  /** 2ᵉ dose (split FPU) programmée par le même clic — C1, §3. */
+  pendingSplit?: { units: number; minutesUntil: number };
   nowMs?: number;
 }
 
@@ -170,6 +185,6 @@ Cette spec renforce l'argument pour le backtest : une fois l'erreur du modèle m
 ## 8. Hors périmètre
 
 - Toute modification des sept couches de `calculateBolus`.
-- La modélisation d'une insuline future (split programmé) dans la prédiction.
-- Le plafonnement de la dose du split elle-même — validée terrain, hors sujet.
+- Le plafonnement de la dose du split elle-même (`splitDose.later`) — validée terrain, hors sujet. (Le fait que le plafond en tienne compte, lui, est désormais dans le périmètre — §3.)
+- La modélisation d'une séance sportive **à venir** (`isPreWorkout`) dans la prédiction — `predictGlucoseCurve` ne modélise que le sport passé. Le plafond ne prétend pas vérifier ces doses ; le badge de validation est masqué et remplacé par un message explicite quand `isPreWorkout` est vrai.
 - Le backtest de l'erreur du modèle — chantier distinct.
