@@ -206,3 +206,67 @@ test("le message de raisonnement reflète le sens réel de l'arrondi (au-dessus/
     `raisonnement attendu "Arrondi en dessous", reçu ${JSON.stringify(down.reasoning)}`
   );
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// Règle hypo simple — sept 2026, décision utilisateur : « sous 75 mg/dL,
+// moins une unité ». Indépendante de capDoseByPrediction (lib/dose-
+// capping.ts) : elle ne lit qu'un chiffre de glycémie, jamais une
+// simulation, donc elle fonctionne même sans capteur (glycémie saisie à
+// la main). Ratio midi par défaut = 10g/U → 60g = 6U avant la règle.
+// ─────────────────────────────────────────────────────────────────────
+
+test("règle hypo simple : 60g à 74 mg/dL → 5U (au lieu de 6)", () => {
+  const result = calculateBolus(60, "lunch", 74, false, null, 0, undefined, 0);
+  assert.equal(result.carbBolus, 6, "bolus glucides brut inchangé avant la règle");
+  assert.equal(result.totalBolus, 5, `attendu 5U, reçu ${result.totalBolus}`);
+  assert.ok(
+    result.reasoning.some((r) => r.includes("Glycémie basse") && r.includes("74") && r.includes("−1 U de sécurité")),
+    `raisonnement attendu sur la réduction, reçu ${JSON.stringify(result.reasoning)}`
+  );
+  assert.ok(
+    result.adjustments.some((a) => a.includes("sécurité")),
+    `adjustments attendu sur la réduction, reçu ${JSON.stringify(result.adjustments)}`
+  );
+});
+
+test("règle hypo simple : 60g à 76 mg/dL → 6U (inchangé, au-dessus du seuil)", () => {
+  const result = calculateBolus(60, "lunch", 76, false, null, 0, undefined, 0);
+  assert.equal(result.totalBolus, 6, `attendu 6U (pas de réduction), reçu ${result.totalBolus}`);
+  assert.ok(
+    !result.reasoning.some((r) => r.includes("de sécurité")),
+    `aucun message de réduction attendu, reçu ${JSON.stringify(result.reasoning)}`
+  );
+});
+
+test("règle hypo simple : borne exacte 75 mg/dL → pas de réduction (« sous 75 » = strictement inférieur)", () => {
+  // Le seuil est une constante nommée à 75 ; « sous » exclut la borne elle-
+  // même. À 75 pile, la règle ne doit PAS se déclencher.
+  const result = calculateBolus(60, "lunch", 75, false, null, 0, undefined, 0);
+  assert.equal(result.totalBolus, 6, `attendu 6U à la borne exacte, reçu ${result.totalBolus}`);
+  assert.ok(
+    !result.reasoning.some((r) => r.includes("de sécurité")),
+    `aucun message de réduction attendu à la borne exacte, reçu ${JSON.stringify(result.reasoning)}`
+  );
+});
+
+test("règle hypo simple : correction pure (0g) à 68 mg/dL → inchangée, la règle ne s'applique qu'aux repas", () => {
+  const result = calculateBolus(0, "lunch", 68, false, null, 0, undefined, 0);
+  assert.ok(
+    !result.reasoning.some((r) => r.includes("de sécurité")),
+    `la règle ne doit pas s'appliquer sans glucides, reçu ${JSON.stringify(result.reasoning)}`
+  );
+  // L'ancien conseil générique reste affiché pour ce cas (correction pure, glycémie basse).
+  assert.ok(
+    result.reasoning.some((r) => r.includes("considérer des glucides supplémentaires")),
+    `conseil générique attendu pour une correction pure basse, reçu ${JSON.stringify(result.reasoning)}`
+  );
+  assert.equal(result.totalBolus, 0);
+});
+
+test("règle hypo simple : très petit repas dont la dose tomberait sous 0 → clampé à 0, jamais négatif", () => {
+  // 5g / (10g/U) = 0.5U de glucides ; -1U de sécurité → -0.5U brut, clampé à 0.
+  const result = calculateBolus(5, "lunch", 60, false, null, 0, undefined, 0);
+  assert.equal(result.carbBolus, 0.5);
+  assert.ok(result.totalBolus >= 0, `totalBolus ne doit jamais être négatif, reçu ${result.totalBolus}`);
+  assert.equal(result.totalBolus, 0);
+});
