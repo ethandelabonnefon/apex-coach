@@ -2683,8 +2683,14 @@ export default function DiabetePage() {
 
           {/* Conseil de timing d'injection (pré-bolus / pendant / après) */}
           {(() => {
+            // I2 (revue finale) : 3e site du motif « valeur par défaut du
+            // champ passée à un garde-fou », après suggestTopUp et
+            // computeCarbsOnBoard (préexistant, mais touché dans la même
+            // passe puisque la source de glycémie est déjà unifiée
+            // ci-dessus). Même `glucoseForBolus` que calculateBolus /
+            // capDoseByPrediction.
             const timing = getInjectionTimingAdvice(
-              currentGlucose,
+              glucoseForBolus,
               carbsGrams,
               mealTime,
               trendArrow,
