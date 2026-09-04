@@ -77,6 +77,16 @@ export const CAPPING_HORIZON_MIN = 300;
 /** Pas de simulation (min) — même granularité que le reste du moteur. */
 const CAPPING_STEP_MIN = 15;
 
+/**
+ * Plancher de sécurité (règle 2, sept 2026, décision utilisateur) : marge
+ * en-dessous du bolus glucides que le plafond ne franchit jamais. Sur 60 g
+ * (bolus glucides 6 U), le plafond ne peut pas proposer moins de 4 U —
+ * même si la trajectoire prédite réclame moins. Ce n'est PAS une valeur
+ * figée listée dans le brief historique (PREDICTION_SAFETY_LIMIT,
+ * CAPPING_GRACE_MIN, le décrément d'1 U) : elle est nouvelle.
+ */
+export const CARB_BOLUS_FLOOR_MARGIN = 2;
+
 // ───────────────────────────────────────────────────────────────────────
 // Types
 // ───────────────────────────────────────────────────────────────────────
@@ -128,6 +138,22 @@ export interface DoseCappingContext {
    */
   pendingSplit?: PendingSplit;
   nowMs?: number;
+  /**
+   * Bolus glucides (U) de la dose candidate — tel que calculé par
+   * `calculateBolus` (`bolusResult.carbBolus`), PAS redérivé ici depuis
+   * `pendingMeal.carbsGrams`. Le calculateur applique des réductions
+   * (pré-sport, sensibilité post-exercice) que ce module ne doit pas
+   * recalculer en double, au risque de diverger de la vraie candidate.
+   *
+   * Sert de plancher de sécurité (règle 2, sept 2026, décision
+   * utilisateur) : le plafond ne descend jamais sous
+   * `carbBolusUnits - CARB_BOLUS_FLOOR_MARGIN`. Mesuré : 60 g à 70 mg/dL
+   * avec 3 U actives → la boucle de décrément proposait 0 U ; défendable
+   * pour le prédicteur, mais sur un vrai repas de 60 g, 0 U garantit une
+   * hyperglycémie. `undefined`/absent → traité comme 0 (aucun plancher),
+   * pour ne pas casser les appelants qui ne la renseignent pas encore.
+   */
+  carbBolusUnits?: number;
 }
 
 export interface CappedDose {
@@ -135,7 +161,25 @@ export interface CappedDose {
   units: number;
   /** Dose candidate avant plafonnement. */
   originalUnits: number;
+  /**
+   * STRICTEMENT « la dose a été réduite » — vrai UNIQUEMENT si
+   * `units < originalUnits`. Ne pas confondre avec `heldAtFloor` : le
+   * plancher (règle 2) peut se déclencher SANS aucune réduction quand la
+   * candidate est déjà au niveau du plancher (bug fixé sept 2026 : cette
+   * fonction rapportait `capped: true` avec `units === originalUnits`,
+   * ce qui faisait afficher « Ramenée de 4 U à 4 U » côté UI — rien n'avait
+   * pourtant été rabot).
+   */
   capped: boolean;
+  /**
+   * Vrai quand la prédiction réclamait une dose plus basse que `units`,
+   * mais que le plancher de sécurité (`carbBolusUnits - CARB_BOLUS_FLOOR_MARGIN`)
+   * a empêché de descendre plus loin. INDÉPENDANT de `capped` : peut être
+   * vrai alors que `capped` est faux (la candidate était déjà AU plancher,
+   * donc aucune réduction n'a eu lieu, mais l'avertissement — « surveille
+   * ta glycémie » — doit rester visible malgré tout).
+   */
+  heldAtFloor: boolean;
   /** Minimum au-delà de la fenêtre de grâce, avec la dose candidate. */
   predictedMinBefore: number | null;
   /** Idem, avec la dose retenue. */
@@ -234,6 +278,7 @@ function unchanged(
     units,
     originalUnits: units,
     capped: false,
+    heldAtFloor: false,
     predictedMinBefore: min?.min ?? null,
     predictedMinAfter: min?.min ?? null,
     predictedMinMinute: min?.minute ?? null,
@@ -304,14 +349,24 @@ export function capDoseByPrediction(
     return unchanged(candidate, null, before);
   }
 
-  // La trajectoire plonge : on rabote d'une unité entière à la fois.
-  for (let units = candidate - 1; units >= 0; units--) {
+  // Plancher (règle 2, sept 2026) : le décrément ne descend jamais sous
+  // `carbBolusUnits - CARB_BOLUS_FLOOR_MARGIN`, borné à 0. `Math.min(...,
+  // candidate)` empêche le plancher de dépasser la candidate elle-même —
+  // l'invariant « le plafond ne peut que réduire » doit tenir même si un
+  // appelant renseigne un `carbBolusUnits` incohérent avec sa candidate.
+  const carbBolusUnits = Number.isFinite(ctx.carbBolusUnits) ? (ctx.carbBolusUnits as number) : 0;
+  const floor = Math.min(candidate, Math.max(0, Math.round(carbBolusUnits) - CARB_BOLUS_FLOOR_MARGIN));
+
+  // La trajectoire plonge : on rabote d'une unité entière à la fois, sans
+  // descendre sous le plancher.
+  for (let units = candidate - 1; units >= floor; units--) {
     const after = simulateMinAfterGrace(units, ctx, baseEvents);
     if (after !== null && after.min >= PREDICTION_SAFETY_LIMIT) {
       return {
         units,
         originalUnits: candidate,
         capped: true,
+        heldAtFloor: false,
         predictedMinBefore: before.min,
         predictedMinAfter: after.min,
         predictedMinMinute: before.minute,
@@ -320,11 +375,44 @@ export function capDoseByPrediction(
     }
   }
 
-  // Aucune dose ne tient : on ne propose rien.
+  // La boucle a atteint le plancher sans trouver de dose sûre : on s'y
+  // arrête et on le DIT — c'est le seul endroit où l'app assume
+  // délibérément de rester sous la limite de sécurité prédite. On ne
+  // masque pas ce cas derrière le message générique « aucune dose ne
+  // tient » : `predictedMinAfter` reflète la trajectoire à la dose
+  // RÉELLEMENT retenue (le plancher), pas une valeur qui tiendrait la
+  // limite.
+  //
+  // ⚠️ Fix (bug reproduit sept 2026, round 1) : quand `floor === candidate`
+  // (ex. la règle hypo simple + un trend descendant ont déjà réduit la
+  // candidate jusqu'au plancher AVANT même d'appeler cette fonction), la
+  // boucle ci-dessus ne s'exécute jamais (`candidate - 1 < floor`) — on
+  // tombe directement ici SANS AVOIR RIEN RÉDUIT. `capped` doit refléter
+  // ça : `units === originalUnits`, donc `capped: false`. Le message
+  // d'avertissement reste néanmoins affiché via `heldAtFloor`, qui lui est
+  // vrai dans les deux cas (réduit jusqu'au plancher, ou déjà au plancher).
+  if (floor > 0) {
+    const atFloor = simulateMinAfterGrace(floor, ctx, baseEvents);
+    const reduced = floor < candidate;
+    return {
+      units: floor,
+      originalUnits: candidate,
+      capped: reduced,
+      heldAtFloor: true,
+      predictedMinBefore: before.min,
+      predictedMinAfter: atFloor?.min ?? null,
+      predictedMinMinute: before.minute,
+      reason: `Dose maintenue à ${floor} U (bolus glucides − ${CARB_BOLUS_FLOOR_MARGIN} U minimum) alors que la prédiction réclamerait moins — surveille ta glycémie de près dans les heures qui suivent.`,
+    };
+  }
+
+  // Aucune dose ne tient, et il n'y a pas de plancher à faire respecter
+  // (pas de glucides à couvrir, ou candidate déjà nulle) : on ne propose rien.
   return {
     units: 0,
     originalUnits: candidate,
     capped: true,
+    heldAtFloor: false,
     predictedMinBefore: before.min,
     predictedMinAfter: null,
     predictedMinMinute: before.minute,

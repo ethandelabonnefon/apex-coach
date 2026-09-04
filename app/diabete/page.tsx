@@ -550,11 +550,18 @@ export default function DiabetePage() {
         pendingSplit: bolusResult.splitDose
           ? { units: bolusResult.splitDose.later, minutesUntil: bolusResult.splitDose.delayMinutes }
           : undefined,
+        // Règle 2 (sept 2026) : plancher de sécurité — le plafond ne
+        // descend jamais sous ce bolus glucides moins CARB_BOLUS_FLOOR_MARGIN.
+        // Même valeur que celle utilisée par `calculateBolus` ci-dessus
+        // (déjà réduite par pré-sport / sensibilité post-exercice le cas
+        // échéant), pas redérivée depuis `carbsGrams` pour ne pas diverger.
+        carbBolusUnits: bolusResult.carbBolus,
         nowMs: nowTick,
       }),
     [
       bolusResult.totalBolus,
       bolusResult.splitDose,
+      bolusResult.carbBolus,
       recentExercise,
       glucoseForBolus,
       liveGlucoseAgeMin,
@@ -621,8 +628,17 @@ export default function DiabetePage() {
     // Docteur, ni le bilan hebdo, ni un futur backtest ne peuvent
     // distinguer un repas plafonné d'un repas normal (c'est justement le
     // corpus qui doit calibrer la limite de 80).
+    //
+    // Fix round 1 (sept 2026) : `capped` et `heldAtFloor` sont deux états
+    // distincts (voir lib/dose-capping.ts) — `capped` seul manquerait le
+    // cas où la candidate était déjà au plancher (aucune réduction, mais
+    // la prédiction visait moins). Les deux méritent une trace : ce sont
+    // justement les repas qui doivent calibrer la limite de 80 et le
+    // plancher.
     const cappedNote = cappedDose.capped
       ? `plafonné ${cappedDose.originalUnits}→${cappedDose.units}U`
+      : cappedDose.heldAtFloor
+      ? `maintenue au plancher ${cappedDose.units}U (prédiction visait moins)`
       : "";
     const splitNote = bolusResult.splitDose ? `split 1/2` : "";
     const notes = [baseNote, cappedNote, overrideNote, splitNote].filter(Boolean).join(" · ");
@@ -2530,6 +2546,35 @@ export default function DiabetePage() {
                 <ShieldAlert className="w-4 h-4 text-warning" />
                 <p className="text-sm font-semibold text-text-primary">
                   Ramenée de {cappedDose.originalUnits} U à {cappedDose.units} U
+                </p>
+              </div>
+              <p className="text-xs text-text-secondary">
+                {cappedDose.reason}
+                {cappedDose.predictedMinMinute !== null && (
+                  <>
+                    {" "}
+                    Minimum prévu vers{" "}
+                    {new Date(nowTick + cappedDose.predictedMinMinute * 60_000).toLocaleTimeString(
+                      "fr-FR",
+                      { hour: "2-digit", minute: "2-digit" },
+                    )}
+                    .
+                  </>
+                )}
+              </p>
+            </div>
+          ) : cappedDose.heldAtFloor ? (
+            // Fix round 1 (sept 2026) : état distinct de « capped » — la
+            // candidate était DÉJÀ au niveau du plancher (règle 2), donc
+            // rien n'a été rabot (`units === originalUnits`), mais la
+            // prédiction réclamait bel et bien moins. On ne dit PAS
+            // « ramenée » (ce serait faux), on dit la vérité : la dose
+            // n'a pas bougé, c'est la prédiction qui visait plus bas.
+            <div className="mt-3 rounded-xl border border-warning/25 bg-warning/5 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <ShieldAlert className="w-4 h-4 text-warning" />
+                <p className="text-sm font-semibold text-text-primary">
+                  Dose maintenue à {cappedDose.units} U malgré la prédiction
                 </p>
               </div>
               <p className="text-xs text-text-secondary">

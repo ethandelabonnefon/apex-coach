@@ -26,6 +26,23 @@ const FPU_CARB_EQUIVALENT_FACTOR = 6;
 const LATER_DOSE_RELATIVE_CAP = 0.4;
 const LATER_DOSE_ABSOLUTE_CAP = 8;
 
+// ───────────────────────────────────────────────────────────────────────
+// Règle hypo simple (sept 2026, décision utilisateur)
+// ───────────────────────────────────────────────────────────────────────
+//
+// « Sous 75 mg/dL, moins une unité. » Volontairement indépendante de
+// `capDoseByPrediction` (lib/dose-capping.ts) : cette règle ne lit qu'UN
+// chiffre de glycémie, jamais une simulation. Elle s'applique donc même
+// quand le capteur est muet ou périmé et que le plafonnement prédictif se
+// désactive faute de mesure fraîche — le trou exact que cette règle comble.
+//
+// Distincte de `targetRange.min` (70 mg/dL, seuil d'hypoglycémie utilisé
+// ailleurs dans ce fichier) : les deux notions ne doivent pas être
+// confondues, sous peine de rendre l'une des deux impossible à ajuster
+// indépendamment de l'autre.
+const HYPO_SAFETY_THRESHOLD = 75;
+const HYPO_SAFETY_REDUCTION_UNITS = 1;
+
 function getRatioForMeal(config: DiabetesConfig, mealTime: MealTime): number {
   // "other" = saisie libre (correction seule, pas de repas) → on retombe
   // sur le ratio midi par défaut au cas où l'utilisateur entre quand même
@@ -189,7 +206,10 @@ export function calculateBolus(
     } else {
       correctionBolus = rawCorrection;
     }
-  } else if (currentGlucose < config.targetRange.min) {
+  } else if (currentGlucose < config.targetRange.min && carbsGrams === 0) {
+    // Uniquement pour une correction PURE (pas de glucides) : la règle
+    // hypo simple ci-dessous prend le relais dès qu'il y a des glucides,
+    // avec un message qui montre la réduction plutôt qu'un conseil vague.
     reasoning.push(`Glycémie basse (${currentGlucose} mg/dL) — considérer des glucides supplémentaires avant l'injection`);
   }
 
@@ -337,7 +357,21 @@ export function calculateBolus(
   const fpuBolusNow = 0; // jamais dans le bolus initial
   const fpuBolusLater = useSplit ? fpuBolus : 0;
 
-  const rawTotal = Math.max(0, carbBolus + correctionBolus + trendBolus + fpuBolusNow);
+  // ─── Règle hypo simple — Phase (sept 2026, décision utilisateur) ────────
+  // « Sous 75 mg/dL, moins une unité. » Ne s'applique QUE quand le repas
+  // porte des glucides (une correction pure n'est pas concernée — rien à
+  // « sécuriser » côté nourriture). Appliquée sur le TOTAL, avant l'arrondi
+  // final : sinon elle se ferait absorber par l'arrondi au plus proche.
+  let hypoSafetyReduction = 0;
+  if (carbsGrams > 0 && currentGlucose < HYPO_SAFETY_THRESHOLD) {
+    hypoSafetyReduction = HYPO_SAFETY_REDUCTION_UNITS;
+    adjustments.push(`-${HYPO_SAFETY_REDUCTION_UNITS}U sécurité (glycémie basse)`);
+    reasoning.push(
+      `Glycémie basse (${currentGlucose} mg/dL) : −${HYPO_SAFETY_REDUCTION_UNITS} U de sécurité`
+    );
+  }
+
+  const rawTotal = Math.max(0, carbBolus + correctionBolus + trendBolus + fpuBolusNow - hypoSafetyReduction);
   // Arrondi au PLUS PROCHE (pas systématiquement au-dessus, cf. commentaire
   // au-dessus) — jamais négatif puisque rawTotal est déjà clampé à 0 par
   // Math.max ci-dessus.
