@@ -17,6 +17,7 @@ import {
   Copy,
   Trash2,
   History,
+  Download,
 } from "lucide-react";
 
 // ─── Mon programme fixe (4 ratios) ─────────────────
@@ -364,6 +365,71 @@ export default function DiabeteParametresPage() {
     clearHypoEvents();
     setHypoCleared(true);
     setTimeout(() => setHypoCleared(false), 4000);
+  };
+
+  // Export des données (sauvegarde manuelle + entrée du backtest, sept. 2026) —
+  // le store persiste sous "apex-coach-storage" sans partialize, donc tout
+  // l'état vit dans localStorage. On l'exporte tel quel : c'est ce qui en
+  // fait une vraie sauvegarde. Forme du fichier = contrat consommé par le
+  // backtest (Task 5) : { exportedAt, version, state }.
+  //
+  // Fix round 1 (sept. 2026) : Ethan utilise l'app surtout en PWA installée
+  // sur iPhone. En mode standalone iOS, un <a download> sur une URL blob est
+  // peu fiable (rien ne se passe, ou le fichier s'ouvre dans un visualiseur
+  // sans bouton "Enregistrer"). Le chemin fiable sur Safari iOS 15+ est la
+  // Web Share API avec fichier (feuille de partage native → Fichiers,
+  // AirDrop, Mail). On tente le partage natif quand la plateforme peut
+  // spécifiquement partager CE fichier, et on retombe sur le téléchargement
+  // classique sinon (desktop, ou tout échec de partage autre qu'une
+  // annulation utilisateur).
+  const handleExportData = async () => {
+    let payload: { exportedAt: string; version: number; state: unknown };
+    try {
+      const raw = localStorage.getItem("apex-coach-storage");
+      if (!raw) {
+        alert("Aucune donnée à exporter sur cet appareil.");
+        return;
+      }
+      const parsed = JSON.parse(raw) as { state?: unknown; version?: number };
+      payload = {
+        exportedAt: new Date().toISOString(),
+        version: parsed.version ?? 3,
+        state: parsed.state ?? null,
+      };
+    } catch {
+      alert("Export impossible — les données locales sont illisibles.");
+      return;
+    }
+
+    const filename = `apex-coach-export-${new Date().toISOString().slice(0, 10)}.json`;
+    const json = JSON.stringify(payload, null, 2);
+    const file = new File([json], filename, { type: "application/json" });
+
+    // navigator.canShare({ files }) — pas juste navigator.share, qui existe
+    // sur des plateformes incapables de partager des fichiers — confirme que
+    // CE fichier est partageable avant de tenter le partage natif.
+    if (navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: "Export Apex Coach" });
+        return;
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          // Utilisateur a fermé/annulé la feuille de partage : pas une erreur.
+          return;
+        }
+        // Tout autre échec du partage : on continue vers le téléchargement classique.
+      }
+    }
+
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const isfInternal = diabetesConfig.insulinSensitivityFactor;
@@ -789,6 +855,28 @@ export default function DiabeteParametresPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* ── Export des données (sauvegarde manuelle, sept. 2026) ──
+          Action sûre : carte dédiée, volontairement séparée de la zone
+          dangereuse ci-dessous pour ne jamais se mêler visuellement à une
+          suppression. Sert aussi d'entrée au backtest du modèle. */}
+      <section className="surface-1 rounded-3xl p-5 sm:p-6 mt-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Download className="w-4 h-4 text-diabete" />
+          <h2 className="text-base font-semibold text-text-primary">Exporter mes données</h2>
+        </div>
+        <p className="text-xs text-text-tertiary mt-1 leading-snug">
+          Télécharge tout ton historique en un fichier : injections, glucides, hypos, séances, réglages. Ta seule sauvegarde — le stockage du navigateur peut être vidé.
+        </p>
+        <button
+          type="button"
+          onClick={handleExportData}
+          className="mt-3 flex items-center gap-1.5 bg-diabete/10 text-diabete text-xs font-semibold px-3 py-2 rounded-lg border border-diabete/30 hover:bg-diabete/20 transition-colors tap-scale"
+        >
+          <Download className="w-3.5 h-3.5" />
+          Télécharger l&apos;export
+        </button>
       </section>
 
       {/* ── Zone dangereuse : remise à zéro de l'apprentissage hypo (sept. 2026) ──
