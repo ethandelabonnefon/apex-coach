@@ -2503,7 +2503,28 @@ export default function DiabetePage() {
           </div>
 
           {/* Plafonnement prédictif (septembre 2026) */}
-          {cappedDose.capped && (
+          {isPreWorkout ? (
+            // I6 (revue finale) : `capDoseByPrediction` ne modélise PAS la
+            // séance à venir (calculateBolus réduit la candidate pour elle,
+            // mais le plafond simule sans son effet hypoglycémiant). Que
+            // `cappedDose` soit capped ou non ici ne dit donc RIEN sur la
+            // sécurité réelle de la dose vis-à-vis du sport — afficher
+            // « ta trajectoire tient » serait promettre à moitié. On le dit
+            // explicitement plutôt que d'afficher un badge qui n'en est pas
+            // un pour ce cas précis.
+            <div className="mt-3 rounded-xl border border-warning/25 bg-warning/5 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <ShieldAlert className="w-4 h-4 text-warning" />
+                <p className="text-sm font-semibold text-text-primary">
+                  Dose non vérifiée par la prédiction
+                </p>
+              </div>
+              <p className="text-xs text-text-secondary">
+                Séance {workoutType === "muscu" ? "muscu" : workoutType === "running" ? "running" : "sportive"}{" "}
+                prévue non modélisée par le plafond prédictif — vérifie ta glycémie avant de partir.
+              </p>
+            </div>
+          ) : cappedDose.capped ? (
             <div className="mt-3 rounded-xl border border-warning/25 bg-warning/5 p-3">
               <div className="flex items-center gap-2 mb-1">
                 <ShieldAlert className="w-4 h-4 text-warning" />
@@ -2526,10 +2547,22 @@ export default function DiabetePage() {
                 )}
               </p>
             </div>
-          )}
-          {!cappedDose.capped && cappedDose.reason && (
-            <p className="mt-3 text-xs text-text-tertiary">{cappedDose.reason}</p>
-          )}
+          ) : cappedDose.reason ? (
+            // I3 (revue finale) : élevé au même niveau de visibilité que le
+            // bloc « plafonné » ci-dessus (avant : `text-xs
+            // text-text-tertiary` sur une ligne — le gris le plus discret
+            // de la palette pour un message de sécurité). « Dose non
+            // vérifiée » n'est pas moins important que « dose ramenée ».
+            <div className="mt-3 rounded-xl border border-warning/25 bg-warning/5 p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <ShieldAlert className="w-4 h-4 text-warning" />
+                <p className="text-sm font-semibold text-text-primary">
+                  Dose non vérifiée par la prédiction
+                </p>
+              </div>
+              <p className="text-xs text-text-secondary">{cappedDose.reason}</p>
+            </div>
+          ) : null}
 
           {/* Split dose later */}
           {bolusResult.splitDose && (
