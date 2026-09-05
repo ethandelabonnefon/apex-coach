@@ -4,6 +4,7 @@ import { USER_PROFILE, DIABETES_CONFIG, DIABETES_PROFILES_DEFAULT, MUSCU_PROGRAM
 import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile, SplitDoseReminder, HypoEvent, CarbEntry } from '@/types';
 import type { NightPredictionRecord } from '@/lib/night-calibration';
 import { computeRatioStamps, hasNewRatioStamps } from '@/lib/dose-validation';
+import { syncInsulinRatios } from '@/lib/ratio-sync';
 
 interface CompletedWorkout {
   id: string;
@@ -194,6 +195,14 @@ export const useStore = create<AppState>()(
       diabetesConfig: DIABETES_CONFIG,
       updateDiabetesConfig: (updates) => set((s) => {
         const next = { ...s.diabetesConfig, ...updates };
+        // Défense en profondeur, même invariant que dans updateRatioProfile :
+        // un appelant qui ne passe que `ratios` laisserait `insulinRatios`
+        // périmé, et tous les lecteurs préfèrent ce tableau — l'écriture
+        // serait invisible. Les deux appelants actuels (Paramètres, Docteur)
+        // passent bien les deux ; ce garde-fou protège les suivants.
+        if (updates.ratios && !updates.insulinRatios) {
+          next.insulinRatios = syncInsulinRatios(s.diabetesConfig.insulinRatios, updates.ratios);
+        }
         // Si l'update touche les flat fields (ratios, insulinRatios, ISF),
         // on répercute aussi dans le profil actif pour rester cohérent.
         const touchesFlat =
@@ -285,9 +294,21 @@ export const useStore = create<AppState>()(
         },
       })),
       updateRatioProfile: (profileId, updates) => set((s) => {
-        const updatedProfiles = s.diabetesConfig.profiles.map((p) =>
-          p.id === profileId ? { ...p, ...updates } : p,
-        );
+        const updatedProfiles = s.diabetesConfig.profiles.map((p) => {
+          if (p.id !== profileId) return p;
+          const merged = { ...p, ...updates };
+          // Le ratio vit à deux endroits (objet plat `ratios` + tableau
+          // `insulinRatios`) et TOUS les lecteurs préfèrent le tableau
+          // (getRatioForMeal, affichage des paramètres). Un appelant qui ne
+          // passe que `ratios` — c'était le cas de la validation des doses —
+          // produisait sinon une écriture invisible : confirmation affichée,
+          // store modifié, dose inchangée. On tient l'invariant ici pour que
+          // le prochain appelant n'ait pas à y penser. Cf. lib/ratio-sync.ts.
+          if (updates.ratios && !updates.insulinRatios) {
+            merged.insulinRatios = syncInsulinRatios(p.insulinRatios, updates.ratios);
+          }
+          return merged;
+        });
         const isActive = s.diabetesConfig.activeProfileId === profileId;
         const active = updatedProfiles.find((p) => p.id === profileId);
         if (isActive && active) {
