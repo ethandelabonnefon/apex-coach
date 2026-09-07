@@ -30,18 +30,28 @@
 import type { GpsPoint } from "@/lib/running-tracker";
 import { totalDistance } from "@/lib/running-tracker";
 
-/** Source de la séance détectée (utilisée pour l'UI). */
-export type ExerciseSource = "running" | "muscu" | "cardio-other";
+/**
+ * Source de la séance détectée (utilisée pour l'UI).
+ *
+ * `intermittent` (sept. 2026) : sports co / raquette / CrossFit — la
+ * glycémie reste stable pendant l'effort (adrénaline) puis chute après.
+ * Distincte de `muscu` (résistance continue, glycémie stable ou en hausse)
+ * et de `running`/`cardio-other` (baisse pendant l'effort).
+ */
+export type ExerciseSource = "running" | "muscu" | "cardio-other" | "intermittent";
 
 /**
  * Mapping nom de sport Whoop → catégorie APEX.
- * Whoop fournit `sport_name` (string libre) ; on classe en 3 catégories.
+ * Whoop fournit `sport_name` (string libre) ; on classe en 4 catégories.
  *
  * - "running" : effet sensibilité ↑ marqué (running, trail)
  * - "cardio-other" : effet sensibilité ↑ similaire au running (cycling,
  *   swimming, rowing, HIIT cardio…)
+ * - "intermittent" (sept. 2026) : effet plein comme le cardio, mais décalé
+ *   après l'effort — sports co / raquette / CrossFit / Hyrox (voir
+ *   commentaire du type `ExerciseSource` et de la règle ci-dessous)
  * - "muscu" : effet sensibilité quasi-nul à modéré selon durée/intensité
- *   (weightlifting, functional fitness, strength training, powerlifting)
+ *   (weightlifting, strength training, powerlifting)
  *
  * Référence : Yardley et al., Diabetes Care 2013 — sensibilité insuline
  * UNCHANGED à 12h ET 36h après résistance (vs marquée après cardio).
@@ -51,8 +61,22 @@ export function classifySport(sportName: string | null | undefined): ExerciseSou
   const s = sportName.toLowerCase();
   // Running et trail
   if (/run|jog|trail/.test(s)) return "running";
+  // Intermittent : efforts mixtes à pics d'intensité. CrossFit et Hyrox
+  // étaient auparavant classés `muscu` — changement de comportement VOULU
+  // (sept. 2026) : ce sont des efforts intermittents, et le facteur passe de
+  // 0,1-0,5 à 1,0, donc la réduction d'insuline post-séance augmente. Sens
+  // anti-hypo, mais il modifie l'ajustement des séances CrossFit remontées
+  // par Whoop. Placé AVANT la règle muscu : "functional" doit être capté
+  // ici en premier, sinon la règle muscu ci-dessous l'absorbe.
+  if (/crossfit|functional|hyrox|circuit/.test(s)) return "intermittent";
+  // Sports co / raquette : glycémie stable pendant l'effort (adrénaline),
+  // chute après (cf. commentaire ExerciseSource). Même famille que
+  // CrossFit/Hyrox ci-dessus.
+  if (/soccer|football|tennis|padel|squash|badminton|basket|handball|rugby/.test(s)) {
+    return "intermittent";
+  }
   // Muscu / résistance
-  if (/weight|strength|powerlift|crossfit|functional|hyrox|lifting|gym/.test(s)) {
+  if (/weight|strength|powerlift|lifting|gym/.test(s)) {
     return "muscu";
   }
   // Cardio autres (vélo, natation, rameur, HIIT cardio, elliptical…)
@@ -126,6 +150,14 @@ export function estimateStrain(
   // Bonus intensité selon source (running = cardio + intense)
   if (source === "running") base += 0;
   else if (source === "muscu") base -= 2;
+  // Intermittent (foot, padel, tennis, basket, CrossFit) : intensité en pics
+  // + course répétée, charge cardiovasculaire comparable au running sur la
+  // durée de la séance — pas de malus comme la muscu continue. Explicite ici
+  // (et non un fallback implicite) car sous-estimer le strain sous-estimerait
+  // ensuite la réduction d'insuline post-séance pour cette famille.
+  else if (source === "intermittent") base += 0;
+  // cardio-other : pas de branche dédiée — comportement existant conservé
+  // (aucun bonus/malus), inchangé par cette tâche.
 
   // Ajustement intensité basé sur la chute glycémie observée
   // (plus la chute est forte, plus l'effort est intense)
@@ -199,6 +231,8 @@ function decayCoefficient(hoursAgo: number, windowHours: number): number {
  * Donc on applique un facteur sport :
  *   - Running : 1.0 (effet plein, mapping strain → réduction direct)
  *   - Cardio-other (vélo, swim, etc.) : 1.0 (similaire au running)
+ *   - Intermittent (foot, padel, tennis, CrossFit, sept. 2026) : 1.0 (effet
+ *     plein lui aussi — la chute arrive après l'effort, pas pendant)
  *   - Muscu < 45min : 0.1 (quasi nul, anti-hypo négligeable)
  *   - Muscu 45-75min : 0.25 (effet limité)
  *   - Muscu > 75min OU strain Whoop ≥ 16 : 0.5 (effet modéré, séance
@@ -211,6 +245,12 @@ export function getSportFactor(
   strain: number,
 ): number {
   if (source === "running" || source === "cardio-other") return 1.0;
+  // Intermittent (foot, padel, tennis, basket, CrossFit) : la glycémie tient
+  // pendant l'effort, mais les hypos sont PLUS fréquentes après les séances à
+  // intervalles les plus intenses (Scientific Reports 2018). On applique donc
+  // l'effet plein, comme le cardio continu — sous-estimer ici, c'est laisser
+  // tomber Ethan une heure après le match.
+  if (source === "intermittent") return 1.0;
   // Muscu : modulé par durée + intensité
   if (durationMin < 45) return 0.1;
   if (durationMin < 75 && strain < 16) return 0.25;

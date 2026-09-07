@@ -24,10 +24,48 @@ import assert from "node:assert/strict";
 
 import {
   resolveRecentExercise,
+  classifySport,
+  getSportFactor,
   type LastWhoopWorkout,
 } from "./exercise-insulin-adjustment";
 
 const NOW = new Date("2026-09-03T20:00:00Z").getTime();
+
+/**
+ * Task 1 (sept. 2026) — quatrième famille "intermittent".
+ *
+ * Ces tests couvrent explicitement le reclassement de CrossFit/Hyrox
+ * (muscu → intermittent, changement de comportement VOULU) et le facteur
+ * plein appliqué à cette famille. Discriminance vérifiée manuellement :
+ * en commentant la règle `crossfit|functional|hyrox|circuit` dans
+ * `classifySport` (retour à l'ancien comportement `muscu`), le premier test
+ * ci-dessous échoue bien ; de même, en retirant le `if (source ===
+ * "intermittent") return 1.0;` de `getSportFactor`, le second test échoue
+ * (retombe sur la branche muscu < 45min → 0.1). Les deux ont été restaurés
+ * après vérification.
+ */
+test("CrossFit et Hyrox sont classés intermittent, pas muscu (changement voulu sept. 2026)", () => {
+  assert.equal(classifySport("CrossFit"), "intermittent");
+  assert.equal(classifySport("Hyrox"), "intermittent");
+  assert.equal(classifySport("Functional Fitness"), "intermittent");
+  // Non-régression : la vraie muscu reste muscu.
+  assert.equal(classifySport("Weightlifting"), "muscu");
+  assert.equal(classifySport("Strength Training"), "muscu");
+});
+
+test("le facteur sport de la famille intermittente est plein (1.0), comme le cardio", () => {
+  assert.equal(getSportFactor("intermittent", 30, 8), 1.0);
+  assert.equal(getSportFactor("intermittent", 90, 18), 1.0);
+  // Non-régression : la muscu reste modulée par durée/intensité.
+  assert.equal(getSportFactor("muscu", 30, 8), 0.1);
+});
+
+test("football, padel, tennis et basket sont classés intermittent", () => {
+  assert.equal(classifySport("Soccer"), "intermittent");
+  assert.equal(classifySport("Padel"), "intermittent");
+  assert.equal(classifySport("Tennis"), "intermittent");
+  assert.equal(classifySport("Basketball"), "intermittent");
+});
 
 test("I5 : un workout Whoop daté dans le FUTUR est ignoré, pas utilisé comme séance récente", () => {
   // C'est exactement le garde que l'ancien memo inline de page.tsx
