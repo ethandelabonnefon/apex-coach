@@ -421,23 +421,26 @@ export function resolveRecentExercise(input: {
 }): RecentExercise | null {
   const nowMs = input.nowMs ?? Date.now();
   const lw = input.lastWhoopWorkout;
+
+  // Candidat Whoop, s'il existe et s'est terminé dans les 24h.
+  let whoopCandidate: RecentExercise | null = null;
   if (lw) {
     const endedAtMs = new Date(lw.endedAt).getTime();
     if (!Number.isNaN(endedAtMs) && endedAtMs <= nowMs && nowMs - endedAtMs < 24 * 3_600_000) {
-      const durationMin = Math.max(
-        1,
-        Math.round((endedAtMs - new Date(lw.startedAt).getTime()) / 60_000),
-      );
-      return {
+      whoopCandidate = {
         source: classifySport(lw.sport),
         endedAtMs,
-        durationMin,
+        durationMin: Math.max(
+          1,
+          Math.round((endedAtMs - new Date(lw.startedAt).getTime()) / 60_000),
+        ),
         strain: lw.strain,
         strainSource: "whoop",
       };
     }
   }
-  return findMostRecentExercise(
+
+  const otherCandidate = findMostRecentExercise(
     input.completedWorkouts.map((w) => ({ id: w.id, date: w.date, duration: w.duration ?? 60 })),
     input.completedRunningSessions.map((r) => ({
       id: r.id,
@@ -449,6 +452,22 @@ export function resolveRecentExercise(input: {
     nowMs,
     input.declaredSportSessions ?? [],
   );
+
+  // La séance la plus RÉCEMMENT TERMINÉE gagne.
+  //
+  // Correctif sept. 2026 (revue finale F1) : ce bloc renvoyait autrefois le
+  // candidat Whoop immédiatement, sans jamais appeler findMostRecentExercise
+  // — donc sans jamais voir les `declaredSportSessions`. Une muscu Whoop du
+  // matin masquait un padel déclaré le soir : la page appliquait -3 % au lieu
+  // de -50 %, soit 5,8 U au lieu de 3 U sur un dîner à 60 g, au moment précis
+  // où la chute décalée du padel commence.
+  //
+  // « Whoop d'abord » reste vrai au sens utile — à égalité de fraîcheur, la
+  // mesure du bracelet prime sur l'estimation — mais ne doit jamais faire
+  // ignorer une séance plus récente.
+  if (!whoopCandidate) return otherCandidate;
+  if (!otherCandidate) return whoopCandidate;
+  return otherCandidate.endedAtMs > whoopCandidate.endedAtMs ? otherCandidate : whoopCandidate;
 }
 
 /** Compte les points GPS valides (utilitaire pour debug). */
