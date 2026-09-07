@@ -32,6 +32,7 @@ const EXCLUSION_LABELS: Record<string, string> = {
   "short-window": "trop proches du repas suivant",
   "no-coverage": "sans mesure capteur suffisante",
   "low-at-meal": "pris en dessous de 80 mg/dL",
+  "sport-carbs": "suivis de glucides pris pour le sport",
 };
 
 function SlotCard({

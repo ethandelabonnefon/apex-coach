@@ -119,15 +119,20 @@ export interface ActiveCarbSource {
   uncertain: boolean;
   confirmed: boolean;
   /**
-   * Glucides de resucrage (hypoglycémie) — marqueur fiable posé depuis
-   * `CarbEntry.hypoEventId` (cf. `buildHypoCarbEntry`). Ces glucides
-   * existent pour CONTRER un excès d'insuline : les compter dans le besoin
-   * d'insuline reviendrait à demander d'annuler le traitement de l'hypo.
-   * Ils restent comptés normalement dans `carbsRemainingG`/`totalRemainingG`
-   * (donc dans l'affichage ET la prédiction de nuit) — seule la couverture
-   * insuline (`insulinNeededU`) les exclut.
+   * Glucides « non couvrants » — marqueur fiable posé depuis
+   * `CarbEntry.hypoEventId` (resucrage, cf. `buildHypoCarbEntry`) OU
+   * `CarbEntry.sportSessionId` (glucides pré-sport, sept. 2026). Les deux cas
+   * existent pour CONTRER une baisse de glycémie (excès d'insuline pour le
+   * premier, effort physique pour le second) : les compter dans le besoin
+   * d'insuline reviendrait à demander d'annuler ce qu'ils corrigent. Ils
+   * restent comptés normalement dans `carbsRemainingG`/`totalRemainingG`
+   * (donc dans l'affichage ET la prédiction de nuit — ils font réellement
+   * monter la glycémie) — seule la couverture insuline (`insulinNeededU`)
+   * les exclut. Un `CarbEntry` peut porter les deux marqueurs à la fois
+   * (resucrage pendant une séance déclarée) : le booléen reste vrai, une
+   * seule exclusion suffit.
    */
-  isRescue: boolean;
+  isNonCovering: boolean;
   /** Glucides bruts encore à absorber (g). */
   carbsRemainingG: number;
   /** Équivalent-glucides FPU encore à absorber (g). */
@@ -140,6 +145,20 @@ export interface BuildCarbSourcesOptions {
   ratios?: MealRatios;
   nowMs?: number;
   windowMin?: number;
+  /**
+   * Séances déclarées au briefing pré-sport (`lib/store.ts`
+   * `declaredSportSessions`). Sert UNIQUEMENT à repérer les séances
+   * ANNULÉES : les glucides tagués `sportSessionId` d'une séance annulée
+   * redeviennent des glucides ordinaires, à couvrir par de l'insuline.
+   *
+   * Correctif sept. 2026 (revue finale F5) : sans cette entrée, les 56 g
+   * avalés pour un padel finalement annulé restaient hors de
+   * `insulinNeededU` à vie — hyperglycémie silencieuse. Tous les autres
+   * consommateurs de l'annulation la respectaient déjà.
+   *
+   * Absente → comportement inchangé (aucune séance connue comme annulée).
+   */
+  declaredSportSessions?: { id: string; cancelledAt?: string }[];
 }
 
 /** Convertit un timestamp (Date | ISO | number) en ms. */
@@ -159,6 +178,10 @@ export function buildCarbSources(
   const now = opts.nowMs ?? Date.now();
   const windowMin = opts.windowMin ?? EVENT_ACTIVE_WINDOW_MIN;
   const sources: ActiveCarbSource[] = [];
+  // Séances annulées : leurs glucides redeviennent ordinaires (cf. F5).
+  const cancelledSessionIds = new Set(
+    (opts.declaredSportSessions ?? []).filter((s) => s.cancelledAt).map((s) => s.id),
+  );
 
   const push = (s: Omit<ActiveCarbSource, "carbsRemainingG" | "fpuRemainingG">) => {
     const fpu = (s.fatGrams * 9 + s.proteinGrams * 4) / 100;
@@ -190,8 +213,9 @@ export function buildCarbSources(
       uncertain: log.carbsUncertain === true,
       confirmed: log.carbsConfirmedAt !== undefined,
       // Une injection est toujours un vrai repas bolussé, jamais un
-      // re-sucrage (le re-sucrage n'écrit qu'un CarbEntry, cf. hypo-resucrage.ts).
-      isRescue: false,
+      // re-sucrage ni des glucides pré-sport (les deux n'écrivent qu'un
+      // CarbEntry, cf. hypo-resucrage.ts et le briefing pré-sport).
+      isNonCovering: false,
     });
   }
 
@@ -212,9 +236,12 @@ export function buildCarbSources(
       minutesAgo: Math.max(0, minutesAgo),
       uncertain: false,
       confirmed: true,
-      // Marqueur posé par buildHypoCarbEntry (hypo-resucrage.ts) — pas une
-      // heuristique sur le label ou les grammes, juste ce champ.
-      isRescue: c.hypoEventId !== undefined,
+      // Marqueurs posés par buildHypoCarbEntry (hypo-resucrage.ts) et par la
+      // création de séance du briefing pré-sport (Task 5) — jamais une
+      // heuristique sur le label ou les grammes, juste ces deux champs.
+      isNonCovering:
+        c.hypoEventId !== undefined ||
+        (c.sportSessionId !== undefined && !cancelledSessionIds.has(c.sportSessionId)),
     });
   }
 
@@ -337,12 +364,13 @@ export function computeCarbsOnBoard(
   for (const s of sources) {
     carbsRemainingG += s.carbsRemainingG;
     fpuRemainingG += s.fpuRemainingG;
-    // Ratio conservé source par source — pas de moyenne. Le resucrage
-    // (isRescue) compte pleinement dans les grammes ci-dessus (affichage +
-    // prédiction de nuit via buildPredictionEvents, qui ignore ce champ),
-    // mais JAMAIS dans le besoin d'insuline : ces glucides existent pour
-    // contrer un excès d'insuline, pas pour en réclamer davantage.
-    if (s.gramsPerU > 0 && !s.isRescue) {
+    // Ratio conservé source par source — pas de moyenne. Le resucrage et les
+    // glucides pré-sport (isNonCovering) comptent pleinement dans les
+    // grammes ci-dessus (affichage + prédiction de nuit via
+    // buildPredictionEvents, qui ignore ce champ), mais JAMAIS dans le
+    // besoin d'insuline : ces glucides existent pour contrer une baisse de
+    // glycémie, pas pour en réclamer davantage.
+    if (s.gramsPerU > 0 && !s.isNonCovering) {
       insulinNeededU += (s.carbsRemainingG + s.fpuRemainingG) / s.gramsPerU;
     }
     if (s.uncertain) uncertain = true;

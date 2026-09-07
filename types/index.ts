@@ -226,6 +226,16 @@ export interface CarbEntry {
    * Absent pour toute entrée saisie manuellement (CarbEntryLogger).
    */
   hypoEventId?: string;
+  /**
+   * Traçabilité vers la `DeclaredSportSession` quand ces glucides ont été
+   * pris pour couvrir un effort (sept. 2026). Même traitement que
+   * `hypoEventId` : comptés dans les glucides actifs (la glycémie monte
+   * réellement, la prédiction doit les voir), mais exclus de la couverture
+   * insuline (`insulinNeededU`) et de l'apprentissage du détecteur de
+   * sur-dosage — ils compensent une baisse due au sport, ce n'est pas un
+   * repas à couvrir ni à juger.
+   */
+  sportSessionId?: string;
 }
 
 /**
@@ -424,3 +434,25 @@ export interface CompletedRunningSession {
 }
 
 export type MealTime = 'morning' | 'lunch' | 'snack' | 'dinner' | 'other';
+
+/**
+ * Séance déclarée depuis le briefing pré-sport (sept. 2026). Créée quand
+ * l'utilisateur accepte la recommandation, ce qui vaut déclaration
+ * d'intention — pas de bouton de confirmation supplémentaire. Complétée
+ * ensuite par la réconciliation Whoop quand le bracelet remonte la séance.
+ */
+export interface DeclaredSportSession {
+  id: string;
+  /** Clé de `SPORTS` (lib/sports.ts). */
+  sportKey: string;
+  /** Famille d'effort, dupliquée pour rester lisible sans le catalogue. */
+  family: "running" | "muscu" | "cardio-other" | "intermittent";
+  /** ISO du début prévu. */
+  startAt: string;
+  plannedDurationMin: number;
+  actualDurationMin?: number;
+  endedAt?: string;
+  whoopWorkoutId?: string;
+  cancelledAt?: string;
+  createdAt: string;
+}

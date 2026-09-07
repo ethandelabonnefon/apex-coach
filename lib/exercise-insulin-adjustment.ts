@@ -29,19 +29,30 @@
 
 import type { GpsPoint } from "@/lib/running-tracker";
 import { totalDistance } from "@/lib/running-tracker";
+import type { DeclaredSportSession } from "@/types";
 
-/** Source de la séance détectée (utilisée pour l'UI). */
-export type ExerciseSource = "running" | "muscu" | "cardio-other";
+/**
+ * Source de la séance détectée (utilisée pour l'UI).
+ *
+ * `intermittent` (sept. 2026) : sports co / raquette / CrossFit — la
+ * glycémie reste stable pendant l'effort (adrénaline) puis chute après.
+ * Distincte de `muscu` (résistance continue, glycémie stable ou en hausse)
+ * et de `running`/`cardio-other` (baisse pendant l'effort).
+ */
+export type ExerciseSource = "running" | "muscu" | "cardio-other" | "intermittent";
 
 /**
  * Mapping nom de sport Whoop → catégorie APEX.
- * Whoop fournit `sport_name` (string libre) ; on classe en 3 catégories.
+ * Whoop fournit `sport_name` (string libre) ; on classe en 4 catégories.
  *
  * - "running" : effet sensibilité ↑ marqué (running, trail)
  * - "cardio-other" : effet sensibilité ↑ similaire au running (cycling,
  *   swimming, rowing, HIIT cardio…)
+ * - "intermittent" (sept. 2026) : effet plein comme le cardio, mais décalé
+ *   après l'effort — sports co / raquette / CrossFit / Hyrox (voir
+ *   commentaire du type `ExerciseSource` et de la règle ci-dessous)
  * - "muscu" : effet sensibilité quasi-nul à modéré selon durée/intensité
- *   (weightlifting, functional fitness, strength training, powerlifting)
+ *   (weightlifting, strength training, powerlifting)
  *
  * Référence : Yardley et al., Diabetes Care 2013 — sensibilité insuline
  * UNCHANGED à 12h ET 36h après résistance (vs marquée après cardio).
@@ -51,8 +62,22 @@ export function classifySport(sportName: string | null | undefined): ExerciseSou
   const s = sportName.toLowerCase();
   // Running et trail
   if (/run|jog|trail/.test(s)) return "running";
+  // Intermittent : efforts mixtes à pics d'intensité. CrossFit et Hyrox
+  // étaient auparavant classés `muscu` — changement de comportement VOULU
+  // (sept. 2026) : ce sont des efforts intermittents, et le facteur passe de
+  // 0,1-0,5 à 1,0, donc la réduction d'insuline post-séance augmente. Sens
+  // anti-hypo, mais il modifie l'ajustement des séances CrossFit remontées
+  // par Whoop. Placé AVANT la règle muscu : "functional" doit être capté
+  // ici en premier, sinon la règle muscu ci-dessous l'absorbe.
+  if (/crossfit|functional|hyrox|circuit/.test(s)) return "intermittent";
+  // Sports co / raquette : glycémie stable pendant l'effort (adrénaline),
+  // chute après (cf. commentaire ExerciseSource). Même famille que
+  // CrossFit/Hyrox ci-dessus.
+  if (/soccer|football|tennis|padel|squash|badminton|basket|handball|rugby/.test(s)) {
+    return "intermittent";
+  }
   // Muscu / résistance
-  if (/weight|strength|powerlift|crossfit|functional|hyrox|lifting|gym/.test(s)) {
+  if (/weight|strength|powerlift|lifting|gym/.test(s)) {
     return "muscu";
   }
   // Cardio autres (vélo, natation, rameur, HIIT cardio, elliptical…)
@@ -109,6 +134,24 @@ export interface ExerciseAdjustment {
  *  - Running > muscu en strain cardiovasculaire pour durée égale
  *  - Si la glycémie a chuté >50 mg/dL pendant → intensité réelle élevée
  */
+/**
+ * Plafond de strain pour une séance simplement DÉCLARÉE, non confirmée par
+ * Whoop (revue finale F3, sept. 2026). 13 = haut du bracket « cardio
+ * modéré » (réduction max 25 %, fenêtre 12 h), au lieu du bracket maximal
+ * (50 %, 24 h) qu'une durée de 90 min déclencherait sinon.
+ *
+ * Une déclaration d'intention n'est pas une mesure d'intensité.
+ */
+export const DECLARED_SESSION_STRAIN_CAP = 13;
+
+/**
+ * Écart maximal (min) entre deux fins de séance pour les considérer comme
+ * la MÊME séance vue par deux sources. Au-delà, ce sont deux efforts
+ * distincts et c'est le plus récent qui compte. En deçà, la mesure Whoop
+ * prime sur l'estimation. Aligné sur la tolérance de réconciliation.
+ */
+export const SAME_SESSION_TOLERANCE_MIN = 45;
+
 export function estimateStrain(
   source: ExerciseSource,
   durationMin: number,
@@ -126,6 +169,14 @@ export function estimateStrain(
   // Bonus intensité selon source (running = cardio + intense)
   if (source === "running") base += 0;
   else if (source === "muscu") base -= 2;
+  // Intermittent (foot, padel, tennis, basket, CrossFit) : intensité en pics
+  // + course répétée, charge cardiovasculaire comparable au running sur la
+  // durée de la séance — pas de malus comme la muscu continue. Explicite ici
+  // (et non un fallback implicite) car sous-estimer le strain sous-estimerait
+  // ensuite la réduction d'insuline post-séance pour cette famille.
+  else if (source === "intermittent") base += 0;
+  // cardio-other : pas de branche dédiée — comportement existant conservé
+  // (aucun bonus/malus), inchangé par cette tâche.
 
   // Ajustement intensité basé sur la chute glycémie observée
   // (plus la chute est forte, plus l'effort est intense)
@@ -199,6 +250,8 @@ function decayCoefficient(hoursAgo: number, windowHours: number): number {
  * Donc on applique un facteur sport :
  *   - Running : 1.0 (effet plein, mapping strain → réduction direct)
  *   - Cardio-other (vélo, swim, etc.) : 1.0 (similaire au running)
+ *   - Intermittent (foot, padel, tennis, CrossFit, sept. 2026) : 1.0 (effet
+ *     plein lui aussi — la chute arrive après l'effort, pas pendant)
  *   - Muscu < 45min : 0.1 (quasi nul, anti-hypo négligeable)
  *   - Muscu 45-75min : 0.25 (effet limité)
  *   - Muscu > 75min OU strain Whoop ≥ 16 : 0.5 (effet modéré, séance
@@ -211,6 +264,12 @@ export function getSportFactor(
   strain: number,
 ): number {
   if (source === "running" || source === "cardio-other") return 1.0;
+  // Intermittent (foot, padel, tennis, basket, CrossFit) : la glycémie tient
+  // pendant l'effort, mais les hypos sont PLUS fréquentes après les séances à
+  // intervalles les plus intenses (Scientific Reports 2018). On applique donc
+  // l'effet plein, comme le cardio continu — sous-estimer ici, c'est laisser
+  // tomber Ethan une heure après le match.
+  if (source === "intermittent") return 1.0;
   // Muscu : modulé par durée + intensité
   if (durationMin < 45) return 0.1;
   if (durationMin < 75 && strain < 16) return 0.25;
@@ -260,9 +319,9 @@ export function computeExerciseAdjustment(
 }
 
 /**
- * Helper qui détermine la séance la plus récente parmi muscu + running
- * dans les 24 dernières heures. Estime le strain si Whoop n'est pas
- * connecté.
+ * Helper qui détermine la séance la plus récente parmi muscu + running +
+ * séances déclarées sur le moment (sept. 2026) dans les 24 dernières
+ * heures. Estime le strain si Whoop n'est pas connecté.
  */
 export function findMostRecentExercise(
   completedWorkouts: { id: string; date: string; duration: number }[],
@@ -276,6 +335,14 @@ export function findMostRecentExercise(
   /** Strain Whoop par session ID si dispo (workout strain via API Whoop). */
   whoopStrainBySessionId?: Record<string, number>,
   nowMs: number = Date.now(),
+  /**
+   * Séances déclarées depuis le briefing pré-sport, hors module muscu/running
+   * (sept. 2026) — ex : padel décidé sur le moment. Une séance annulée
+   * (`cancelledAt`) ne doit JAMAIS réduire un bolus : elle est ignorée sans
+   * exception. La durée réelle Whoop (`actualDurationMin`, tâche 6) prime
+   * sur la durée prévue (`plannedDurationMin`) dès qu'elle est renseignée.
+   */
+  declaredSessions: DeclaredSportSession[] = [],
 ): RecentExercise | null {
   const cutoff = nowMs - 24 * 3_600_000;
   const candidates: RecentExercise[] = [];
@@ -313,6 +380,60 @@ export function findMostRecentExercise(
     });
   }
 
+  for (const d of declaredSessions) {
+    // Garde-fou principal : une séance annulée ne doit jamais réduire un
+    // bolus (padel déclaré puis annulé → pas de baisse d'insuline fantôme).
+    if (d.cancelledAt) continue;
+    // Séance déjà réconciliée avec Whoop : le candidat Whoop la représente
+    // avec son strain RÉELLEMENT MESURÉ. En produire un second ici ferait
+    // concourir une estimation contre une mesure — et l'estimation peut
+    // gagner, puisqu'on départage sur la fin la plus récente (revue des
+    // correctifs, sept. 2026 : padel joué 18h25-20h00, strain Whoop 11,
+    // mais candidat déclaré à 20h05 avec strain estimé 18 → -50 % sur 24 h
+    // au lieu de -25 % sur 12 h).
+    if (d.whoopWorkoutId) continue;
+    const startMs = new Date(d.startAt).getTime();
+    if (Number.isNaN(startMs)) continue;
+    // La durée réelle (Whoop, tâche 6) prime sur la durée prévue.
+    const durationMin = d.actualDurationMin ?? d.plannedDurationMin;
+    // Heure de fin mesurée si la réconciliation l'a écrite, sinon déduite du
+    // début déclaré : recalculer depuis `startAt` ignorerait le fait
+    // qu'Ethan est parti plus tôt ou plus tard que prévu.
+    const endedFromWhoop = d.endedAt ? new Date(d.endedAt).getTime() : NaN;
+    const endedAtMs = Number.isNaN(endedFromWhoop)
+      ? startMs + durationMin * 60_000
+      : endedFromWhoop;
+    // Même filtre que les autres sources : l'effet de sensibilité commence
+    // APRÈS l'effort (endedAtMs <= nowMs), pas pendant.
+    if (endedAtMs < cutoff || endedAtMs > nowMs) continue;
+    candidates.push({
+      source: d.family,
+      endedAtMs,
+      durationMin,
+      // Plafond sur une séance simplement DÉCLARÉE (revue finale F3,
+      // sept. 2026). `estimateStrain` ne dispose que de la durée : 90 min
+      // suffisent à produire un strain de 18, donc le bracket maximal —
+      // -50 % pendant 2 h, fenêtre de 24 h, et encore -13 % le lendemain
+      // midi. Or Football, Padel, Tennis et Basket ont 90 min par défaut :
+      // deux taps armaient cette réduction maximale sans qu'aucune
+      // intensité n'ait jamais été mesurée.
+      //
+      // Une déclaration d'intention n'est pas une mesure. Tant que Whoop
+      // n'a pas confirmé la séance (`actualDurationMin` renseigné par la
+      // réconciliation), le strain est plafonné au haut du bracket
+      // « cardio modéré » — un ajustement réel, mais pas le maximum.
+      // Plafond TOUJOURS appliqué. Le premier correctif le levait dès que
+      // `actualDurationMin` était renseigné, en croyant qu'une séance
+      // confirmée par Whoop apportait son strain mesuré — c'est faux : ce
+      // chemin n'a jamais que `estimateStrain`, qui ne connaît que la durée.
+      // Lever le plafond ne donnait donc pas une mesure, juste une
+      // estimation plus grosse. Le strain mesuré n'arrive que par le
+      // candidat Whoop, qui court-circuite désormais ce bloc.
+      strain: Math.min(DECLARED_SESSION_STRAIN_CAP, estimateStrain(d.family, durationMin)),
+      strainSource: "estimated",
+    });
+  }
+
   if (candidates.length === 0) return null;
   // Garde la plus récente (fin la plus proche de maintenant)
   candidates.sort((a, b) => b.endedAtMs - a.endedAtMs);
@@ -346,26 +467,31 @@ export function resolveRecentExercise(input: {
     actualDuration?: number;
     glucoseCheckpoints?: { value: number; offsetSec: number }[];
   }[];
+  /** Séances déclarées sur le moment depuis le briefing pré-sport (tâche 3). */
+  declaredSportSessions?: DeclaredSportSession[];
 }): RecentExercise | null {
   const nowMs = input.nowMs ?? Date.now();
   const lw = input.lastWhoopWorkout;
+
+  // Candidat Whoop, s'il existe et s'est terminé dans les 24h.
+  let whoopCandidate: RecentExercise | null = null;
   if (lw) {
     const endedAtMs = new Date(lw.endedAt).getTime();
     if (!Number.isNaN(endedAtMs) && endedAtMs <= nowMs && nowMs - endedAtMs < 24 * 3_600_000) {
-      const durationMin = Math.max(
-        1,
-        Math.round((endedAtMs - new Date(lw.startedAt).getTime()) / 60_000),
-      );
-      return {
+      whoopCandidate = {
         source: classifySport(lw.sport),
         endedAtMs,
-        durationMin,
+        durationMin: Math.max(
+          1,
+          Math.round((endedAtMs - new Date(lw.startedAt).getTime()) / 60_000),
+        ),
         strain: lw.strain,
         strainSource: "whoop",
       };
     }
   }
-  return findMostRecentExercise(
+
+  const otherCandidate = findMostRecentExercise(
     input.completedWorkouts.map((w) => ({ id: w.id, date: w.date, duration: w.duration ?? 60 })),
     input.completedRunningSessions.map((r) => ({
       id: r.id,
@@ -375,7 +501,35 @@ export function resolveRecentExercise(input: {
     })),
     undefined,
     nowMs,
+    input.declaredSportSessions ?? [],
   );
+
+  // La séance la plus RÉCEMMENT TERMINÉE gagne.
+  //
+  // Correctif sept. 2026 (revue finale F1) : ce bloc renvoyait autrefois le
+  // candidat Whoop immédiatement, sans jamais appeler findMostRecentExercise
+  // — donc sans jamais voir les `declaredSportSessions`. Une muscu Whoop du
+  // matin masquait un padel déclaré le soir : la page appliquait -3 % au lieu
+  // de -50 %, soit 5,8 U au lieu de 3 U sur un dîner à 60 g, au moment précis
+  // où la chute décalée du padel commence.
+  //
+  // « Whoop d'abord » reste vrai au sens utile — à égalité de fraîcheur, la
+  // mesure du bracelet prime sur l'estimation — mais ne doit jamais faire
+  // ignorer une séance plus récente.
+  if (!whoopCandidate) return otherCandidate;
+  if (!otherCandidate) return whoopCandidate;
+
+  // Même séance vue deux fois ? Une sortie trackée dans l'app et enregistrée
+  // par le bracelet produit deux candidats dont les fins ne coïncident qu'à
+  // quelques minutes près. Sans ce rapprochement, l'estimation l'emporterait
+  // sur la mesure pour deux minutes d'écart (revue des correctifs, sept.
+  // 2026) : 40 % sur 18 h au lieu des 25 % sur 12 h réellement mesurés.
+  const sameSession =
+    Math.abs(otherCandidate.endedAtMs - whoopCandidate.endedAtMs) <=
+    SAME_SESSION_TOLERANCE_MIN * 60_000;
+  if (sameSession) return whoopCandidate;
+
+  return otherCandidate.endedAtMs > whoopCandidate.endedAtMs ? otherCandidate : whoopCandidate;
 }
 
 /** Compte les points GPS valides (utilitaire pour debug). */

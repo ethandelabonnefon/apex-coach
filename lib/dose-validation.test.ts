@@ -29,7 +29,7 @@ import {
   type SlotSelection,
   type SportSession,
 } from "./dose-validation";
-import type { InsulinLog } from "@/types";
+import type { DeclaredSportSession, InsulinLog } from "@/types";
 
 const NOW = new Date("2026-09-02T12:00:00Z").getTime();
 const DAY = 86_400_000;
@@ -215,6 +215,189 @@ test("D1 — chevauchement : séance à H−260 min durant 60 min écarte le rep
     "lunch",
   );
   assert.ok(short.meals.some((m) => m.injectionId === "a"));
+});
+
+// ─── Task 4 : séances DÉCLARÉES (briefing pré-sport) — motif "sport-carbs" ──
+//
+// Distinct du motif "sport" ci-dessus (séances réellement TRACKÉES). Une
+// DeclaredSportSession (padel décidé au dernier moment, avec ses glucides
+// pré-sport CarbEntry.sportSessionId) peut faire porter le chapeau au bolus
+// d'un repas voisin : une hypo de fin de match n'est pas un sur-dosage du
+// goûter. Cf. lib/carbs-on-board.ts pour le traitement jumeau côté COB.
+
+/** DeclaredSportSession minimale, débutant `startOffsetMin` après `mealAt`. */
+function declaredSession(
+  mealAt: number,
+  over: Partial<DeclaredSportSession> = {},
+): DeclaredSportSession {
+  return {
+    id: over.id ?? "sport-1",
+    sportKey: "padel",
+    family: "intermittent",
+    startAt: new Date(mealAt + 30 * MIN).toISOString(),
+    plannedDurationMin: 90,
+    createdAt: new Date(mealAt).toISOString(),
+    ...over,
+  };
+}
+
+test("exclusion sport-carbs : une séance intermittente déclarée après le goûter écarte le repas", () => {
+  const mealAt = NOW - 1 * DAY;
+  const sel = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(1, { id: "a", mealType: "snack" }), ...filler()],
+      sportSessions: [declaredSession(mealAt)],
+    }),
+    "snack",
+  );
+  assert.ok(!sel.meals.some((m) => m.injectionId === "a"));
+  assert.equal(sel.excluded["sport-carbs"], 1);
+  // Motif distinct de "sport" (séances trackées) : jamais confondus.
+  assert.equal(sel.excluded.sport ?? 0, 0);
+});
+
+test("exclusion sport-carbs : une séance ANNULÉE ne compte pas — elle n'a pas eu lieu", () => {
+  const mealAt = NOW - 1 * DAY;
+  const sel = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(1, { id: "a", mealType: "snack" }), ...filler()],
+      sportSessions: [
+        declaredSession(mealAt, { cancelledAt: new Date(mealAt + 40 * MIN).toISOString() }),
+      ],
+    }),
+    "snack",
+  );
+  assert.ok(
+    sel.meals.some((m) => m.injectionId === "a"),
+    "une séance annulée n'a pas eu lieu : ni l'effort ni les glucides ne peuvent avoir causé une hypo",
+  );
+  assert.equal(sel.excluded["sport-carbs"] ?? 0, 0);
+});
+
+test("exclusion sport-carbs : séance hors fenêtre ne disqualifie pas", () => {
+  const mealAt = NOW - 1 * DAY;
+  const sel = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(1, { id: "a", mealType: "snack" }), ...filler()],
+      // Démarre à H+8h, bien après la fin de la fenêtre d'observation (5h).
+      sportSessions: [
+        declaredSession(mealAt, { startAt: new Date(mealAt + 8 * 60 * MIN).toISOString() }),
+      ],
+    }),
+    "snack",
+  );
+  assert.ok(sel.meals.some((m) => m.injectionId === "a"));
+  assert.equal(sel.excluded["sport-carbs"] ?? 0, 0);
+});
+
+test("exclusion sport-carbs : une séance déclarée de famille muscu courte n'écarte PAS (cohérent avec D1)", () => {
+  const mealAt = NOW - 1 * DAY;
+  const sel = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(1, { id: "a", mealType: "snack" }), ...filler()],
+      sportSessions: [
+        declaredSession(mealAt, { family: "muscu", plannedDurationMin: 60 }),
+      ],
+    }),
+    "snack",
+  );
+  assert.ok(
+    sel.meals.some((m) => m.injectionId === "a"),
+    "la muscu courte ne fait pas chuter la glycémie — même décision produit que pour les séances trackées",
+  );
+  assert.equal(sel.excluded["sport-carbs"] ?? 0, 0);
+});
+
+test("exclusion sport-carbs : une séance déclarée de famille muscu LONGUE (>75min) écarte", () => {
+  const mealAt = NOW - 1 * DAY;
+  const sel = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(1, { id: "a", mealType: "snack" }), ...filler()],
+      sportSessions: [
+        declaredSession(mealAt, { family: "muscu", plannedDurationMin: 90 }),
+      ],
+    }),
+    "snack",
+  );
+  assert.ok(!sel.meals.some((m) => m.injectionId === "a"));
+  assert.equal(sel.excluded["sport-carbs"], 1);
+});
+
+test("exclusion sport-carbs : la durée RÉELLE (actualDurationMin) prime sur la durée prévue", () => {
+  const mealAt = NOW - 1 * DAY;
+  // Prévu 90 min (aurait écarté en muscu), mais Whoop rapporte 40 min réelles
+  // → sous le seuil de 75 min, ne doit plus écarter.
+  const sel = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(1, { id: "a", mealType: "snack" }), ...filler()],
+      sportSessions: [
+        declaredSession(mealAt, { family: "muscu", plannedDurationMin: 90, actualDurationMin: 40 }),
+      ],
+    }),
+    "snack",
+  );
+  assert.ok(sel.meals.some((m) => m.injectionId === "a"));
+  assert.equal(sel.excluded["sport-carbs"] ?? 0, 0);
+});
+
+test("scénario padel : sans le motif dédié, l'hypo de fin de match fait passer le goûter pour sur-dosé", () => {
+  // Reproduit exactement la crainte d'Ethan : « il va me conseiller de
+  // prendre des glucides, sauf que l'algorithme ne va pas comprendre pourquoi
+  // j'ai pris des glucides ». Deux soirs de padel (J-1, J-2) : goûter bolussé
+  // normalement, glucides pré-sport pris pour le match, hypo ~10 min après la
+  // fin du match (mealAt+130min, session mealAt+30 → mealAt+120). Cinq autres
+  // goûters (J-3 à J-7), identiques mais sans sport ni hypo, complètent
+  // l'échantillon à 7 repas pour atteindre MIN_ELIGIBLE_MEALS des deux côtés.
+  const sportDays = [1, 2];
+  const cleanDays = [3, 4, 5, 6, 7];
+
+  const sportMeals = sportDays.map((d) => meal(d, { id: `sport-${d}`, mealType: "snack" }));
+  const cleanMeals = cleanDays.map((d) => meal(d, { id: `clean-${d}`, mealType: "snack" }));
+
+  let pts = flatPoints(130);
+  const sportSessions: DeclaredSportSession[] = [];
+  for (const d of sportDays) {
+    const mealAt = NOW - d * DAY;
+    sportSessions.push(declaredSession(mealAt, { id: `sport-session-${d}` }));
+    // Creux ~10 min après la fin du match (mealAt+120) : hypo décalée, pas un
+    // effet immédiat du bolus.
+    pts = pts.map((p) => {
+      const dt = p.t - mealAt;
+      return dt > 125 * MIN && dt < 140 * MIN ? { ...p, value: 60 } : p;
+    });
+  }
+
+  const baseInput = input({
+    insulinLogs: [...sportMeals, ...cleanMeals],
+    archivePoints: pts,
+  });
+
+  // Sans sportSessions (comportement d'avant cette tâche) : les deux hypos de
+  // fin de match comptent contre le goûter → verdict "sur-dosé", à tort.
+  const withoutRule = analyzeSlot(selectEligibleMeals(baseInput, "snack"), 8.3, "snack");
+  assert.equal(withoutRule.eligibleCount, 7);
+  assert.equal(withoutRule.hypoCount, 2);
+  assert.equal(
+    withoutRule.verdict,
+    "over-bolus",
+    "preuve du problème signalé par Ethan : sans le motif dédié, l'app conclurait à tort à un sur-dosage du goûter",
+  );
+
+  // Avec les séances déclarées : les deux repas de sport sont écartés avec le
+  // motif dédié, visible dans le décompte affiché à l'utilisateur.
+  const sel = selectEligibleMeals({ ...baseInput, sportSessions }, "snack");
+  assert.equal(sel.excluded["sport-carbs"], 2, "le motif dédié doit apparaître dans le décompte, comme les autres");
+  assert.ok(!sel.meals.some((m) => m.injectionId.startsWith("sport-")));
+
+  const withRule = analyzeSlot(sel, 8.3, "snack");
+  assert.equal(withRule.eligibleCount, 5);
+  assert.equal(withRule.hypoCount, 0);
+  assert.equal(
+    withRule.verdict,
+    "ok",
+    "avec le motif dédié, le goûter n'est plus jugé sur-dosé pour une hypo qui vient du sport",
+  );
+  assert.equal(withRule.proposedRatio, null, "aucune baisse de ratio ne doit être proposée sur ce faux positif");
 });
 
 // ─── Point 1 (re-revue) : bornes AVANT/APRÈS des prédicats d'exclusion ──
