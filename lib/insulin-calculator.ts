@@ -1,5 +1,6 @@
 import { DIABETES_CONFIG } from './constants';
 import type { DiabetesConfig, MealTime } from '@/types';
+import type { ExerciseSource } from './exercise-insulin-adjustment';
 
 // ───────────────────────────────────────────────────────────────────────
 // Phase 11 — Calibrage FPU (mai 2026, retour terrain Ethan)
@@ -494,6 +495,104 @@ export function estimateGlucoseImpact(
   return { estimatedPeak, estimatedTrough, timeline: timeline.filter((_, i) => i <= 16) };
 }
 
+// ─── Glucides pré-sport par famille d'effort (sept. 2026) ───────────────
+//
+// Jusqu'ici, le briefing ne savait combler que l'ÉCART entre la glycémie
+// estimée au départ et une cible (composante "avant l'effort", inchangée
+// ci-dessous). Il ignorait complètement la DURÉE et la FAMILLE du sport :
+// un padel de 90 minutes et une muscu de 30 recevaient le même conseil.
+//
+// Cette section ajoute la composante "pendant l'effort" : combien de
+// glucides pour couvrir la baisse causée par l'effort lui-même, selon sa
+// durée et l'insuline active (IOB). Consensus Riddell et al. 2017 : 30-60
+// g/h quand l'insuline circulante est faible, jusqu'à 75 g/h quand elle
+// est élevée, pour un aérobie continu de 60-150 min. Les valeurs
+// intermittentes sont posées à environ la moitié — cohérentes avec la
+// stabilité glycémique observée PENDANT l'effort (l'adrénaline soutient
+// la glycémie tant que le match dure) — et sont des AMORCES à recalibrer
+// sur les données réelles d'Ethan, pas des constantes établies.
+//
+// ⚠️ Garde-fous nés d'un incident réel (mai 2026) : une formule non
+// bornée a un jour conseillé "191g de glucides" avec une glycémie prédite
+// à -633 mg/dL. `MAX_PRE_SPORT_CARBS_G` est le plafond ABSOLU sur le
+// total (composante avant + composante pendant, jamais l'une sans
+// l'autre) et ne doit jamais être contourné. La règle des 120 minutes
+// (plus bas dans computePreSportBriefing) reste le second garde-fou : au
+// delà, on n'affiche plus de chiffre du tout.
+export const HIGH_IOB_THRESHOLD_U = 1.5;
+export const AEROBIC_CARBS_PER_HOUR_LOW_IOB = 45;
+export const AEROBIC_CARBS_PER_HOUR_HIGH_IOB = 75;
+export const INTERMITTENT_CARBS_PER_HOUR_LOW_IOB = 20;
+export const INTERMITTENT_CARBS_PER_HOUR_HIGH_IOB = 40;
+export const MAX_PRE_SPORT_CARBS_G = 80;
+export const MAX_PLANNED_DURATION_MIN = 180;
+
+const CARB_RATES: Record<ExerciseSource, { low: number; high: number }> = {
+  running: { low: AEROBIC_CARBS_PER_HOUR_LOW_IOB, high: AEROBIC_CARBS_PER_HOUR_HIGH_IOB },
+  "cardio-other": { low: AEROBIC_CARBS_PER_HOUR_LOW_IOB, high: AEROBIC_CARBS_PER_HOUR_HIGH_IOB },
+  intermittent: {
+    low: INTERMITTENT_CARBS_PER_HOUR_LOW_IOB,
+    high: INTERMITTENT_CARBS_PER_HOUR_HIGH_IOB,
+  },
+  // Résistance : la muscu fait plutôt MONTER la glycémie (adrénaline +
+  // glycogénolyse hépatique, Yardley et al. 2013) — jamais de glucides
+  // pour "couvrir l'effort" ici, ce serait une hyperglycémie garantie.
+  muscu: { low: 0, high: 0 },
+};
+
+/**
+ * Glucides (g) à prévoir pour couvrir la baisse PENDANT l'effort, selon la
+ * famille du sport, sa durée et l'insuline active (IOB). Distinct du
+ * comblement de l'écart AVANT l'effort que computePreSportBriefing calcule
+ * déjà depuis l'IOB et la tendance : les deux s'additionnent, sous
+ * plafond — voir MAX_PRE_SPORT_CARBS_G.
+ *
+ * - Muscu → toujours 0, quelle que soit la durée ou l'IOB.
+ * - Durée plafonnée à MAX_PLANNED_DURATION_MIN (180min) : au delà, on ne
+ *   prévoit pas plus, la fenêtre de fiabilité de la prédiction est de
+ *   toute façon dépassée bien avant (cf. règle des 120min plus bas).
+ * - IOB interpolé linéairement entre le débit "IOB faible" et "IOB élevé"
+ *   (seuil HIGH_IOB_THRESHOLD_U), plafonné à 100% au delà du seuil.
+ */
+export function exerciseCarbsForDuration(
+  family: ExerciseSource,
+  durationMin: number,
+  iobUnits: number,
+): number {
+  const rates = CARB_RATES[family];
+  if (!rates || (rates.low === 0 && rates.high === 0)) return 0;
+  if (!Number.isFinite(durationMin) || durationMin <= 0) return 0;
+  const iob = Number.isFinite(iobUnits) ? Math.max(0, iobUnits) : 0;
+  const t = Math.min(1, iob / HIGH_IOB_THRESHOLD_U);
+  const perHour = rates.low + (rates.high - rates.low) * t;
+  const hours = Math.min(durationMin, MAX_PLANNED_DURATION_MIN) / 60;
+  return Math.min(MAX_PRE_SPORT_CARBS_G, Math.round(perHour * hours));
+}
+
+/**
+ * Impact académique par défaut (mg/dL) sur la glycémie PENDANT l'effort,
+ * utilisé en fallback quand `personalSportImpact` (Bloc 6, mesures réelles
+ * d'Ethan) n'est pas disponible. Switch exhaustif explicite par famille —
+ * pas de fourre-tout — car les 4 familles ont des comportements distincts
+ * pendant l'effort lui-même (indépendamment de la composante glucides
+ * ci-dessus, qui elle porte sur la baisse à couvrir) :
+ *  - muscu : monte (+40, adrénaline + glycogénolyse hépatique)
+ *  - running / cardio-other : baisse (-60, aérobie continu)
+ *  - intermittent : stable pendant le match (adrénaline la soutient) — la
+ *    chute réelle arrive APRÈS, ce que le message dédié plus bas couvre.
+ */
+function academicSportImpact(workoutType: ExerciseSource): number {
+  switch (workoutType) {
+    case 'muscu':
+      return 40;
+    case 'running':
+    case 'cardio-other':
+      return -60;
+    case 'intermittent':
+      return 0;
+  }
+}
+
 /**
  * Briefing pré-sport — Phase 11.
  *
@@ -517,7 +616,7 @@ export function computePreSportBriefing(input: {
   iobUnits: number;
   isfMgPerU: number;          // Insulin Sensitivity Factor (mg/dL par U)
   insulinActiveMinutes: number; // durée d'action insuline (par défaut 195)
-  workoutType: 'muscu' | 'running';
+  workoutType: ExerciseSource;
   minutesUntilWorkout: number;
   workoutDurationMinutes?: number;
   /** Split dose en attente : units + délai jusqu'au moment où il sera dû */
@@ -558,6 +657,7 @@ export function computePreSportBriefing(input: {
     insulinActiveMinutes,
     workoutType,
     minutesUntilWorkout,
+    workoutDurationMinutes,
     pendingSplitUnits = 0,
     pendingSplitMinutesUntil,
     personalSportImpact,
@@ -619,10 +719,15 @@ export function computePreSportBriefing(input: {
   const sportImpact =
     personalSportImpact !== null && personalSportImpact !== undefined
       ? personalSportImpact
-      : workoutType === 'muscu'
-      ? 40
-      : -60;
+      : academicSportImpact(workoutType);
   const estimatedDuringWorkout = estimatedAtWorkoutStart + sportImpact;
+
+  // Aérobie continu (running, vélo/natation/rameur…) : baisse pendant tout
+  // l'effort, contrairement à la muscu (stable/hausse) et à l'intermittent
+  // (stable pendant, chute décalée après). Regroupement utilisé partout où
+  // le texte/seuil dépend de ce comportement — jamais de branche implicite
+  // par défaut, chaque famille est couverte explicitement ci-dessous.
+  const isAerobicContinuous = workoutType === 'running' || workoutType === 'cardio-other';
 
   const breakdown = {
     glucoseInput: currentGlucose,
@@ -640,10 +745,31 @@ export function computePreSportBriefing(input: {
   const recos: ReturnType<typeof computePreSportBriefing>["recommendations"] = [];
   let risk: 'safe' | 'caution' | 'risk' = 'safe';
 
+  // ─── Avertissement décalé pour la famille intermittente (sept. 2026) ──
+  // Cœur clinique de cette famille : au foot/padel/tennis/CrossFit,
+  // l'adrénaline soutient la glycémie PENDANT le match — le calme revient
+  // après, et c'est là que l'hypo frappe. Sans ce message, "peu de
+  // glucides nécessaires" se lirait comme "pas de risque", ce qui est
+  // faux. Poussé avant la règle des 120min pour rester visible même
+  // quand la fenêtre est trop longue pour chiffrer quoi que ce soit —
+  // c'est une info clinique, pas un chiffre, donc ça ne contourne pas
+  // cette règle.
+  if (workoutType === 'intermittent') {
+    recos.push({
+      type: 'check-glucose',
+      headline: 'Re-vérifie ta glycémie à la fin',
+      detail:
+        "Au foot, au padel ou en CrossFit, la glycémie tient pendant l'effort puis chute après : l'adrénaline la soutient tant que tu joues. Le risque d'hypo est décalé, pas absent.",
+    });
+  }
+
   // ─── Fenêtre trop longue → recommandation prudente ─────────
   // Au-delà de 2h, la prédiction n'est plus fiable. On invite l'utilisateur
   // à re-vérifier sa glycémie 30min avant son sport plutôt que d'agir sur
-  // la base d'un chiffre absurde.
+  // la base d'un chiffre absurde. Garde-fou né d'un incident réel (mai
+  // 2026, cf. commentaire sur exerciseCarbsForDuration) : ne JAMAIS
+  // afficher de grammage au delà de cette fenêtre, quelle que soit la
+  // famille ou l'IOB.
   if (windowTooLong) {
     risk = 'caution';
     recos.push({
@@ -658,7 +784,7 @@ export function computePreSportBriefing(input: {
       estimatedDuringWorkout: estimatedAtWorkoutStart + (
         personalSportImpact !== null && personalSportImpact !== undefined
           ? personalSportImpact
-          : workoutType === 'muscu' ? 40 : -60
+          : academicSportImpact(workoutType)
       ),
       breakdown,
       risk,
@@ -666,32 +792,78 @@ export function computePreSportBriefing(input: {
     };
   }
 
-  // ─── Risque hypo en début de sport ─────────────────────────
-  if (estimatedAtWorkoutStart < 90 || (estimatedAtWorkoutStart < 110 && isFalling)) {
+  // ─── Glucides pré-sport : écart avant l'effort + baisse pendant l'effort ──
+  // Composante 1 — comblement de l'écart AVANT l'effort (existante,
+  // déclenchement INCHANGÉ : glycémie déjà trop basse pour démarrer).
+  // Composante 2 — couverture de la baisse anticipée PENDANT l'effort lui
+  // même, selon la durée et la famille (sept. 2026, cf.
+  // exerciseCarbsForDuration ; toujours 0 pour la muscu). Les deux
+  // s'additionnent, puis le total est plafonné à MAX_PRE_SPORT_CARBS_G —
+  // jamais l'une sans l'autre, jamais sans le plafond (garde-fou né de
+  // l'incident de mai 2026 : une formule non bornée avait un jour
+  // conseillé 191g).
+  const startTarget = isAerobicContinuous ? 150 : 130;
+  const immediateRisk = estimatedAtWorkoutStart < 90 || (estimatedAtWorkoutStart < 110 && isFalling);
+  const gapCarbs = immediateRisk
+    ? Math.max(15, Math.ceil((startTarget - estimatedAtWorkoutStart) / 4))
+    : 0;
+  const durationCarbs = exerciseCarbsForDuration(workoutType, workoutDurationMinutes ?? 60, iobUnits);
+  const totalCarbs = Math.min(MAX_PRE_SPORT_CARBS_G, gapCarbs + durationCarbs);
+
+  const duringRisk = estimatedDuringWorkout < 80;
+  const duringCaution = !duringRisk && estimatedDuringWorkout < 110;
+
+  if (totalCarbs > 0 && (immediateRisk || duringRisk)) {
     risk = 'risk';
-    const target = workoutType === 'running' ? 150 : 130;
-    // Plafonné à 60g (au-delà c'est plus une collation qu'un re-sucrage).
-    const carbsNeeded = Math.min(60, Math.max(15, Math.ceil((target - estimatedAtWorkoutStart) / 4)));
     recos.push({
       type: 'eat-carbs',
-      headline: `Mange ${carbsNeeded}g de glucides rapides avant le sport`,
-      detail: `Ta glycémie estimée au début du ${workoutType} est ${estimatedAtWorkoutStart} mg/dL — trop bas pour démarrer en sécurité.`,
-      quantity: carbsNeeded,
+      headline: `Mange ${totalCarbs}g de glucides rapides avant le sport`,
+      detail: immediateRisk
+        ? `Ta glycémie estimée au début de la séance est ${estimatedAtWorkoutStart} mg/dL — trop bas pour démarrer en sécurité.`
+        : `Ta glycémie va probablement chuter à ~${estimatedDuringWorkout} mg/dL pendant ta séance.`,
+      quantity: totalCarbs,
+    });
+  } else if (totalCarbs > 0 && duringCaution) {
+    // On atteint cette branche seulement si la 1ère (immediateRisk ||
+    // duringRisk) était fausse — `risk` est donc encore forcément 'safe'
+    // ici, jamais besoin de préserver un 'risk' antérieur.
+    risk = 'caution';
+    recos.push({
+      type: 'eat-carbs',
+      headline: `Prends ${totalCarbs}g de glucides avant le sport`,
+      detail: `Ta glycémie sera autour de ${estimatedDuringWorkout} mg/dL pendant — un peu juste pour finir la séance sans hypo.`,
+      quantity: totalCarbs,
+    });
+  } else if (totalCarbs > 0 && estimatedAtWorkoutStart < 180) {
+    // Pas de risque immédiat détecté au départ ni pendant (selon le modèle
+    // académique), mais la durée + la famille + l'IOB justifient quand
+    // même un apport préventif. Cœur du fix sept. 2026 : un padel de
+    // 90min ou un running de 45min avec de l'IOB en cours a besoin de
+    // glucides même quand le point de départ est confortable — jusqu'ici
+    // l'app ne le voyait pas du tout. Gardé sous 180 mg/dL pour ne jamais
+    // chevaucher la branche hyper ci-dessous (pas de glucides en plus
+    // quand la glycémie est déjà haute).
+    risk = 'caution';
+    recos.push({
+      type: 'eat-carbs',
+      headline: `Prévois ${totalCarbs}g de glucides avant le sport`,
+      detail: `Sur ${workoutDurationMinutes ?? 60} min d'effort avec de l'insuline encore active, prévois cet apport pour ne pas chuter en cours de séance.`,
+      quantity: totalCarbs,
     });
   }
 
   // ─── Split dose qui tombe avant ou pendant le sport ─────────
   if (splitFallsBeforeWorkout && pendingSplitUnits > 0) {
-    const splitDuringWorkout = workoutType === 'running'
-      ? estimatedDuringWorkout < 120  // running fait baisser, split rajoute
-      : estimatedDuringWorkout < 100; // muscu monte mais split peut compenser
+    const splitDuringWorkout = isAerobicContinuous
+      ? estimatedDuringWorkout < 120  // aérobie continu fait baisser, split rajoute
+      : estimatedDuringWorkout < 100; // muscu/intermittent : stable ou en hausse, split peut compenser
     if (splitDuringWorkout || estimatedDuringWorkout < 100) {
       const reducedSplit = Math.max(0, Math.ceil(pendingSplitUnits / 2));
       risk = risk === 'risk' ? 'risk' : 'caution';
       recos.push({
         type: 'reduce-split',
         headline: `Réduis ta 2e dose à ${reducedSplit}U au lieu de ${pendingSplitUnits}U`,
-        detail: `Le split dose tombe avant ton sport. Avec l'effet ${workoutType === 'running' ? 'hypoglycémiant du running' : 'de l\'IOB'}, ${pendingSplitUnits}U risque d'être trop. Réduis à ${reducedSplit}U.`,
+        detail: `Le split dose tombe avant ton sport. Avec l'effet ${isAerobicContinuous ? 'hypoglycémiant du sport' : "de l'IOB"}, ${pendingSplitUnits}U risque d'être trop. Réduis à ${reducedSplit}U.`,
         quantity: reducedSplit,
       });
       recos.push({
@@ -702,40 +874,27 @@ export function computePreSportBriefing(input: {
     }
   }
 
-  // ─── Hypo prévue PENDANT le sport (sans split en jeu) ──────
-  if (estimatedDuringWorkout < 80 && recos.length === 0) {
-    risk = 'risk';
-    const carbsNeeded = workoutType === 'running' ? 30 : 20;
-    recos.push({
-      type: 'eat-carbs',
-      headline: `Mange ${carbsNeeded}g de glucides avant le sport`,
-      detail: `Ta glycémie va probablement chuter à ~${estimatedDuringWorkout} mg/dL pendant ton ${workoutType}.`,
-      quantity: carbsNeeded,
-    });
-  } else if (estimatedDuringWorkout < 110 && recos.length === 0) {
-    risk = 'caution';
-    recos.push({
-      type: 'eat-carbs',
-      headline: `Prends 10-15g de glucides avant le sport`,
-      detail: `Ta glycémie sera autour de ${estimatedDuringWorkout} mg/dL pendant — un peu juste pour finir la séance sans hypo.`,
-      quantity: 15,
-    });
-  }
-
   // ─── Hyper en début de sport ───────────────────────────────
   if (estimatedAtWorkoutStart > 250) {
     risk = 'caution';
+    // Muscu : on invite à attendre plutôt qu'à vérifier les cétones — le
+    // risque de cétoacidose en résistance pure est bien moindre qu'en
+    // effort aérobie/mixte prolongé (running, cardio-other, intermittent).
+    const ketoneRisk = workoutType !== 'muscu';
     recos.push({
-      type: workoutType === 'running' ? 'check-glucose' : 'delay-workout',
-      headline:
-        workoutType === 'running'
-          ? 'Vérifie tes cétones avant de courir'
-          : 'Glycémie trop haute, attends 30min',
-      detail: `Glycémie estimée ${estimatedAtWorkoutStart} mg/dL au début du sport — risque de cétoacidose en aérobie ou faible perf en muscu.`,
+      type: ketoneRisk ? 'check-glucose' : 'delay-workout',
+      headline: ketoneRisk
+        ? 'Vérifie tes cétones avant de commencer'
+        : 'Glycémie trop haute, attends 30min',
+      detail: `Glycémie estimée ${estimatedAtWorkoutStart} mg/dL au début du sport — risque de cétoacidose en aérobie/mixte ou faible perf en muscu.`,
     });
   }
 
   // ─── Aucun risque détecté → message safe ───────────────────
+  // Ne se déclenche jamais pour l'intermittent : l'avertissement décalé
+  // poussé plus haut est déjà présent dans `recos`, et un message "rien à
+  // ajuster" serait trompeur pour cette famille — le risque est décalé,
+  // pas absent.
   if (recos.length === 0) {
     recos.push({
       type: 'safe',
@@ -743,7 +902,7 @@ export function computePreSportBriefing(input: {
       detail:
         workoutType === 'muscu'
           ? `Glycémie estimée ${estimatedAtWorkoutStart} → ~${estimatedDuringWorkout} pendant la muscu (qui fait monter de ~${sportImpact > 0 ? '+' : ''}${sportImpact} mg/dL).`
-          : `Glycémie estimée ${estimatedAtWorkoutStart} → ~${estimatedDuringWorkout} pendant le running. Garde du sucre sur toi au cas où.`,
+          : `Glycémie estimée ${estimatedAtWorkoutStart} → ~${estimatedDuringWorkout} pendant la séance. Garde du sucre sur toi au cas où.`,
     });
   }
 
