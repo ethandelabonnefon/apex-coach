@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { USER_PROFILE, DIABETES_CONFIG, DIABETES_PROFILES_DEFAULT, MUSCU_PROGRAM } from './constants';
-import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile, SplitDoseReminder, HypoEvent, CarbEntry } from '@/types';
+import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile, SplitDoseReminder, HypoEvent, CarbEntry, DeclaredSportSession } from '@/types';
 import type { NightPredictionRecord } from '@/lib/night-calibration';
 import { computeRatioStamps, hasNewRatioStamps } from '@/lib/dose-validation';
 import { syncInsulinRatios } from '@/lib/ratio-sync';
@@ -107,6 +107,12 @@ interface AppState {
   carbEntries: CarbEntry[];
   addCarbEntry: (entry: CarbEntry) => void;
   removeCarbEntry: (id: string) => void;
+
+  // Séances déclarées sur le moment depuis le briefing pré-sport (sept. 2026)
+  declaredSportSessions: DeclaredSportSession[];
+  addDeclaredSportSession: (session: DeclaredSportSession) => void;
+  updateDeclaredSportSession: (id: string, updates: Partial<DeclaredSportSession>) => void;
+  cancelDeclaredSportSession: (id: string) => void;
 
   // Night Brain — boucle d'auto-apprentissage (prédit vs réel)
   nightPredictionLogs: NightPredictionRecord[];
@@ -440,6 +446,25 @@ export const useStore = create<AppState>()(
       removeCarbEntry: (id) => set((s) => ({
         carbEntries: s.carbEntries.filter((e) => e.id !== id),
       })),
+
+      // Séances déclarées sur le moment (sept. 2026) — cf. lib/exercise-insulin-adjustment.ts
+      declaredSportSessions: [],
+      addDeclaredSportSession: (session) => set((s) => ({
+        declaredSportSessions: [session, ...s.declaredSportSessions].slice(0, 200),
+      })),
+      updateDeclaredSportSession: (id, updates) => set((s) => ({
+        declaredSportSessions: s.declaredSportSessions.map((x) =>
+          x.id === id ? { ...x, ...updates } : x,
+        ),
+      })),
+      // Garde-fou principal de la tâche : annuler ne doit jamais réduire un
+      // bolus pour une séance qui n'a pas eu lieu (cf. findMostRecentExercise).
+      cancelDeclaredSportSession: (id) => set((s) => ({
+        declaredSportSessions: s.declaredSportSessions.map((x) =>
+          x.id === id ? { ...x, cancelledAt: new Date().toISOString() } : x,
+        ),
+      })),
+
       nightPredictionLogs: [],
       addNightPredictionLog: (record) =>
         set((s) => ({ nightPredictionLogs: [record, ...s.nightPredictionLogs].slice(0, 60) })),

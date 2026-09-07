@@ -424,3 +424,25 @@ export interface CompletedRunningSession {
 }
 
 export type MealTime = 'morning' | 'lunch' | 'snack' | 'dinner' | 'other';
+
+/**
+ * Séance déclarée depuis le briefing pré-sport (sept. 2026). Créée quand
+ * l'utilisateur accepte la recommandation, ce qui vaut déclaration
+ * d'intention — pas de bouton de confirmation supplémentaire. Complétée
+ * ensuite par la réconciliation Whoop quand le bracelet remonte la séance.
+ */
+export interface DeclaredSportSession {
+  id: string;
+  /** Clé de `SPORTS` (lib/sports.ts). */
+  sportKey: string;
+  /** Famille d'effort, dupliquée pour rester lisible sans le catalogue. */
+  family: "running" | "muscu" | "cardio-other" | "intermittent";
+  /** ISO du début prévu. */
+  startAt: string;
+  plannedDurationMin: number;
+  actualDurationMin?: number;
+  endedAt?: string;
+  whoopWorkoutId?: string;
+  cancelledAt?: string;
+  createdAt: string;
+}

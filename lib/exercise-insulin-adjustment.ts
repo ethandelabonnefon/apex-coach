@@ -29,6 +29,7 @@
 
 import type { GpsPoint } from "@/lib/running-tracker";
 import { totalDistance } from "@/lib/running-tracker";
+import type { DeclaredSportSession } from "@/types";
 
 /**
  * Source de la séance détectée (utilisée pour l'UI).
@@ -300,9 +301,9 @@ export function computeExerciseAdjustment(
 }
 
 /**
- * Helper qui détermine la séance la plus récente parmi muscu + running
- * dans les 24 dernières heures. Estime le strain si Whoop n'est pas
- * connecté.
+ * Helper qui détermine la séance la plus récente parmi muscu + running +
+ * séances déclarées sur le moment (sept. 2026) dans les 24 dernières
+ * heures. Estime le strain si Whoop n'est pas connecté.
  */
 export function findMostRecentExercise(
   completedWorkouts: { id: string; date: string; duration: number }[],
@@ -316,6 +317,14 @@ export function findMostRecentExercise(
   /** Strain Whoop par session ID si dispo (workout strain via API Whoop). */
   whoopStrainBySessionId?: Record<string, number>,
   nowMs: number = Date.now(),
+  /**
+   * Séances déclarées depuis le briefing pré-sport, hors module muscu/running
+   * (sept. 2026) — ex : padel décidé sur le moment. Une séance annulée
+   * (`cancelledAt`) ne doit JAMAIS réduire un bolus : elle est ignorée sans
+   * exception. La durée réelle Whoop (`actualDurationMin`, tâche 6) prime
+   * sur la durée prévue (`plannedDurationMin`) dès qu'elle est renseignée.
+   */
+  declaredSessions: DeclaredSportSession[] = [],
 ): RecentExercise | null {
   const cutoff = nowMs - 24 * 3_600_000;
   const candidates: RecentExercise[] = [];
@@ -353,6 +362,27 @@ export function findMostRecentExercise(
     });
   }
 
+  for (const d of declaredSessions) {
+    // Garde-fou principal : une séance annulée ne doit jamais réduire un
+    // bolus (padel déclaré puis annulé → pas de baisse d'insuline fantôme).
+    if (d.cancelledAt) continue;
+    const startMs = new Date(d.startAt).getTime();
+    if (Number.isNaN(startMs)) continue;
+    // La durée réelle (Whoop, tâche 6) prime sur la durée prévue.
+    const durationMin = d.actualDurationMin ?? d.plannedDurationMin;
+    const endedAtMs = startMs + durationMin * 60_000;
+    // Même filtre que les autres sources : l'effet de sensibilité commence
+    // APRÈS l'effort (endedAtMs <= nowMs), pas pendant.
+    if (endedAtMs < cutoff || endedAtMs > nowMs) continue;
+    candidates.push({
+      source: d.family,
+      endedAtMs,
+      durationMin,
+      strain: estimateStrain(d.family, durationMin),
+      strainSource: "estimated",
+    });
+  }
+
   if (candidates.length === 0) return null;
   // Garde la plus récente (fin la plus proche de maintenant)
   candidates.sort((a, b) => b.endedAtMs - a.endedAtMs);
@@ -386,6 +416,8 @@ export function resolveRecentExercise(input: {
     actualDuration?: number;
     glucoseCheckpoints?: { value: number; offsetSec: number }[];
   }[];
+  /** Séances déclarées sur le moment depuis le briefing pré-sport (tâche 3). */
+  declaredSportSessions?: DeclaredSportSession[];
 }): RecentExercise | null {
   const nowMs = input.nowMs ?? Date.now();
   const lw = input.lastWhoopWorkout;
@@ -415,6 +447,7 @@ export function resolveRecentExercise(input: {
     })),
     undefined,
     nowMs,
+    input.declaredSportSessions ?? [],
   );
 }
 

@@ -224,6 +224,8 @@ export default function DiabetePage() {
   // Glucides sans insuline (re-sucrage course, collation) — alimente la prédiction
   const carbEntries = useStore((s) => s.carbEntries);
   const addCarbEntry = useStore((s) => s.addCarbEntry);
+  // Séances déclarées sur le moment depuis le briefing pré-sport (sept. 2026)
+  const declaredSportSessions = useStore((s) => s.declaredSportSessions);
   // Boucle d'auto-apprentissage de la prédiction nuit (prédit vs réel)
   const nightPredictionLogs = useStore((s) => s.nightPredictionLogs);
   const addNightPredictionLog = useStore((s) => s.addNightPredictionLog);
@@ -476,8 +478,16 @@ export default function DiabetePage() {
           actualDuration: r.actualDuration,
           glucoseCheckpoints: r.glucoseCheckpoints,
         })),
+        declaredSportSessions,
       }),
-    [nowTick, whoop.connected, whoop.snapshot, completedWorkouts, completedRunningSessions],
+    [
+      nowTick,
+      whoop.connected,
+      whoop.snapshot,
+      completedWorkouts,
+      completedRunningSessions,
+      declaredSportSessions,
+    ],
   );
 
   // Réduction du bolus : dérivée de la MÊME résolution que la simulation du
