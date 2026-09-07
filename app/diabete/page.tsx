@@ -1164,7 +1164,11 @@ export default function DiabetePage() {
     enrichedSportSessions,
   ]);
 
-  // Séance déclarée en cours (ni annulée, ni terminée) — indépendante du
+  // Durée pendant laquelle une séance pèse encore sur le bolus (bracket
+  // maximal de computeExerciseAdjustment).
+  const ADJUSTMENT_WINDOW_MS = 24 * 3_600_000;
+
+  // Séance déclarée qui pèse encore sur le bolus — indépendante du
   // toggle `briefingActive` : si Ethan désactive le briefing après avoir
   // déclaré, l'annulation doit rester trouvable (garde-fou anti-hyper
   // fantôme). Cf. findMostRecentExercise (lib/exercise-insulin-adjustment.ts)
@@ -1176,7 +1180,13 @@ export default function DiabetePage() {
       if (Number.isNaN(startMs)) continue;
       const durationMin = s.actualDurationMin ?? s.plannedDurationMin;
       const endMs = startMs + durationMin * 60_000;
-      if (nowTick < endMs) return s;
+      // Fenêtre volontairement étendue à la durée pendant laquelle la
+      // séance influence encore le bolus (revue des correctifs, sept.
+      // 2026). S'arrêter à `endMs` rendait l'annulation introuvable dès
+      // l'heure de fin prévue passée, alors que la réduction d'insuline,
+      // elle, reste active jusqu'à 24 h : un padel déclaré puis annulé
+      // dans sa tête réduisait le dîner sans qu'Ethan puisse rien y faire.
+      if (nowTick < endMs + ADJUSTMENT_WINDOW_MS) return s;
     }
     return null;
   }, [declaredSportSessions, nowTick]);
@@ -3359,6 +3369,11 @@ function BriefingSessionCard({
     ? "—"
     : new Date(startMs).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
   const durationMin = session.actualDurationMin ?? session.plannedDurationMin;
+  // Passé l'heure de fin prévue, la séance pèse encore sur le bolus pendant
+  // des heures : la carte reste donc affichée, mais le texte change — il
+  // n'est plus question d'une séance « à venir » mais d'une séance dont il
+  // faut confirmer qu'elle a bien eu lieu.
+  const hasEnded = !Number.isNaN(startMs) && Date.now() > startMs + durationMin * 60_000;
 
   return (
     <div className="rounded-xl bg-diabete/10 border border-diabete/30 p-3 space-y-3 animate-slide-up">
@@ -3368,8 +3383,13 @@ function BriefingSessionCard({
           <p className="text-xs font-semibold text-text-primary leading-snug">{label}</p>
           <p className="text-[11px] text-text-secondary mt-0.5">
             Départ à <span className="num">{startLabel}</span> ·{" "}
-            <span className="num">{durationMin}</span> min prévues
+            <span className="num">{durationMin}</span> min {hasEnded ? "déclarées" : "prévues"}
           </p>
+          {hasEnded && (
+            <p className="text-[11px] text-text-tertiary mt-1 leading-snug">
+              Elle réduit encore ton bolus. Annule-la si tu n&apos;y es pas allé.
+            </p>
+          )}
         </div>
       </div>
       <button
@@ -3378,7 +3398,9 @@ function BriefingSessionCard({
         className="w-full min-h-11 flex items-center justify-center gap-2 text-center text-[11px] font-semibold text-warning bg-warning/10 hover:bg-warning/20 border border-warning/30 rounded-lg py-2.5 transition-colors tap-scale"
       >
         <X className="w-3.5 h-3.5 shrink-0" />
-        Annuler — sinon ton prochain bolus sera réduit pour une séance qui n&apos;a pas eu lieu
+        {hasEnded
+          ? "Annuler — je n'y suis pas allé"
+          : "Annuler — sinon ton prochain bolus sera réduit pour une séance qui n'a pas eu lieu"}
       </button>
     </div>
   );
