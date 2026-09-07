@@ -55,6 +55,7 @@ import {
   type ExerciseSource,
 } from "@/lib/exercise-insulin-adjustment";
 import { SPORTS, getSport, type SportDefinition } from "@/lib/sports";
+import { reconcileWithWhoop, unconfirmedSessions } from "@/lib/whoop-reconcile";
 import { buildPredictionEvents } from "@/lib/prediction-inputs";
 import { capDoseByPrediction } from "@/lib/dose-capping";
 import { useWhoop } from "@/hooks/useWhoop";
@@ -303,6 +304,7 @@ export default function DiabetePage() {
   // Séances déclarées sur le moment depuis le briefing pré-sport (sept. 2026)
   const declaredSportSessions = useStore((s) => s.declaredSportSessions);
   const addDeclaredSportSession = useStore((s) => s.addDeclaredSportSession);
+  const updateDeclaredSportSession = useStore((s) => s.updateDeclaredSportSession);
   const cancelDeclaredSportSession = useStore((s) => s.cancelDeclaredSportSession);
   // Boucle d'auto-apprentissage de la prédiction nuit (prédit vs réel)
   const nightPredictionLogs = useStore((s) => s.nightPredictionLogs);
@@ -1168,6 +1170,33 @@ export default function DiabetePage() {
     if (!activeBriefingSession) briefingSessionSubmittedRef.current = false;
   }, [activeBriefingSession]);
 
+  // ─── Réconciliation Whoop (Task 6, sept. 2026) ───────────────────────
+  // Le briefing crée une durée APPROXIMATIVE ; dès que Whoop retrouve la
+  // séance (`whoop.snapshot.lastWorkout`), on complète avec l'heure de fin
+  // réelle — une mesure vaut mieux qu'une estimation. `reconcileWithWhoop`
+  // (lib/whoop-reconcile.ts) est une fonction pure et idempotente : une
+  // séance qui porte déjà `whoopWorkoutId` n'est plus jamais candidate, donc
+  // ce useEffect ne réécrit le store QUE la première fois qu'un match est
+  // trouvé — pas de boucle malgré le refresh Whoop toutes les 5min (ou à
+  // chaque retour d'onglet). Silencieux si Whoop n'est pas connecté ou si
+  // `lastWorkout` est absent.
+  useEffect(() => {
+    if (!whoop.connected) return;
+    const lastWorkout = whoop.snapshot?.lastWorkout;
+    if (!lastWorkout) return;
+    const result = reconcileWithWhoop(declaredSportSessions, lastWorkout, Date.now());
+    if (!result) return;
+    updateDeclaredSportSession(result.sessionId, result.updates);
+  }, [whoop.connected, whoop.snapshot, declaredSportSessions, updateDeclaredSportSession]);
+
+  // Séances déclarées que Whoop n'a pas (encore) retrouvées, terminées depuis
+  // longtemps. Jamais supprimées : seulement signalées, Ethan garde la main
+  // (il a pu jouer sans bracelet). Cf. lib/whoop-reconcile.ts.
+  const unconfirmedBriefingSessions = useMemo(
+    () => unconfirmedSessions(declaredSportSessions, whoop.connected, nowTick),
+    [declaredSportSessions, whoop.connected, nowTick],
+  );
+
   // Change de sport dans le sélecteur : la durée se réinitialise sur le
   // défaut du nouveau sport SAUF si Ethan l'a déjà modifiée à la main (même
   // motif que macrosManuallyEdited plus haut dans ce fichier).
@@ -1881,6 +1910,39 @@ export default function DiabetePage() {
             />
           </button>
         </div>
+
+        {/* Séances non confirmées par Whoop — signalées, jamais supprimées.
+            Discret (pas de rouge/warning) : Whoop peut juste ne pas avoir
+            sync, ou Ethan a joué sans bracelet — ce n'est pas une erreur. */}
+        {unconfirmedBriefingSessions.length > 0 && (
+          <div className="space-y-2 mb-3">
+            {unconfirmedBriefingSessions.map((session) => {
+              const sport = getSport(session.sportKey);
+              const label = sport?.label ?? exerciseSourceLabel(session.family);
+              return (
+                <div
+                  key={session.id}
+                  className="flex items-start gap-2 rounded-xl bg-bg-tertiary border border-border-subtle p-2.5"
+                >
+                  <Info className="w-3.5 h-3.5 text-text-tertiary shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] text-text-secondary leading-snug">
+                      Whoop n&apos;a pas retrouvé ta séance de {label.toLowerCase()} —
+                      elle reste prise en compte, annule-la si elle n&apos;a pas eu lieu.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => handleCancelBriefingSession(session)}
+                      className="mt-1 text-[10px] font-semibold text-text-tertiary hover:text-warning underline underline-offset-2 tap-scale"
+                    >
+                      Annuler cette séance
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {activeBriefingSession ? (
           <BriefingSessionCard
