@@ -543,6 +543,20 @@ export const MAX_PLANNED_DURATION_MIN = 180;
 export const PREVENTIVE_CARBS_MIN_IOB_U = 0.5;
 export const PREVENTIVE_CARBS_GLUCOSE_CEILING = 160;
 
+/**
+ * Durée (min) à partir de laquelle un effort aérobie ou intermittent
+ * justifie un apport même sans insuline active (revue des correctifs,
+ * sept. 2026). Le premier correctif ne gardait que le plancher d'IOB et
+ * fermait du même coup le seul canal sensible à la durée : un running de
+ * 2 h à 175 mg/dL sans insuline active ne conseillait plus rien, alors
+ * qu'un effort long épuise le glycogène quelle que soit l'insuline à bord.
+ *
+ * L'absurdité d'origine venait d'efforts COURTS avec de la marge, pas des
+ * efforts longs — d'où un critère de durée à côté du critère d'insuline,
+ * les deux restant soumis au plafond de trajectoire.
+ */
+export const PREVENTIVE_CARBS_MIN_DURATION_MIN = 90;
+
 const CARB_RATES: Record<ExerciseSource, { low: number; high: number }> = {
   running: { low: AEROBIC_CARBS_PER_HOUR_LOW_IOB, high: AEROBIC_CARBS_PER_HOUR_HIGH_IOB },
   "cardio-other": { low: AEROBIC_CARBS_PER_HOUR_LOW_IOB, high: AEROBIC_CARBS_PER_HOUR_HIGH_IOB },
@@ -852,8 +866,9 @@ export function computePreSportBriefing(input: {
     });
   } else if (
     durationCarbs > 0 &&
-    iobUnits >= PREVENTIVE_CARBS_MIN_IOB_U &&
-    estimatedDuringWorkout < PREVENTIVE_CARBS_GLUCOSE_CEILING
+    estimatedDuringWorkout < PREVENTIVE_CARBS_GLUCOSE_CEILING &&
+    (iobUnits >= PREVENTIVE_CARBS_MIN_IOB_U ||
+      (workoutDurationMinutes ?? 60) >= PREVENTIVE_CARBS_MIN_DURATION_MIN)
   ) {
     // Apport préventif sur la durée, quand le point de départ est
     // confortable mais que de l'insuline travaille encore.
@@ -874,7 +889,10 @@ export function computePreSportBriefing(input: {
     recos.push({
       type: 'eat-carbs',
       headline: `Prévois ${durationCarbs}g de glucides pendant la séance`,
-      detail: `Sur ${workoutDurationMinutes ?? 60} min d'effort avec ~${Math.round(iobUnits * 10) / 10}U encore actives, tu devrais tourner autour de ${estimatedDuringWorkout} mg/dL. Répartis cet apport pendant l'effort plutôt que tout avant.`,
+      detail:
+        iobUnits >= PREVENTIVE_CARBS_MIN_IOB_U
+          ? `Sur ${workoutDurationMinutes ?? 60} min d'effort avec ~${Math.round(iobUnits * 10) / 10}U encore actives, tu devrais tourner autour de ${estimatedDuringWorkout} mg/dL. Répartis cet apport pendant l'effort plutôt que tout avant.`
+          : `Sur ${workoutDurationMinutes ?? 60} min d'effort continu, tu devrais tourner autour de ${estimatedDuringWorkout} mg/dL. Répartis cet apport pendant l'effort plutôt que tout avant.`,
       quantity: durationCarbs,
     });
   }

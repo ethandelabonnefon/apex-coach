@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findMostRecentExercise, resolveRecentExercise, DECLARED_SESSION_STRAIN_CAP } from "./exercise-insulin-adjustment";
+import {
+  findMostRecentExercise,
+  resolveRecentExercise,
+  computeExerciseAdjustment,
+  DECLARED_SESSION_STRAIN_CAP,
+} from "./exercise-insulin-adjustment";
 import type { DeclaredSportSession } from "@/types";
 
 const now = Date.UTC(2026, 8, 7, 20, 0, 0);
@@ -89,29 +94,6 @@ test("chemin de production : une séance déclarée plus récente l'emporte sur 
   );
 });
 
-test("chemin de production : à fraîcheur égale, la mesure Whoop prime sur l'estimation", () => {
-  const at2015 = Date.UTC(2026, 8, 7, 20, 15, 0);
-  const endedAt = Date.UTC(2026, 8, 7, 20, 0, 0);
-  const r = resolveRecentExercise({
-    nowMs: at2015,
-    lastWhoopWorkout: {
-      sport: "Running",
-      startedAt: new Date(endedAt - 45 * 60_000).toISOString(),
-      endedAt: new Date(endedAt).toISOString(),
-      strain: 13,
-    },
-    completedWorkouts: [],
-    completedRunningSessions: [],
-    declaredSportSessions: [
-      session({
-        startAt: new Date(endedAt - 90 * 60_000).toISOString(),
-        plannedDurationMin: 90,
-      }),
-    ],
-  });
-  assert.equal(r?.strainSource, "whoop", "une mesure réelle doit primer sur une estimation");
-});
-
 test("chemin de production : sans séance Whoop, la séance déclarée passe bien", () => {
   const r = resolveRecentExercise({
     nowMs: now,
@@ -137,12 +119,90 @@ test("F3 : une séance seulement déclarée ne peut pas armer la réduction maxi
   );
 });
 
-test("F3 : une séance confirmée par Whoop retrouve son strain réel", () => {
-  const r = findMostRecentExercise([], [], undefined, now, [
-    session({ plannedDurationMin: 90, actualDurationMin: 95 }),
-  ]);
-  assert.ok(
-    r!.strain > DECLARED_SESSION_STRAIN_CAP,
-    `une durée confirmée doit lever le plafond, reçu ${r!.strain}`,
-  );
+test("F3 : une séance réconciliée est pilotée par le strain MESURÉ, pas par une estimation", () => {
+  // Padel déclaré 18h30 pour 90 min, réellement joué 18h25-20h00, strain
+  // Whoop 11. Le premier correctif levait le plafond dès qu'une durée réelle
+  // existait — en croyant obtenir une mesure, alors que ce chemin n'a que
+  // `estimateStrain` (durée seule) : 95 min donnaient 18, soit -50 % sur 24 h
+  // au lieu des -25 % sur 12 h réellement mesurés.
+  const at2030 = Date.UTC(2026, 8, 7, 20, 30, 0);
+  const r = resolveRecentExercise({
+    nowMs: at2030,
+    lastWhoopWorkout: {
+      sport: "Padel",
+      startedAt: new Date(Date.UTC(2026, 8, 7, 18, 25, 0)).toISOString(),
+      endedAt: new Date(Date.UTC(2026, 8, 7, 20, 0, 0)).toISOString(),
+      strain: 11,
+    },
+    completedWorkouts: [],
+    completedRunningSessions: [],
+    declaredSportSessions: [
+      session({
+        startAt: new Date(Date.UTC(2026, 8, 7, 18, 30, 0)).toISOString(),
+        plannedDurationMin: 90,
+        actualDurationMin: 95,
+        endedAt: new Date(Date.UTC(2026, 8, 7, 20, 0, 0)).toISOString(),
+        whoopWorkoutId: "w1",
+      }),
+    ],
+  });
+  assert.equal(r?.strainSource, "whoop", "la mesure doit piloter, pas l'estimation");
+  assert.equal(r?.strain, 11, `strain mesuré attendu, reçu ${r?.strain}`);
+  const adj = computeExerciseAdjustment(r!, at2030)!;
+  assert.equal(adj.reductionPct, 25, "bracket cardio modéré, pas le bracket maximal");
+  assert.equal(adj.windowHours, 12);
+});
+
+test("F1 : une séance trackée et vue par Whoop ne fait pas gagner l'estimation pour 2 minutes", () => {
+  // Même sortie, deux sources : l'app la calcule finissant 2 min plus tard
+  // que le bracelet. Sans rapprochement, l'estimation gagnait le
+  // départage « la plus récente » et faisait passer la réduction de 25 %
+  // sur 12 h (mesuré) à 40 % sur 18 h (estimé).
+  const at2100 = Date.UTC(2026, 8, 7, 21, 0, 0);
+  const whoopEnd = Date.UTC(2026, 8, 7, 20, 0, 0);
+  const r = resolveRecentExercise({
+    nowMs: at2100,
+    lastWhoopWorkout: {
+      sport: "Running",
+      startedAt: new Date(whoopEnd - 55 * 60_000).toISOString(),
+      endedAt: new Date(whoopEnd).toISOString(),
+      strain: 11,
+    },
+    completedWorkouts: [],
+    completedRunningSessions: [
+      {
+        id: "r1",
+        date: new Date(whoopEnd - 57 * 60_000).toISOString(),
+        actualDuration: 59,
+      },
+    ],
+    declaredSportSessions: [],
+  });
+  assert.equal(r?.strainSource, "whoop", "la mesure doit primer sur l'estimation");
+  const adj = computeExerciseAdjustment(r!, at2100)!;
+  assert.equal(adj.reductionPct, 25);
+});
+
+test("F1 : deux séances vraiment distinctes restent départagées par la plus récente", () => {
+  // Muscu Whoop le matin, padel déclaré le soir : plus de 45 min d'écart,
+  // ce ne sont pas les mêmes — la plus récente doit gagner.
+  const at2015 = Date.UTC(2026, 8, 7, 20, 15, 0);
+  const r = resolveRecentExercise({
+    nowMs: at2015,
+    lastWhoopWorkout: {
+      sport: "Weightlifting",
+      startedAt: new Date(Date.UTC(2026, 8, 7, 8, 0, 0)).toISOString(),
+      endedAt: new Date(Date.UTC(2026, 8, 7, 9, 0, 0)).toISOString(),
+      strain: 10,
+    },
+    completedWorkouts: [],
+    completedRunningSessions: [],
+    declaredSportSessions: [
+      session({
+        startAt: new Date(Date.UTC(2026, 8, 7, 18, 30, 0)).toISOString(),
+        plannedDurationMin: 90,
+      }),
+    ],
+  });
+  assert.equal(r?.source, "intermittent", "le padel du soir doit l'emporter sur la muscu du matin");
 });

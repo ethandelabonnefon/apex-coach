@@ -144,6 +144,14 @@ export interface ExerciseAdjustment {
  */
 export const DECLARED_SESSION_STRAIN_CAP = 13;
 
+/**
+ * Écart maximal (min) entre deux fins de séance pour les considérer comme
+ * la MÊME séance vue par deux sources. Au-delà, ce sont deux efforts
+ * distincts et c'est le plus récent qui compte. En deçà, la mesure Whoop
+ * prime sur l'estimation. Aligné sur la tolérance de réconciliation.
+ */
+export const SAME_SESSION_TOLERANCE_MIN = 45;
+
 export function estimateStrain(
   source: ExerciseSource,
   durationMin: number,
@@ -376,11 +384,25 @@ export function findMostRecentExercise(
     // Garde-fou principal : une séance annulée ne doit jamais réduire un
     // bolus (padel déclaré puis annulé → pas de baisse d'insuline fantôme).
     if (d.cancelledAt) continue;
+    // Séance déjà réconciliée avec Whoop : le candidat Whoop la représente
+    // avec son strain RÉELLEMENT MESURÉ. En produire un second ici ferait
+    // concourir une estimation contre une mesure — et l'estimation peut
+    // gagner, puisqu'on départage sur la fin la plus récente (revue des
+    // correctifs, sept. 2026 : padel joué 18h25-20h00, strain Whoop 11,
+    // mais candidat déclaré à 20h05 avec strain estimé 18 → -50 % sur 24 h
+    // au lieu de -25 % sur 12 h).
+    if (d.whoopWorkoutId) continue;
     const startMs = new Date(d.startAt).getTime();
     if (Number.isNaN(startMs)) continue;
     // La durée réelle (Whoop, tâche 6) prime sur la durée prévue.
     const durationMin = d.actualDurationMin ?? d.plannedDurationMin;
-    const endedAtMs = startMs + durationMin * 60_000;
+    // Heure de fin mesurée si la réconciliation l'a écrite, sinon déduite du
+    // début déclaré : recalculer depuis `startAt` ignorerait le fait
+    // qu'Ethan est parti plus tôt ou plus tard que prévu.
+    const endedFromWhoop = d.endedAt ? new Date(d.endedAt).getTime() : NaN;
+    const endedAtMs = Number.isNaN(endedFromWhoop)
+      ? startMs + durationMin * 60_000
+      : endedFromWhoop;
     // Même filtre que les autres sources : l'effet de sensibilité commence
     // APRÈS l'effort (endedAtMs <= nowMs), pas pendant.
     if (endedAtMs < cutoff || endedAtMs > nowMs) continue;
@@ -400,9 +422,14 @@ export function findMostRecentExercise(
       // n'a pas confirmé la séance (`actualDurationMin` renseigné par la
       // réconciliation), le strain est plafonné au haut du bracket
       // « cardio modéré » — un ajustement réel, mais pas le maximum.
-      strain: d.actualDurationMin
-        ? estimateStrain(d.family, durationMin)
-        : Math.min(DECLARED_SESSION_STRAIN_CAP, estimateStrain(d.family, durationMin)),
+      // Plafond TOUJOURS appliqué. Le premier correctif le levait dès que
+      // `actualDurationMin` était renseigné, en croyant qu'une séance
+      // confirmée par Whoop apportait son strain mesuré — c'est faux : ce
+      // chemin n'a jamais que `estimateStrain`, qui ne connaît que la durée.
+      // Lever le plafond ne donnait donc pas une mesure, juste une
+      // estimation plus grosse. Le strain mesuré n'arrive que par le
+      // candidat Whoop, qui court-circuite désormais ce bloc.
+      strain: Math.min(DECLARED_SESSION_STRAIN_CAP, estimateStrain(d.family, durationMin)),
       strainSource: "estimated",
     });
   }
@@ -491,6 +518,17 @@ export function resolveRecentExercise(input: {
   // ignorer une séance plus récente.
   if (!whoopCandidate) return otherCandidate;
   if (!otherCandidate) return whoopCandidate;
+
+  // Même séance vue deux fois ? Une sortie trackée dans l'app et enregistrée
+  // par le bracelet produit deux candidats dont les fins ne coïncident qu'à
+  // quelques minutes près. Sans ce rapprochement, l'estimation l'emporterait
+  // sur la mesure pour deux minutes d'écart (revue des correctifs, sept.
+  // 2026) : 40 % sur 18 h au lieu des 25 % sur 12 h réellement mesurés.
+  const sameSession =
+    Math.abs(otherCandidate.endedAtMs - whoopCandidate.endedAtMs) <=
+    SAME_SESSION_TOLERANCE_MIN * 60_000;
+  if (sameSession) return whoopCandidate;
+
   return otherCandidate.endedAtMs > whoopCandidate.endedAtMs ? otherCandidate : whoopCandidate;
 }
 

@@ -286,11 +286,13 @@ const briefing = (
 const carbsOf = (r: ReturnType<typeof briefing>) =>
   r.recommendations.find((x) => x.type === "eat-carbs")?.quantity ?? 0;
 
-test("F2 : aucun glucide conseillé à glycémie confortable sans insuline active", () => {
+test("F2 : aucun glucide sur un effort COURT à glycémie confortable sans insuline active", () => {
+  // C'est le cas absurde d'origine : un effort court, de la marge, aucune
+  // insuline au travail — et pourtant jusqu'à 45 g conseillés.
   for (const [fam, g, dur] of [
-    ["cardio-other", 179, 120],
     ["cardio-other", 175, 60],
     ["intermittent", 170, 90],
+    ["running", 175, 45],
   ] as const) {
     const grams = carbsOf(briefing(fam, g, 0, dur));
     assert.equal(
@@ -299,6 +301,15 @@ test("F2 : aucun glucide conseillé à glycémie confortable sans insuline activ
       `${fam} ${dur}min à ${g} mg/dL sans IOB ne doit conseiller aucun glucide, reçu ${grams} g`,
     );
   }
+});
+
+test("F2 : un effort LONG reste couvert même sans insuline active", () => {
+  // Le premier correctif ne gardait que le plancher d'IOB et fermait le
+  // canal de la durée : une randonnée de 2 h ne conseillait plus rien,
+  // alors qu'un effort long épuise le glycogène quelle que soit l'insuline.
+  const grams = carbsOf(briefing("cardio-other", 179, 0, 120));
+  assert.ok(grams > 0, `une randonnée de 2 h doit conseiller des glucides, reçu ${grams} g`);
+  assert.ok(grams <= MAX_PRE_SPORT_CARBS_G, "le plafond absolu tient toujours");
 });
 
 test("F2 : l'apport préventif reste actif quand de l'insuline travaille encore", () => {

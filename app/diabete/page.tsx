@@ -350,6 +350,19 @@ export default function DiabetePage() {
   // chaque changement de sport, sauf si l'utilisateur l'a modifiée à la main
   // (même motif que `macrosManuallyEdited` sur le calculateur de bolus).
   const [briefingDurationMin, setBriefingDurationMin] = useState<number>(60);
+  /**
+   * Durée bornée dans le CODE, pas seulement par les attributs du champ
+   * (revue des correctifs, sept. 2026) : une saisie aberrante gardait une
+   * séance « en cours » pendant deux jours, et une durée vide ou nulle
+   * partait quand même dans le calcul des glucides et dans la séance
+   * persistée. Une seule valeur dérivée, utilisée à la fois par le
+   * briefing affiché et par l'enregistrement — pour qu'ils ne puissent
+   * jamais diverger.
+   */
+  const safeBriefingDurationMin = Math.min(
+    MAX_PLANNED_DURATION_MIN,
+    Math.max(5, Math.round(briefingDurationMin) || 5),
+  );
   const [briefingDurationTouched, setBriefingDurationTouched] = useState(false);
   // Garde-fou anti double-tap : passe à true à la première création de
   // séance et bloque toute création suivante tant que la séance active n'a
@@ -1131,7 +1144,7 @@ export default function DiabetePage() {
       insulinActiveMinutes: diabetesConfig.insulinActiveDuration,
       workoutType: briefingSport.family,
       minutesUntilWorkout: briefingMinutes,
-      workoutDurationMinutes: briefingDurationMin,
+      workoutDurationMinutes: safeBriefingDurationMin,
       pendingSplitUnits: upcomingSplit?.units,
       pendingSplitMinutesUntil: upcomingSplit?.minutesUntil,
       personalSportImpact: personalImpact,
@@ -1140,7 +1153,7 @@ export default function DiabetePage() {
     briefingActive,
     briefingSport,
     briefingMinutes,
-    briefingDurationMin,
+    safeBriefingDurationMin,
     liveGlucose,
     currentGlucose,
     trendArrow,
@@ -1227,13 +1240,7 @@ export default function DiabetePage() {
       sportKey: sport.key,
       family: sport.family,
       startAt: new Date(Date.now() + briefingMinutes * 60_000).toISOString(),
-      // Borné dans le CODE et pas seulement en HTML (revue finale F7,
-      // sept. 2026) : une durée de 0 appliquait encore une réduction, une
-      // durée aberrante gardait une séance « en cours » pendant deux jours.
-      plannedDurationMin: Math.min(
-        MAX_PLANNED_DURATION_MIN,
-        Math.max(5, Math.round(briefingDurationMin) || 5),
-      ),
+      plannedDurationMin: safeBriefingDurationMin,
       createdAt: new Date().toISOString(),
     });
     if (carbsGrams !== null && carbsGrams > 0) {
