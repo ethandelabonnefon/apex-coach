@@ -13,7 +13,7 @@
 
 import { activeIOB, type ActiveBolus } from "./glucose-prediction";
 import { isLearnable, resolveCarbs } from "./insulin-log-values";
-import type { InsulinLog } from "@/types";
+import type { DeclaredSportSession, InsulinLog } from "@/types";
 
 // ───────────────────────────────────────────────────────────────────────
 // Constantes — figées par la spec, ne pas ajuster sans décision produit
@@ -105,6 +105,7 @@ export interface SportSession {
 
 export type ExclusionReason =
   | "sport"
+  | "sport-carbs"
   | "iob"
   | "uncertain"
   | "correction"
@@ -139,6 +140,17 @@ export interface DoseValidationInput {
   /** Créneau → ISO du dernier changement de ratio. La fenêtre ne remonte jamais avant. */
   ratioChangedAt: Partial<Record<string, string>>;
   nowMs?: number;
+  /**
+   * Séances du briefing pré-sport (Task 3, `lib/store.ts` `declaredSportSessions`).
+   * Distinct de `workouts` : celui-ci trace des séances réellement TRACKÉES
+   * (muscu/running du store historique) et sert à modéliser la sensibilité
+   * post-exercice (motif `sport`). Celui-là trace une séance DÉCLARÉE au
+   * moment du briefing, dont les glucides pré-sport (`CarbEntry.sportSessionId`)
+   * peuvent faire porter le chapeau au bolus d'un repas voisin — un goûter
+   * suivi d'un padel dont l'hypo de fin de match ne vient pas d'un
+   * sur-dosage. Motif dédié `sport-carbs`, pas confondu avec `sport`.
+   */
+  sportSessions?: DeclaredSportSession[];
 }
 
 export interface SlotSelection {
@@ -267,6 +279,53 @@ function hasSportAround(
     if (!Number.isFinite(start)) return false;
     const dur = Number.isFinite(w.durationMin) && w.durationMin > 0 ? w.durationMin : 0;
     const end = start + dur * MIN_MS;
+    return end >= from && start <= windowEnd;
+  });
+}
+
+/**
+ * Une `DeclaredSportSession` de cette famille et cette durée peut-elle
+ * brouiller la lecture d'un repas voisin ? Même règle que `sessionExcludes`
+ * pour les séances trackées : la muscu courte ne fait pas chuter la
+ * glycémie (décision produit D1, ne pas ré-exclure ce que la muscu courte a
+ * déjà été sortie d'exclusion), les autres familles (aérobie, intermittent)
+ * le peuvent toujours — et c'est justement le cas d'usage visé (foot,
+ * padel : hypo décalée en fin de match).
+ */
+function declaredSessionExcludes(session: DeclaredSportSession): boolean {
+  if (session.family !== "muscu") return true;
+  const dur = session.actualDurationMin ?? session.plannedDurationMin;
+  return Number.isFinite(dur) && dur > MUSCU_EXCLUSION_MIN_DURATION;
+}
+
+/**
+ * Une séance sport DÉCLARÉE (briefing pré-sport) chevauche-t-elle la zone
+ * sensible d'un repas ? Même géométrie temporelle que `hasSportAround`
+ * (borne AVANT pleine sur SPORT_BEFORE_MIN, borne APRÈS calée sur la fenêtre
+ * tronquée `windowEnd`) : les glucides pris pour compenser l'effort — et
+ * l'effort lui-même — peuvent produire une hypo que le détecteur imputerait
+ * autrement au bolus du repas. Motif dédié `sport-carbs`, distinct de
+ * `sport` : ce n'est pas la sensibilité post-exercice d'une séance
+ * réellement trackée, c'est la confusion causale introduite par une séance
+ * déclarée dans le briefing (avec ou sans glucides associés).
+ *
+ * Une séance annulée (`cancelledAt`) est ignorée : elle n'a pas eu lieu, ni
+ * l'effort ni les glucides ne peuvent avoir causé quoi que ce soit.
+ */
+function hasDeclaredSportAround(
+  sessions: DeclaredSportSession[],
+  mealMs: number,
+  windowEnd: number,
+): boolean {
+  const from = mealMs - SPORT_BEFORE_MIN * MIN_MS;
+  return sessions.some((s) => {
+    if (!s || s.cancelledAt) return false;
+    if (!declaredSessionExcludes(s)) return false;
+    const start = toMs(s.startAt);
+    if (!Number.isFinite(start)) return false;
+    const rawDuration = s.actualDurationMin ?? s.plannedDurationMin;
+    const durationMin = Number.isFinite(rawDuration) && rawDuration > 0 ? rawDuration : 0;
+    const end = start + durationMin * MIN_MS;
     return end >= from && start <= windowEnd;
   });
 }
@@ -411,6 +470,10 @@ export function selectEligibleMeals(
     }
     if (hasSportAround(input.workouts ?? [], t, windowEnd)) {
       bump("sport", t);
+      continue;
+    }
+    if (hasDeclaredSportAround(input.sportSessions ?? [], t, windowEnd)) {
+      bump("sport-carbs", t);
       continue;
     }
     if (iobBefore(logs, t, log.id) > IOB_EXCLUSION_U) {

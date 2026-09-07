@@ -226,6 +226,16 @@ export interface CarbEntry {
    * Absent pour toute entrée saisie manuellement (CarbEntryLogger).
    */
   hypoEventId?: string;
+  /**
+   * Traçabilité vers la `DeclaredSportSession` quand ces glucides ont été
+   * pris pour couvrir un effort (sept. 2026). Même traitement que
+   * `hypoEventId` : comptés dans les glucides actifs (la glycémie monte
+   * réellement, la prédiction doit les voir), mais exclus de la couverture
+   * insuline (`insulinNeededU`) et de l'apprentissage du détecteur de
+   * sur-dosage — ils compensent une baisse due au sport, ce n'est pas un
+   * repas à couvrir ni à juger.
+   */
+  sportSessionId?: string;
 }
 
 /**

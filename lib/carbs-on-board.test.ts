@@ -661,7 +661,7 @@ test("intégration : un CarbEntry de resucrage (buildHypoCarbEntry) vieux de 20 
 // resucrage sur recommandation de l'app, et la tuile a affiché « 82 g · il
 // manque ~4,2 U ». Compter le resucrage dans le besoin d'insuline revient à
 // demander d'annuler le traitement de l'hypo en cours. Le marqueur fiable
-// est `CarbEntry.hypoEventId` (posé par `buildHypoCarbEntry`) → `isRescue`
+// est `CarbEntry.hypoEventId` (posé par `buildHypoCarbEntry`) → `isNonCovering`
 // sur `ActiveCarbSource`, exclu de `insulinNeededU` mais PAS de
 // `carbsRemainingG`/`totalRemainingG` (grammes affichés + prédiction nuit,
 // qui n'est pas concernée par ce champ).
@@ -682,7 +682,7 @@ test("resucrage : 17 g n'ajoutent rien à insulinNeededU, mais alimentent bien c
     ratios: RATIOS,
   });
 
-  assert.equal(cob.sources[0].isRescue, true, "la source doit être marquée resucrage");
+  assert.equal(cob.sources[0].isNonCovering, true, "la source doit être marquée non-couvrante");
   assert.equal(
     cob.insulinNeededU,
     0,
@@ -697,9 +697,9 @@ test("resucrage : 17 g n'ajoutent rien à insulinNeededU, mais alimentent bien c
 test("jumeau : les mêmes 17 g saisis SANS hypoEventId (glucides ordinaires) comptent dans insulinNeededU", () => {
   // Preuve que la distinction porte sur le marqueur `hypoEventId`, pas sur
   // le label, les grammes ou une autre heuristique : ce test échoue si
-  // `isRescue` se met à dépendre d'autre chose que ce champ. Si la règle de
-  // la correction 1 disparaît (le filtre `!s.isRescue` sauté), ce test-ci
-  // continue de passer — c'est le test précédent qui échoue alors, la
+  // `isNonCovering` se met à dépendre d'autre chose que ce champ. Si la règle
+  // de la correction 1 disparaît (le filtre `!s.isNonCovering` sauté), ce
+  // test-ci continue de passer — c'est le test précédent qui échoue alors, la
   // preuve que le comportement dépend bien du marqueur et non de la valeur.
   const cob = computeCarbsOnBoard({
     insulinLogs: [],
@@ -714,7 +714,7 @@ test("jumeau : les mêmes 17 g saisis SANS hypoEventId (glucides ordinaires) com
     ratios: RATIOS,
   });
 
-  assert.equal(cob.sources[0].isRescue, false, "aucun hypoEventId → pas resucrage");
+  assert.equal(cob.sources[0].isNonCovering, false, "aucun hypoEventId → glucides couvrants");
   assert.ok(
     cob.insulinNeededU > 0,
     "17g ordinaires (sans hypoEventId) doivent générer un besoin d'insuline",
@@ -840,4 +840,88 @@ test("verdict : glycémie fournie à 120 + déficit → verdict de déficit norm
 
   const v = cobVerdict(cob);
   assert.match(v.text, /il manque/i);
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// Glucides tagués sport (Task 4, septembre 2026) — même traitement que le
+// resucrage, sur `CarbEntry.sportSessionId` au lieu de `hypoEventId`.
+// ───────────────────────────────────────────────────────────────────────
+//
+// Contexte : le briefing pré-sport recommande de manger avant un padel pour
+// éviter une hypo pendant l'effort. Sans ce marqueur, ces glucides sont vus
+// comme un repas ordinaire : la tuile réclame un bolus pour les couvrir alors
+// qu'ils sont là pour EMPÊCHER une baisse, pas pour en provoquer une.
+
+test("les glucides pris pour le sport ne réclament pas d'insuline (règle 2)", () => {
+  const now = Date.now();
+  const sportCarbs = {
+    id: "c-sport-1",
+    carbsGrams: 40,
+    eatenAt: new Date(now - 10 * 60_000).toISOString(),
+    sportSessionId: "s1",
+  };
+  const cob = computeCarbsOnBoard({
+    insulinLogs: [],
+    carbEntries: [sportCarbs],
+    ratios: RATIOS,
+    isf: ISF,
+  });
+  assert.ok(
+    cob.carbsRemainingG > 0,
+    "règle 1 : les grammes doivent bien compter dans le COB (la glycémie monte réellement)",
+  );
+  assert.equal(
+    cob.insulinNeededU,
+    0,
+    "règle 2 : aucune insuline ne doit être réclamée pour des glucides pris pour le sport",
+  );
+  assert.equal(
+    cob.sources[0].isNonCovering,
+    true,
+    "la source doit être marquée non-couvrante via sportSessionId",
+  );
+});
+
+test("jumeau : les mêmes 40 g SANS sportSessionId (glucides ordinaires) comptent dans insulinNeededU", () => {
+  // Même preuve de discrimination que le jumeau du resucrage : si le filtre
+  // `!s.isNonCovering` disparaissait, CE test resterait vert (40g génère
+  // toujours un insulinNeededU > 0 par défaut) — c'est le test précédent qui
+  // détecterait la régression. Les deux ensemble prouvent que la distinction
+  // porte bien sur le marqueur, pas sur les grammes ou une autre heuristique.
+  const now = Date.now();
+  const cob = computeCarbsOnBoard({
+    insulinLogs: [],
+    carbEntries: [
+      { id: "c-ordinaire-2", carbsGrams: 40, eatenAt: new Date(now - 10 * 60_000).toISOString() },
+    ],
+    ratios: RATIOS,
+    isf: ISF,
+  });
+  assert.equal(cob.sources[0].isNonCovering, false, "aucun sportSessionId → glucides couvrants");
+  assert.ok(cob.insulinNeededU > 0, "40g ordinaires (sans sportSessionId) doivent réclamer de l'insuline");
+});
+
+test("un CarbEntry portant à la fois hypoEventId ET sportSessionId reste non-couvrant (cumul sain)", () => {
+  // Auto-revue : une hypo pendant une séance déclarée écrit un CarbEntry de
+  // resucrage qui pourrait aussi porter le sportSessionId de la séance en
+  // cours. Le OR logique doit rester vrai — pas de double exclusion ni de
+  // conflit — et les grammes doivent toujours compter dans le COB.
+  const now = Date.now();
+  const cob = computeCarbsOnBoard({
+    insulinLogs: [],
+    carbEntries: [
+      {
+        id: "c-both",
+        carbsGrams: 15,
+        eatenAt: new Date(now - 5 * 60_000).toISOString(),
+        hypoEventId: "hypo-during-sport",
+        sportSessionId: "s2",
+      },
+    ],
+    ratios: RATIOS,
+    isf: ISF,
+  });
+  assert.equal(cob.sources[0].isNonCovering, true);
+  assert.equal(cob.insulinNeededU, 0);
+  assert.ok(cob.carbsRemainingG > 0, "les grammes restent visibles dans le COB");
 });
