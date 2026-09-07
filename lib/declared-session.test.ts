@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findMostRecentExercise, resolveRecentExercise } from "./exercise-insulin-adjustment";
+import { findMostRecentExercise, resolveRecentExercise, DECLARED_SESSION_STRAIN_CAP } from "./exercise-insulin-adjustment";
 import type { DeclaredSportSession } from "@/types";
 
 const now = Date.UTC(2026, 8, 7, 20, 0, 0);
@@ -122,4 +122,27 @@ test("chemin de production : sans séance Whoop, la séance déclarée passe bie
   });
   assert.equal(r?.source, "intermittent");
   assert.equal(r?.durationMin, 90);
+});
+
+test("F3 : une séance seulement déclarée ne peut pas armer la réduction maximale", () => {
+  // Padel de 90 min : la durée seule produirait un strain de 18, donc le
+  // bracket maximal (-50 % pendant 2 h, fenêtre 24 h). Deux taps suffisaient.
+  const r = findMostRecentExercise([], [], undefined, now, [
+    session({ plannedDurationMin: 90 }),
+  ]);
+  assert.ok(r, "la séance doit bien être retenue");
+  assert.ok(
+    r!.strain <= DECLARED_SESSION_STRAIN_CAP,
+    `strain ${r!.strain} doit être plafonné à ${DECLARED_SESSION_STRAIN_CAP} sans mesure d'intensité`,
+  );
+});
+
+test("F3 : une séance confirmée par Whoop retrouve son strain réel", () => {
+  const r = findMostRecentExercise([], [], undefined, now, [
+    session({ plannedDurationMin: 90, actualDurationMin: 95 }),
+  ]);
+  assert.ok(
+    r!.strain > DECLARED_SESSION_STRAIN_CAP,
+    `une durée confirmée doit lever le plafond, reçu ${r!.strain}`,
+  );
 });

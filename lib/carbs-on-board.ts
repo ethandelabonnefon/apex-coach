@@ -145,6 +145,20 @@ export interface BuildCarbSourcesOptions {
   ratios?: MealRatios;
   nowMs?: number;
   windowMin?: number;
+  /**
+   * Séances déclarées au briefing pré-sport (`lib/store.ts`
+   * `declaredSportSessions`). Sert UNIQUEMENT à repérer les séances
+   * ANNULÉES : les glucides tagués `sportSessionId` d'une séance annulée
+   * redeviennent des glucides ordinaires, à couvrir par de l'insuline.
+   *
+   * Correctif sept. 2026 (revue finale F5) : sans cette entrée, les 56 g
+   * avalés pour un padel finalement annulé restaient hors de
+   * `insulinNeededU` à vie — hyperglycémie silencieuse. Tous les autres
+   * consommateurs de l'annulation la respectaient déjà.
+   *
+   * Absente → comportement inchangé (aucune séance connue comme annulée).
+   */
+  declaredSportSessions?: { id: string; cancelledAt?: string }[];
 }
 
 /** Convertit un timestamp (Date | ISO | number) en ms. */
@@ -164,6 +178,10 @@ export function buildCarbSources(
   const now = opts.nowMs ?? Date.now();
   const windowMin = opts.windowMin ?? EVENT_ACTIVE_WINDOW_MIN;
   const sources: ActiveCarbSource[] = [];
+  // Séances annulées : leurs glucides redeviennent ordinaires (cf. F5).
+  const cancelledSessionIds = new Set(
+    (opts.declaredSportSessions ?? []).filter((s) => s.cancelledAt).map((s) => s.id),
+  );
 
   const push = (s: Omit<ActiveCarbSource, "carbsRemainingG" | "fpuRemainingG">) => {
     const fpu = (s.fatGrams * 9 + s.proteinGrams * 4) / 100;
@@ -221,7 +239,9 @@ export function buildCarbSources(
       // Marqueurs posés par buildHypoCarbEntry (hypo-resucrage.ts) et par la
       // création de séance du briefing pré-sport (Task 5) — jamais une
       // heuristique sur le label ou les grammes, juste ces deux champs.
-      isNonCovering: c.hypoEventId !== undefined || c.sportSessionId !== undefined,
+      isNonCovering:
+        c.hypoEventId !== undefined ||
+        (c.sportSessionId !== undefined && !cancelledSessionIds.has(c.sportSessionId)),
     });
   }
 

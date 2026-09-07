@@ -134,6 +134,16 @@ export interface ExerciseAdjustment {
  *  - Running > muscu en strain cardiovasculaire pour durée égale
  *  - Si la glycémie a chuté >50 mg/dL pendant → intensité réelle élevée
  */
+/**
+ * Plafond de strain pour une séance simplement DÉCLARÉE, non confirmée par
+ * Whoop (revue finale F3, sept. 2026). 13 = haut du bracket « cardio
+ * modéré » (réduction max 25 %, fenêtre 12 h), au lieu du bracket maximal
+ * (50 %, 24 h) qu'une durée de 90 min déclencherait sinon.
+ *
+ * Une déclaration d'intention n'est pas une mesure d'intensité.
+ */
+export const DECLARED_SESSION_STRAIN_CAP = 13;
+
 export function estimateStrain(
   source: ExerciseSource,
   durationMin: number,
@@ -378,7 +388,21 @@ export function findMostRecentExercise(
       source: d.family,
       endedAtMs,
       durationMin,
-      strain: estimateStrain(d.family, durationMin),
+      // Plafond sur une séance simplement DÉCLARÉE (revue finale F3,
+      // sept. 2026). `estimateStrain` ne dispose que de la durée : 90 min
+      // suffisent à produire un strain de 18, donc le bracket maximal —
+      // -50 % pendant 2 h, fenêtre de 24 h, et encore -13 % le lendemain
+      // midi. Or Football, Padel, Tennis et Basket ont 90 min par défaut :
+      // deux taps armaient cette réduction maximale sans qu'aucune
+      // intensité n'ait jamais été mesurée.
+      //
+      // Une déclaration d'intention n'est pas une mesure. Tant que Whoop
+      // n'a pas confirmé la séance (`actualDurationMin` renseigné par la
+      // réconciliation), le strain est plafonné au haut du bracket
+      // « cardio modéré » — un ajustement réel, mais pas le maximum.
+      strain: d.actualDurationMin
+        ? estimateStrain(d.family, durationMin)
+        : Math.min(DECLARED_SESSION_STRAIN_CAP, estimateStrain(d.family, durationMin)),
       strainSource: "estimated",
     });
   }

@@ -925,3 +925,43 @@ test("un CarbEntry portant à la fois hypoEventId ET sportSessionId reste non-co
   assert.equal(cob.insulinNeededU, 0);
   assert.ok(cob.carbsRemainingG > 0, "les grammes restent visibles dans le COB");
 });
+
+test("F5 : les glucides d'une séance ANNULÉE redeviennent à couvrir", () => {
+  const now = Date.now();
+  const entry = {
+    id: "c1",
+    carbsGrams: 56,
+    eatenAt: new Date(now - 20 * 60_000).toISOString(),
+    sportSessionId: "s1",
+  };
+  const common = {
+    insulinLogs: [],
+    carbEntries: [entry],
+    isf: 100,
+    ratios: { morning: 6.67, lunch: 10, snack: 8.33, dinner: 10 },
+    nowMs: now,
+  };
+
+  const active = computeCarbsOnBoard({
+    ...common,
+    declaredSportSessions: [{ id: "s1" }],
+  });
+  assert.equal(
+    active.insulinNeededU,
+    0,
+    "séance en cours : les glucides du sport ne réclament pas d'insuline",
+  );
+
+  const cancelled = computeCarbsOnBoard({
+    ...common,
+    declaredSportSessions: [{ id: "s1", cancelledAt: new Date(now - 5 * 60_000).toISOString() }],
+  });
+  assert.ok(
+    cancelled.insulinNeededU > 0,
+    `séance annulée : les 56 g redeviennent à couvrir, reçu ${cancelled.insulinNeededU} U`,
+  );
+  assert.ok(
+    cancelled.carbsRemainingG > 0,
+    "les grammes comptent toujours dans le COB, annulée ou non",
+  );
+});

@@ -8,6 +8,7 @@ import {
   getDigestiveComplexity,
   getInjectionTimingAdvice,
   computePreSportBriefing,
+  MAX_PLANNED_DURATION_MIN,
   inferMealTimeFromClock,
 } from "@/lib/insulin-calculator";
 import { activeIOB } from "@/lib/glucose-prediction";
@@ -874,8 +875,11 @@ export default function DiabetePage() {
         ratios: diabetesConfig.ratios,
         nowMs: nowTick,
         currentGlucose: liveGlucose?.value,
+        // Séances annulées : leurs glucides pré-sport redeviennent des
+        // glucides ordinaires, à couvrir (revue finale F5, sept. 2026).
+        declaredSportSessions,
       }),
-    [insulinLogs, carbEntries, diabetesConfig, nowTick, liveGlucose],
+    [insulinLogs, carbEntries, diabetesConfig, nowTick, liveGlucose, declaredSportSessions],
   );
 
   // ─── Appoint suggéré (écart de glucides d'une injection confirmée) ──
@@ -1223,7 +1227,13 @@ export default function DiabetePage() {
       sportKey: sport.key,
       family: sport.family,
       startAt: new Date(Date.now() + briefingMinutes * 60_000).toISOString(),
-      plannedDurationMin: briefingDurationMin,
+      // Borné dans le CODE et pas seulement en HTML (revue finale F7,
+      // sept. 2026) : une durée de 0 appliquait encore une réduction, une
+      // durée aberrante gardait une séance « en cours » pendant deux jours.
+      plannedDurationMin: Math.min(
+        MAX_PLANNED_DURATION_MIN,
+        Math.max(5, Math.round(briefingDurationMin) || 5),
+      ),
       createdAt: new Date().toISOString(),
     });
     if (carbsGrams !== null && carbsGrams > 0) {
