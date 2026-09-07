@@ -250,6 +250,7 @@ export default function DiabeteHistoriquePage() {
   // Phase 11 Bloc 5 — sources de contexte enrichi pour le bilan IA
   const completedWorkouts = useStore((s) => s.completedWorkouts);
   const completedRunningSessions = useStore((s) => s.completedRunningSessions);
+  const declaredSportSessions = useStore((s) => s.declaredSportSessions);
   // Tâche 4 — validation des doses par créneau
   const profile = useStore((s) => s.profile);
   const updateRatioProfile = useStore((s) => s.updateRatioProfile);
@@ -306,6 +307,11 @@ export default function DiabeteHistoriquePage() {
       insulinLogs,
       archivePoints: validationPoints,
       workouts,
+      // Séances DÉCLARÉES au briefing pré-sport (sept. 2026), distinctes des
+      // séances trackées ci-dessus : sans elles, une hypo de fin de padel
+      // ferait passer le goûter voisin pour sur-dosé et l'app proposerait de
+      // baisser une dose qui n'a rien fait de mal.
+      sportSessions: declaredSportSessions,
       ratios: diabetesConfig.ratios,
       ratioChangedAt: profile.ratioChangedAt ?? {},
     });
@@ -314,6 +320,7 @@ export default function DiabeteHistoriquePage() {
     validationPoints,
     completedWorkouts,
     completedRunningSessions,
+    declaredSportSessions,
     diabetesConfig.ratios,
     profile.ratioChangedAt,
   ]);
