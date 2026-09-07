@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
 import {
@@ -23,7 +23,7 @@ import {
   NIGHT_BALANCE_THRESHOLD_U,
 } from "@/lib/carbs-on-board";
 import { DIABETES_CONFIG } from "@/lib/constants";
-import type { InsulinLog, MealTime, SplitDoseReminder } from "@/types";
+import type { InsulinLog, MealTime, SplitDoseReminder, DeclaredSportSession } from "@/types";
 import type { GlucoseTrend } from "@/lib/libre-link/utils";
 import { Badge } from "@/components/ui/Badge";
 import { useGlucose } from "@/hooks/useGlucose";
@@ -52,7 +52,9 @@ import {
 import {
   computeExerciseAdjustment,
   resolveRecentExercise,
+  type ExerciseSource,
 } from "@/lib/exercise-insulin-adjustment";
+import { SPORTS, getSport, type SportDefinition } from "@/lib/sports";
 import { buildPredictionEvents } from "@/lib/prediction-inputs";
 import { capDoseByPrediction } from "@/lib/dose-capping";
 import { useWhoop } from "@/hooks/useWhoop";
@@ -116,6 +118,14 @@ import {
   Sparkle,
   Stethoscope,
   HelpCircle,
+  Bike,
+  Waves,
+  Ship,
+  Mountain,
+  Goal,
+  CircleDot,
+  Zap,
+  Rabbit,
 } from "lucide-react";
 
 // Mapping iconName (lib/meal-tags) → composant lucide-react
@@ -189,6 +199,72 @@ function formatBriefingDelay(min: number): string {
   return rem ? `${h} h ${rem}` : `${h} h`;
 }
 
+/**
+ * Libellé FR d'une famille d'effort — fallback exhaustif utilisé quand le
+ * sport précis n'est pas connu (séance Whoop non déclarée, ou clé de
+ * catalogue disparue). Jamais "Muscu" par défaut pour une famille autre que
+ * `muscu` — c'est exactement le bug signalé (une séance de padel/foot,
+ * famille `intermittent`, s'affichait comme de la musculation).
+ */
+function exerciseSourceLabel(source: ExerciseSource): string {
+  switch (source) {
+    case "running":
+      return "Running";
+    case "cardio-other":
+      return "Cardio";
+    case "intermittent":
+      return "Intermittent";
+    case "muscu":
+      return "Muscu";
+  }
+}
+
+// Icône lucide par sport du catalogue (lib/sports.ts). Un fallback (Activity)
+// couvre toute clé absente de cette map (catalogue étendu plus tard).
+const SPORT_ICONS: Record<string, typeof Activity> = {
+  course: Footprints,
+  velo: Bike,
+  natation: Waves,
+  rameur: Ship,
+  randonnee: Mountain,
+  football: Goal,
+  padel: CircleDot,
+  tennis: CircleDot,
+  basket: CircleDot,
+  crossfit: Zap,
+  musculation: Dumbbell,
+  sprint: Rabbit,
+};
+
+// Groupes d'affichage du sélecteur de sport (Task 5) — reprend les 3 tokens
+// de couleur déjà utilisés ailleurs dans la page (running / diabete / muscu),
+// un groupe par comportement glycémique documenté dans lib/sports.ts.
+const BRIEFING_SPORT_GROUPS: {
+  title: string;
+  token: "running" | "diabete" | "muscu";
+  families: ExerciseSource[];
+}[] = [
+  { title: "Aérobie — la glycémie baisse", token: "running", families: ["running", "cardio-other"] },
+  { title: "Intermittent — elle chute après", token: "diabete", families: ["intermittent"] },
+  { title: "Résistance — elle monte plutôt", token: "muscu", families: ["muscu"] },
+];
+
+// Classes Tailwind par groupe — écrites en toutes lettres (jamais
+// interpolées) pour que le scanner JIT les détecte à la compilation.
+function sportChipClasses(token: "running" | "diabete" | "muscu", active: boolean): string {
+  if (!active) {
+    return "bg-bg-tertiary border-border-subtle text-text-secondary hover:border-border-default";
+  }
+  switch (token) {
+    case "running":
+      return "bg-running/15 border-running/40 text-running";
+    case "diabete":
+      return "bg-diabete/15 border-diabete/40 text-diabete";
+    case "muscu":
+      return "bg-muscu/15 border-muscu/40 text-muscu";
+  }
+}
+
 function trendNumberToArrow(trend?: number): string {
   switch (trend) {
     case 1: return "↓↓";
@@ -226,6 +302,8 @@ export default function DiabetePage() {
   const addCarbEntry = useStore((s) => s.addCarbEntry);
   // Séances déclarées sur le moment depuis le briefing pré-sport (sept. 2026)
   const declaredSportSessions = useStore((s) => s.declaredSportSessions);
+  const addDeclaredSportSession = useStore((s) => s.addDeclaredSportSession);
+  const cancelDeclaredSportSession = useStore((s) => s.cancelDeclaredSportSession);
   // Boucle d'auto-apprentissage de la prédiction nuit (prédit vs réel)
   const nightPredictionLogs = useStore((s) => s.nightPredictionLogs);
   const addNightPredictionLog = useStore((s) => s.addNightPredictionLog);
@@ -258,9 +336,25 @@ export default function DiabetePage() {
   // bolus. Affiche des recommandations actionnables (manger, réduire le
   // split, décaler, etc.) basées sur l'IOB + glycémie live + split en attente.
   const [briefingActive, setBriefingActive] = useState(false);
-  const [briefingType, setBriefingType] = useState<"muscu" | "running">("muscu");
+  // Clé de `SPORTS` (lib/sports.ts) — 12 sports rangés en 3 familles (sept.
+  // 2026). Volontairement null au départ : rien de sensé à pré-remplir tant
+  // qu'Ethan n'a pas choisi le sport, et ça garde le geste "approximatif"
+  // (2 champs pré-remplis sur 3 — durée + délai — le sport reste son choix).
+  const [briefingSportKey, setBriefingSportKey] = useState<string | null>(null);
   const [briefingMinutes, setBriefingMinutes] = useState<number>(30);
   const [briefingRefreshing, setBriefingRefreshing] = useState(false);
+  // Durée prévue — pré-remplie depuis `getSport(key).defaultDurationMin` à
+  // chaque changement de sport, sauf si l'utilisateur l'a modifiée à la main
+  // (même motif que `macrosManuallyEdited` sur le calculateur de bolus).
+  const [briefingDurationMin, setBriefingDurationMin] = useState<number>(60);
+  const [briefingDurationTouched, setBriefingDurationTouched] = useState(false);
+  // Garde-fou anti double-tap : passe à true à la première création de
+  // séance et bloque toute création suivante tant que la séance active n'a
+  // pas disparu (annulée ou terminée) — cf. useEffect plus bas. Un ref est
+  // nécessaire (pas un state) car il doit bloquer un 2e clic survenant AVANT
+  // le prochain re-render (deux clics dans le même tick liraient sinon le
+  // même `activeBriefingSession` obsolète).
+  const briefingSessionSubmittedRef = useRef(false);
   // L'auto-refresh est défini plus bas, après la déclaration de useGlucose.
 
   // ─── Phase 11 Bloc 2 — Meal tag + size ────────
@@ -991,11 +1085,17 @@ export default function DiabetePage() {
     return sessions.map((s) => enrichSession(s, archivePoints as ArchivedPoint[]));
   }, [completedWorkouts, completedRunningSessions, archivePoints]);
 
+  // Sport choisi dans le sélecteur du briefing — résolu une fois pour toute
+  // dérivation en aval (family, label, icône). null tant que rien n'est
+  // choisi (cf. auto-revue : pas de sport par défaut trompeur).
+  const briefingSport: SportDefinition | null = briefingSportKey ? getSport(briefingSportKey) : null;
+
   // ─── Briefing pré-sport (advisor indépendant) ─────────────────────
   // Utilise la glycémie live + IOB + split dose en attente pour donner
-  // des recommandations actionnables. Calculé seulement quand activé.
+  // des recommandations actionnables. Calculé seulement quand activé ET
+  // qu'un sport est choisi (la famille pilote tout le calcul).
   const preSportBriefing = useMemo(() => {
-    if (!briefingActive) return null;
+    if (!briefingActive || !briefingSport) return null;
     // Glycémie de référence : live si dispo, sinon manuel
     const refGlucose = liveGlucose?.value ?? currentGlucose;
     const refTrend = liveGlucose ? trendStringToNumber(liveGlucose.trend) : trendArrow;
@@ -1008,7 +1108,14 @@ export default function DiabetePage() {
       .filter((r) => r.minutesUntil >= 0)
       .sort((a, b) => a.minutesUntil - b.minutesUntil)[0];
 
-    const personalImpact = computeAvgSportImpact(enrichedSportSessions, briefingType, 3);
+    // computeAvgSportImpact (Bloc 6) ne connaît que muscu/running — les 2
+    // familles ajoutées en sept. 2026 (cardio-other/intermittent) retombent
+    // proprement sur le fallback académique déjà géré par
+    // computePreSportBriefing (personalSportImpact null/undefined).
+    const personalImpact =
+      briefingSport.family === "muscu" || briefingSport.family === "running"
+        ? computeAvgSportImpact(enrichedSportSessions, briefingSport.family, 3)
+        : null;
 
     return computePreSportBriefing({
       currentGlucose: refGlucose,
@@ -1016,16 +1123,18 @@ export default function DiabetePage() {
       iobUnits: iob.totalIOB,
       isfMgPerU: diabetesConfig.insulinSensitivityFactor,
       insulinActiveMinutes: diabetesConfig.insulinActiveDuration,
-      workoutType: briefingType,
+      workoutType: briefingSport.family,
       minutesUntilWorkout: briefingMinutes,
+      workoutDurationMinutes: briefingDurationMin,
       pendingSplitUnits: upcomingSplit?.units,
       pendingSplitMinutesUntil: upcomingSplit?.minutesUntil,
       personalSportImpact: personalImpact,
     });
   }, [
     briefingActive,
-    briefingType,
+    briefingSport,
     briefingMinutes,
+    briefingDurationMin,
     liveGlucose,
     currentGlucose,
     trendArrow,
@@ -1035,6 +1144,79 @@ export default function DiabetePage() {
     nowTick,
     enrichedSportSessions,
   ]);
+
+  // Séance déclarée en cours (ni annulée, ni terminée) — indépendante du
+  // toggle `briefingActive` : si Ethan désactive le briefing après avoir
+  // déclaré, l'annulation doit rester trouvable (garde-fou anti-hyper
+  // fantôme). Cf. findMostRecentExercise (lib/exercise-insulin-adjustment.ts)
+  // pour la même logique de fenêtre côté calcul.
+  const activeBriefingSession: DeclaredSportSession | null = useMemo(() => {
+    for (const s of declaredSportSessions) {
+      if (s.cancelledAt) continue;
+      const startMs = new Date(s.startAt).getTime();
+      if (Number.isNaN(startMs)) continue;
+      const durationMin = s.actualDurationMin ?? s.plannedDurationMin;
+      const endMs = startMs + durationMin * 60_000;
+      if (nowTick < endMs) return s;
+    }
+    return null;
+  }, [declaredSportSessions, nowTick]);
+
+  // Réarme le garde-fou anti double-tap dès que la séance active disparaît
+  // (annulée ou terminée) — permet de déclarer la séance suivante.
+  useEffect(() => {
+    if (!activeBriefingSession) briefingSessionSubmittedRef.current = false;
+  }, [activeBriefingSession]);
+
+  // Change de sport dans le sélecteur : la durée se réinitialise sur le
+  // défaut du nouveau sport SAUF si Ethan l'a déjà modifiée à la main (même
+  // motif que macrosManuallyEdited plus haut dans ce fichier).
+  function handleSelectBriefingSport(key: string) {
+    setBriefingSportKey(key);
+    if (!briefingDurationTouched) {
+      const def = getSport(key);
+      if (def) setBriefingDurationMin(def.defaultDurationMin);
+    }
+  }
+
+  // Crée la séance déclarée et, si des glucides sont acceptés, le CarbEntry
+  // taggé qui va avec — les deux écritures partagent `sessionId` (le
+  // CarbEntry pointe dessus via `sportSessionId`). Accepter les glucides
+  // VAUT déclaration (décision produit d'Ethan) : pas de bouton de
+  // confirmation séparé. `briefingSessionSubmittedRef` bloque un 2e appel
+  // survenant avant le prochain rendu (double-tap).
+  function createBriefingSession(sport: SportDefinition, carbsGrams: number | null) {
+    if (briefingSessionSubmittedRef.current) return;
+    briefingSessionSubmittedRef.current = true;
+    const sessionId = crypto.randomUUID();
+    addDeclaredSportSession({
+      id: sessionId,
+      sportKey: sport.key,
+      family: sport.family,
+      startAt: new Date(Date.now() + briefingMinutes * 60_000).toISOString(),
+      plannedDurationMin: briefingDurationMin,
+      createdAt: new Date().toISOString(),
+    });
+    if (carbsGrams !== null && carbsGrams > 0) {
+      addCarbEntry({
+        id: crypto.randomUUID(),
+        carbsGrams,
+        eatenAt: new Date().toISOString(),
+        sportSessionId: sessionId,
+        label: `Avant ${sport.label.toLowerCase()}`,
+      });
+    }
+  }
+
+  // Annulation — confirmation native, libellé qui dit ce qu'elle évite (une
+  // séance fantôme réduirait le prochain bolus → hyperglycémie).
+  function handleCancelBriefingSession(session: DeclaredSportSession) {
+    const confirmed = window.confirm(
+      "Annuler cette séance ? Sinon ton prochain bolus sera réduit pour un sport qui n'a pas eu lieu.",
+    );
+    if (!confirmed) return;
+    cancelDeclaredSportSession(session.id);
+  }
 
   // Action : réduire la 2e dose du split en attente (depuis le briefing)
   function handleReduceSplit(reminderId: string, newUnits: number) {
@@ -1700,7 +1882,12 @@ export default function DiabetePage() {
           </button>
         </div>
 
-        {!briefingActive ? (
+        {activeBriefingSession ? (
+          <BriefingSessionCard
+            session={activeBriefingSession}
+            onCancel={() => handleCancelBriefingSession(activeBriefingSession)}
+          />
+        ) : !briefingActive ? (
           <p className="text-xs text-text-tertiary leading-relaxed">
             Active si tu prévois un sport bientôt. On regarde ton IOB, ta
             glycémie live et tes split doses pour te donner des conseils
@@ -1708,32 +1895,30 @@ export default function DiabetePage() {
           </p>
         ) : (
           <div className="space-y-3 animate-slide-up">
-            {/* Sélecteur sport */}
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setBriefingType("muscu")}
-                className={`flex items-center gap-2 justify-center py-2 text-xs font-medium rounded-lg border transition-all tap-scale ${
-                  briefingType === "muscu"
-                    ? "bg-muscu/15 border-muscu/40 text-muscu"
-                    : "bg-bg-tertiary border-border-subtle text-text-secondary"
-                }`}
-              >
-                <Dumbbell className="w-3.5 h-3.5" />
-                Muscu
-              </button>
-              <button
-                type="button"
-                onClick={() => setBriefingType("running")}
-                className={`flex items-center gap-2 justify-center py-2 text-xs font-medium rounded-lg border transition-all tap-scale ${
-                  briefingType === "running"
-                    ? "bg-running/15 border-running/40 text-running"
-                    : "bg-bg-tertiary border-border-subtle text-text-secondary"
-                }`}
-              >
-                <Footprints className="w-3.5 h-3.5" />
-                Running
-              </button>
+            {/* Sélecteur sport — 12 sports rangés en 3 familles (sept. 2026) */}
+            <div className="space-y-3">
+              {BRIEFING_SPORT_GROUPS.map((group) => (
+                <div key={group.title}>
+                  <p className="label mb-1.5">{group.title}</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {SPORTS.filter((s) => group.families.includes(s.family)).map((sport) => {
+                      const Icon = SPORT_ICONS[sport.key] ?? Activity;
+                      const active = briefingSportKey === sport.key;
+                      return (
+                        <button
+                          key={sport.key}
+                          type="button"
+                          onClick={() => handleSelectBriefingSport(sport.key)}
+                          className={`flex flex-col items-center justify-center gap-1 min-h-11 py-2 px-1 text-[11px] font-medium rounded-lg border transition-all tap-scale ${sportChipClasses(group.token, active)}`}
+                        >
+                          <Icon className="w-3.5 h-3.5" />
+                          <span className="leading-tight text-center">{sport.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
 
             {/* Quand fais-tu ton sport ? — boutons discrets (le slider était
@@ -1767,6 +1952,37 @@ export default function DiabetePage() {
               </div>
             </div>
 
+            {/* Durée prévue — pré-remplie depuis le sport choisi, modifiable */}
+            <div>
+              <p className="label mb-1.5">Durée prévue</p>
+              <div className="relative">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={briefingDurationMin}
+                  onChange={(e) => {
+                    setBriefingDurationTouched(true);
+                    const v = Number(e.target.value);
+                    setBriefingDurationMin(Number.isFinite(v) ? Math.max(0, v) : 0);
+                  }}
+                  min={0}
+                  max={300}
+                  className="num w-full min-h-11 bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-2.5 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-text-tertiary uppercase tracking-wide pointer-events-none">
+                  min
+                </span>
+              </div>
+            </div>
+
+            {!briefingSportKey && (
+              <p className="text-[11px] text-text-tertiary italic px-1">
+                Choisis un sport ci-dessus pour voir les recommandations.
+              </p>
+            )}
+
+            {briefingSport && (
+            <>
             {/* Données utilisées — transparence sur les inputs */}
             <div className="rounded-xl bg-bg-tertiary border border-border-subtle p-3">
               <div className="flex items-center justify-between mb-2">
@@ -1963,7 +2179,47 @@ export default function DiabetePage() {
                     );
                   })}
                 </div>
+
+                {/* Acceptation — vaut déclaration de la séance (décision
+                    produit d'Ethan : pas de bouton de confirmation en plus).
+                    Si le conseil du moment recommande des glucides, les
+                    accepter crée la séance ET le CarbEntry taggé ensemble ;
+                    sinon (cas résistance le plus fréquent, ou tout autre
+                    conseil sans grammage), "Je pars" déclare la séance seule
+                    — sans quoi la muscu ne créerait jamais de séance et
+                    l'ajustement post-effort ne se déclencherait pas. */}
+                {(() => {
+                  const eatCarbsReco = preSportBriefing.recommendations.find(
+                    (r) => r.type === "eat-carbs" && r.quantity !== undefined,
+                  );
+                  if (eatCarbsReco) {
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => createBriefingSession(briefingSport, eatCarbsReco.quantity!)}
+                        disabled={briefingSessionSubmittedRef.current}
+                        className="mt-3 w-full min-h-11 flex items-center justify-center gap-2 text-sm font-semibold rounded-xl bg-diabete text-ink py-3 transition-colors hover:bg-diabete/90 tap-scale disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <Apple className="w-4 h-4" />
+                        Je mange {eatCarbsReco.quantity}g et je pars
+                      </button>
+                    );
+                  }
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => createBriefingSession(briefingSport, null)}
+                      disabled={briefingSessionSubmittedRef.current}
+                      className="mt-3 w-full min-h-11 flex items-center justify-center gap-2 text-sm font-semibold rounded-xl bg-diabete text-ink py-3 transition-colors hover:bg-diabete/90 tap-scale disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Je pars
+                    </button>
+                  );
+                })()}
               </div>
+            )}
+            </>
             )}
           </div>
         )}
@@ -1978,10 +2234,14 @@ export default function DiabetePage() {
 
         {/* Phase F — Encadré ajustement post-exercice (insulin sensitivity ↑) */}
         {exerciseAdjustment && (() => {
-          const sportLabel =
-            exerciseAdjustment.source === "running" ? "Running"
-            : exerciseAdjustment.source === "cardio-other" ? "Cardio"
-            : "Muscu";
+          // Libellé exhaustif par famille (cf. exerciseSourceLabel) — avant
+          // sept. 2026 ce ternaire retombait sur "Muscu" pour toute famille
+          // différente de running/cardio-other, donc une séance de padel ou
+          // de foot (famille intermittent) s'affichait comme une séance de
+          // musculation. Les tons/couleurs restaient corrects, seul le
+          // libellé mentait — corrigé ici en utilisant le libellé réel de la
+          // famille détectée.
+          const sportLabel = exerciseSourceLabel(exerciseAdjustment.source);
           const isMuscu = exerciseAdjustment.source === "muscu";
           // Pour la muscu, l'effet est moindre → tone "warning" plus discret
           const toneBg = isMuscu ? "bg-warning/10" : "bg-success/10";
@@ -2998,6 +3258,52 @@ export default function DiabetePage() {
 }
 
 // ─── Sub-components ────────────────────────────
+
+/**
+ * Carte de séance déclarée en cours (Task 5, step 4). Affichée dès qu'une
+ * `DeclaredSportSession` non annulée et non terminée existe — indépendamment
+ * du toggle du briefing, pour que l'annulation reste toujours trouvable
+ * (sinon une séance fantôme réduirait le prochain bolus sans raison).
+ */
+function BriefingSessionCard({
+  session,
+  onCancel,
+}: {
+  session: DeclaredSportSession;
+  onCancel: () => void;
+}) {
+  const sport = getSport(session.sportKey);
+  const label = sport?.label ?? exerciseSourceLabel(session.family);
+  const Icon = (sport ? SPORT_ICONS[sport.key] : undefined) ?? Activity;
+  const startMs = new Date(session.startAt).getTime();
+  const startLabel = Number.isNaN(startMs)
+    ? "—"
+    : new Date(startMs).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  const durationMin = session.actualDurationMin ?? session.plannedDurationMin;
+
+  return (
+    <div className="rounded-xl bg-diabete/10 border border-diabete/30 p-3 space-y-3 animate-slide-up">
+      <div className="flex items-start gap-2">
+        <Icon className="w-4 h-4 text-diabete shrink-0 mt-0.5" />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-text-primary leading-snug">{label}</p>
+          <p className="text-[11px] text-text-secondary mt-0.5">
+            Départ à <span className="num">{startLabel}</span> ·{" "}
+            <span className="num">{durationMin}</span> min prévues
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="w-full min-h-11 flex items-center justify-center gap-2 text-center text-[11px] font-semibold text-warning bg-warning/10 hover:bg-warning/20 border border-warning/30 rounded-lg py-2.5 transition-colors tap-scale"
+      >
+        <X className="w-3.5 h-3.5 shrink-0" />
+        Annuler — sinon ton prochain bolus sera réduit pour une séance qui n&apos;a pas eu lieu
+      </button>
+    </div>
+  );
+}
 
 function BolusInput({
   label,
