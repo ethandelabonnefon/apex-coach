@@ -258,3 +258,70 @@ test("intermittent + fenêtre > 120min : le message décalé n'introduit pas de 
   assert.ok(r.recommendations.some((x) => /décalé/i.test(x.detail)));
   assert.ok(r.recommendations.some((x) => /re-vérifie/i.test(x.headline)));
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// Revue finale F2 (sept. 2026) : l'apport PRÉVENTIF sur la durée se
+// déclenchait sur la seule condition « glycémie < 180 », sans plancher
+// d'insuline active ni vérification de la trajectoire. Mesuré avant
+// correctif : randonnée 120 min à 179 mg/dL avec IOB 0 → « Prévois 80 g ».
+// Même classe d'absurdité que le « mange 191 g » de mai 2026.
+// ─────────────────────────────────────────────────────────────────────
+
+const briefing = (
+  workoutType: "running" | "muscu" | "cardio-other" | "intermittent",
+  currentGlucose: number,
+  iobUnits: number,
+  workoutDurationMinutes: number,
+) =>
+  computePreSportBriefing({
+    currentGlucose,
+    iobUnits,
+    isfMgPerU: 100,
+    insulinActiveMinutes: 195,
+    workoutType,
+    minutesUntilWorkout: 20,
+    workoutDurationMinutes,
+  });
+
+const carbsOf = (r: ReturnType<typeof briefing>) =>
+  r.recommendations.find((x) => x.type === "eat-carbs")?.quantity ?? 0;
+
+test("F2 : aucun glucide conseillé à glycémie confortable sans insuline active", () => {
+  for (const [fam, g, dur] of [
+    ["cardio-other", 179, 120],
+    ["cardio-other", 175, 60],
+    ["intermittent", 170, 90],
+  ] as const) {
+    const grams = carbsOf(briefing(fam, g, 0, dur));
+    assert.equal(
+      grams,
+      0,
+      `${fam} ${dur}min à ${g} mg/dL sans IOB ne doit conseiller aucun glucide, reçu ${grams} g`,
+    );
+  }
+});
+
+test("F2 : l'apport préventif reste actif quand de l'insuline travaille encore", () => {
+  const grams = carbsOf(briefing("intermittent", 160, 2, 90));
+  assert.ok(grams > 0, "un padel de 90 min avec 2 U actives doit conseiller des glucides");
+});
+
+test("F2 : le message n'affirme jamais une insuline active inexistante", () => {
+  for (const iob of [0, 0.2]) {
+    const r = briefing("cardio-other", 175, iob, 90);
+    for (const reco of r.recommendations) {
+      assert.ok(
+        !/encore active/i.test(reco.detail),
+        `avec IOB ${iob}, aucun message ne doit parler d'insuline encore active — reçu « ${reco.detail} »`,
+      );
+    }
+  }
+});
+
+test("F2 : un vrai risque de chute reste détecté, sans insuline active", () => {
+  // Running à 110 : le modèle prédit une chute bien sous 80 pendant l'effort.
+  // Le durcissement ne doit PAS avoir supprimé cette alerte-là.
+  const r = briefing("running", 110, 0, 45);
+  assert.ok(carbsOf(r) > 0, "une chute prédite sous 80 doit toujours déclencher un apport");
+  assert.equal(r.risk, "risk");
+});

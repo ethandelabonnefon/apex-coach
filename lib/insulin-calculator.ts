@@ -527,6 +527,22 @@ export const INTERMITTENT_CARBS_PER_HOUR_HIGH_IOB = 40;
 export const MAX_PRE_SPORT_CARBS_G = 80;
 export const MAX_PLANNED_DURATION_MIN = 180;
 
+/**
+ * Garde-fous de l'apport PRÉVENTIF sur la durée (revue finale F2, sept. 2026).
+ *
+ * Sans eux, la branche préventive se déclenchait sur la seule condition
+ * « glycémie < 180 » : 80 g conseillés à 179 mg/dL avec zéro insuline active.
+ * Les 30-75 g/h du consensus Riddell s'adressent à quelqu'un qui risque de
+ * chuter, pas à quelqu'un qui a de la marge.
+ *
+ * - Plancher d'insuline active : en dessous, rien ne « tire » la glycémie vers
+ *   le bas et l'apport préventif n'a pas de justification.
+ * - Plafond de trajectoire : si la glycémie prédite pendant l'effort reste
+ *   au-dessus, la réserve est suffisante pour terminer sans apport.
+ */
+export const PREVENTIVE_CARBS_MIN_IOB_U = 0.5;
+export const PREVENTIVE_CARBS_GLUCOSE_CEILING = 160;
+
 const CARB_RATES: Record<ExerciseSource, { low: number; high: number }> = {
   running: { low: AEROBIC_CARBS_PER_HOUR_LOW_IOB, high: AEROBIC_CARBS_PER_HOUR_HIGH_IOB },
   "cardio-other": { low: AEROBIC_CARBS_PER_HOUR_LOW_IOB, high: AEROBIC_CARBS_PER_HOUR_HIGH_IOB },
@@ -834,21 +850,32 @@ export function computePreSportBriefing(input: {
       detail: `Ta glycémie sera autour de ${estimatedDuringWorkout} mg/dL pendant — un peu juste pour finir la séance sans hypo.`,
       quantity: totalCarbs,
     });
-  } else if (totalCarbs > 0 && estimatedAtWorkoutStart < 180) {
-    // Pas de risque immédiat détecté au départ ni pendant (selon le modèle
-    // académique), mais la durée + la famille + l'IOB justifient quand
-    // même un apport préventif. Cœur du fix sept. 2026 : un padel de
-    // 90min ou un running de 45min avec de l'IOB en cours a besoin de
-    // glucides même quand le point de départ est confortable — jusqu'ici
-    // l'app ne le voyait pas du tout. Gardé sous 180 mg/dL pour ne jamais
-    // chevaucher la branche hyper ci-dessous (pas de glucides en plus
-    // quand la glycémie est déjà haute).
+  } else if (
+    durationCarbs > 0 &&
+    iobUnits >= PREVENTIVE_CARBS_MIN_IOB_U &&
+    estimatedDuringWorkout < PREVENTIVE_CARBS_GLUCOSE_CEILING
+  ) {
+    // Apport préventif sur la durée, quand le point de départ est
+    // confortable mais que de l'insuline travaille encore.
+    //
+    // Correctif sept. 2026 (revue finale F2) : cette branche se déclenchait
+    // sur la seule condition « glycémie < 180 », sans plancher d'IOB ni
+    // vérification de la trajectoire. Elle conseillait 80 g de glucides à
+    // 179 mg/dL avec ZÉRO insuline active — la classe d'absurdité que le
+    // plafond de mai 2026 était censé empêcher — et son texte affirmait
+    // « avec de l'insuline encore active » alors qu'il n'y en avait aucune.
+    //
+    // Les 30-75 g/h du consensus s'adressent à quelqu'un qui risque de
+    // chuter, pas à quelqu'un qui a de la marge. Deux conditions donc :
+    // de l'insuline réellement au travail, et une trajectoire prédite qui
+    // ne laisse pas de réserve confortable. Le texte devient vrai par
+    // construction.
     risk = 'caution';
     recos.push({
       type: 'eat-carbs',
-      headline: `Prévois ${totalCarbs}g de glucides avant le sport`,
-      detail: `Sur ${workoutDurationMinutes ?? 60} min d'effort avec de l'insuline encore active, prévois cet apport pour ne pas chuter en cours de séance.`,
-      quantity: totalCarbs,
+      headline: `Prévois ${durationCarbs}g de glucides pendant la séance`,
+      detail: `Sur ${workoutDurationMinutes ?? 60} min d'effort avec ~${Math.round(iobUnits * 10) / 10}U encore actives, tu devrais tourner autour de ${estimatedDuringWorkout} mg/dL. Répartis cet apport pendant l'effort plutôt que tout avant.`,
+      quantity: durationCarbs,
     });
   }
 
