@@ -29,6 +29,7 @@ import type { GlucoseTrend } from "@/lib/libre-link/utils";
 import { Badge } from "@/components/ui/Badge";
 import { useGlucose } from "@/hooks/useGlucose";
 import GlucoseWidget from "@/components/glucose/GlucoseWidget";
+import ForgottenInjection from "@/components/diabete/ForgottenInjection";
 import GlucoseChart from "@/components/glucose/GlucoseChart";
 import CarbEntryLogger from "@/components/glucose/CarbEntryLogger";
 import { CarbsOnBoardTile } from "@/components/glucose/CarbsOnBoardTile";
@@ -3190,7 +3191,19 @@ export default function DiabetePage() {
             </div>
           ) : (
             <div className="space-y-2 max-h-[420px] overflow-y-auto">
-              {insulinLogs.slice(0, 10).map((log) => (
+              {/* Tri par heure d'injection, et non par ordre d'ajout : depuis
+                  la saisie rétroactive (sept. 2026), une injection oubliée
+                  d'hier peut être ajoutée aujourd'hui et se retrouverait en
+                  tête de liste. Les calculs, eux, triaient déjà par
+                  horodatage — seul l'affichage s'appuyait sur l'ordre du
+                  tableau. */}
+              {[...insulinLogs]
+                .sort(
+                  (a, b) =>
+                    new Date(b.injectedAt).getTime() - new Date(a.injectedAt).getTime(),
+                )
+                .slice(0, 10)
+                .map((log) => (
                 <div
                   key={log.id}
                   className="group bg-bg-tertiary rounded-xl p-3 border border-border-subtle"
@@ -3297,6 +3310,11 @@ export default function DiabetePage() {
               ))}
             </div>
           )}
+
+          {/* Saisie rétroactive — hors du ternaire, donc visible aussi quand
+              la liste est vide : la toute première injection d'Ethan peut très
+              bien être une injection oubliée. */}
+          <ForgottenInjection />
         </section>
       </div>
 
