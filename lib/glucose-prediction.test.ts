@@ -113,15 +113,30 @@ test("carbGlucoseRise: monotone croissant avec l'horizon", () => {
 // ───────────────────────────────────────────────────────────────────────
 
 test("fpuGlucoseRise: sous 1 FPU → 0 (négligeable, cohérent calculateur dose)", () => {
-  // 5g lip + 5g prot = (45+20)/100 = 0.65 FPU < 1
+  // Lipides seuls : 5g → 0,45 « FPU » < 1 → négligeable
   assert.equal(fpuGlucoseRise(5, 5, 0, 120), 0);
 });
 
-test("fpuGlucoseRise: repas riche, montée totale = FPU×6×mgPerGram sur la fenêtre", () => {
-  // 30g lip + 40g prot = (270+160)/100 = 4.3 FPU
-  const fpu = (30 * 9 + 40 * 4) / 100;
+test("fpuGlucoseRise: la montée vient des LIPIDES seuls", () => {
+  // Sept. 2026 : le modèle comptait (lipides×9 + protéines×4). Sur le midi
+  // de sèche d'Ethan il prédisait ainsi +40 mg/dL attribuables aux seules
+  // protéines — une montée que ses 47 repas exploitables démentent.
+  const fpu = (30 * 9) / 100; // lipides seuls
   const total = fpuGlucoseRise(30, 40, 0, 5 * 60);
-  assert.ok(Math.abs(total - fpu * 6 * 3.5) < 1, `attendu ${fpu * 6 * 3.5}, obtenu ${total}`);
+  assert.ok(
+    Math.abs(total - fpu * 6 * 3.5) < 1,
+    `attendu ${fpu * 6 * 3.5} (lipides seuls), obtenu ${total}`,
+  );
+});
+
+test("fpuGlucoseRise: les protéines ne changent RIEN à la montée prédite", () => {
+  // Le test qui compte : ce sont les protéines qui faisaient prédire au plan
+  // de nuit une correction inutile. À lipides égaux, la montée doit être
+  // identique quelle que soit la quantité de protéines.
+  const sansProt = fpuGlucoseRise(30, 0, 0, 5 * 60);
+  const avecProt = fpuGlucoseRise(30, 90, 0, 5 * 60);
+  assert.equal(avecProt, sansProt, "90g de protéines ne doivent rien ajouter");
+  assert.ok(sansProt > 0, "les lipides, eux, doivent bien produire une montée");
 });
 
 test("mealGlucoseRise: somme glucides + FPU", () => {

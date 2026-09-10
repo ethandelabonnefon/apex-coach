@@ -30,6 +30,7 @@ import { Badge } from "@/components/ui/Badge";
 import { useGlucose } from "@/hooks/useGlucose";
 import GlucoseWidget from "@/components/glucose/GlucoseWidget";
 import ForgottenInjection from "@/components/diabete/ForgottenInjection";
+import { lateFatLoad } from "@/lib/fat-coverage";
 import GlucoseChart from "@/components/glucose/GlucoseChart";
 import CarbEntryLogger from "@/components/glucose/CarbEntryLogger";
 import { CarbsOnBoardTile } from "@/components/glucose/CarbsOnBoardTile";
@@ -1001,7 +1002,7 @@ export default function DiabetePage() {
       mealType: 'other',
       carbsGrams: 0,
       glucoseBefore: liveValueForBolus ?? currentGlucose,
-      notes: 'split 2/2 (FPU)',
+      notes: 'split 2/2 (couverture lipides)',
       injectedAt: new Date(),
       isSplitDose: true,
       parentInjectionId: reminder.parentInjectionId,
@@ -1448,10 +1449,11 @@ export default function DiabetePage() {
       .sort((a, b) => b.injectedAt - a.injectedAt)[0];
     const lastMealFat = lastMeal ? resolveFat(lastMeal) : 0;
     const lastMealProtein = lastMeal ? resolveProtein(lastMeal) : 0;
-    const inferredFpu =
-      lastMealFat > 0 && lastMealProtein > 0
-        ? (lastMealFat * 9 + lastMealProtein * 4) / 100
-        : 0;
+    // Lipides seuls — définition partagée avec la dose et la prédiction
+    // (cf. lateFatLoad, lib/fat-coverage.ts). L'ancienne formule comptait
+    // les protéines et faisait prédire au plan de nuit une montée de +40
+    // mg/dL sur le midi de sèche d'Ethan, montée que ses données démentent.
+    const inferredFpu = lateFatLoad(lastMealFat);
 
     const mealHoursAgo = lastMeal?.hoursAgo;
     const mealFpu = inferredFpu;
@@ -1857,7 +1859,7 @@ export default function DiabetePage() {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}{" "}
-                      · couverture FPU
+                      · couverture lipides
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -2984,7 +2986,7 @@ export default function DiabetePage() {
                 <span className="text-sm text-accent-2/70 ml-1">U</span>
               </p>
               <p className="text-[10px] text-text-tertiary mt-0.5">
-                couverture FPU (graisses + protéines)
+                couverture des lipides
               </p>
             </div>
           )}
@@ -3035,11 +3037,17 @@ export default function DiabetePage() {
                 {bolusResult.correctionBolus.toFixed(1)}<span className="text-xs text-text-tertiary">U</span>
               </p>
             </div>
-            {bolusResult.fpuBolus > 0 && (
+            {/* Anciennement « FPU » : affichait un nombre d'unités calculé
+                depuis les calories lipides+protéines, alors qu'il ne dosait
+                plus rien depuis le passage à la couverture par les lipides
+                (sept. 2026). Un chiffre en « U » qui ne correspond à aucune
+                injection est un mensonge à l'écran — on montre désormais la
+                vraie 2e injection. */}
+            {bolusResult.splitDose && bolusResult.splitDose.later > 0 && (
               <div className="bg-bg-tertiary rounded-lg px-3 py-2">
-                <p className="text-[10px] text-text-tertiary uppercase tracking-wide">FPU</p>
+                <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Lipides</p>
                 <p className="num text-base font-semibold text-accent-2">
-                  {bolusResult.fpuBolus.toFixed(1)}<span className="text-xs text-text-tertiary">U</span>
+                  {bolusResult.splitDose.later}<span className="text-xs text-text-tertiary">U</span>
                 </p>
               </div>
             )}

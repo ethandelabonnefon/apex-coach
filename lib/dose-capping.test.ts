@@ -212,8 +212,14 @@ test("C1 : un split en attente réduit STRICTEMENT plus la dose que sans lui, m�
     avecSplit.units < sansSplit.units,
     `le split doit forcer une dose STRICTEMENT plus basse (sans: ${sansSplit.units}, avec: ${avecSplit.units})`,
   );
+  // Valeurs exactes : 9 et 7 depuis sept. 2026. Elles étaient 9 et 8 quand
+  // la prédiction comptait encore les protéines dans la montée tardive ;
+  // en ne comptant plus que les lipides, la trajectoire prédite est plus
+  // basse et le plafond rabote donc davantage — il protège mieux.
+  // L'assertion qui porte le sens du test reste celle du dessus :
+  // le split doit forcer une dose STRICTEMENT plus basse.
   assert.equal(sansSplit.units, 9);
-  assert.equal(avecSplit.units, 8);
+  assert.equal(avecSplit.units, 7);
 });
 
 test("C1 : sans split en attente, le comportement est inchangé (horizon standard)", () => {
