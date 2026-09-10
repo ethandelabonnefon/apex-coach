@@ -3,6 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
+import {
+  DEFAULT_FAT_COVERAGE_TIERS,
+  normalizeCoveragePct,
+  FAT_COVERAGE_MIN_G,
+  FAT_TIER_HIGH_G,
+  FAT_TIER_VERY_HIGH_G,
+} from "@/lib/fat-coverage";
 import { DIABETES_CONFIG } from "@/lib/constants";
 import type { InsulinRatio } from "@/types";
 import { Badge } from "@/components/ui/Badge";
@@ -432,6 +439,21 @@ export default function DiabeteParametresPage() {
     URL.revokeObjectURL(url);
   };
 
+  // ─── Couverture des lipides (sept. 2026) ───────────────────────────
+  const fatTiers = diabetesConfig.fatCoverageTiers ?? DEFAULT_FAT_COVERAGE_TIERS;
+  const [fatTierError, setFatTierError] = useState<string | null>(null);
+
+  function handleFatTierChange(key: "moderate" | "high" | "veryHigh", raw: string) {
+    setFatTierError(null);
+    if (raw.trim() === "") return;
+    const pct = normalizeCoveragePct(Number(raw.replace(",", ".")) / 100);
+    if (pct === null) {
+      setFatTierError("Un palier doit rester entre 0 et 40 %.");
+      return;
+    }
+    updateDiabetesConfig({ fatCoverageTiers: { ...fatTiers, [key]: pct } });
+  }
+
   const isfInternal = diabetesConfig.insulinSensitivityFactor;
 
   return (
@@ -731,6 +753,59 @@ export default function DiabeteParametresPage() {
             </div>
           </div>
         )}
+      </section>
+
+      {/* ── Couverture des lipides (sept. 2026) ──
+          Les paliers du milieu sont INTERPOLÉS entre deux ancrages mesurés,
+          pas observés : Ethan n'a aucun repas propre entre 45 et 60 g de
+          lipides sur 90 jours. D'où le réglage — c'est aussi ce que
+          recommande la littérature, qui donne une fourchette de 24 à 75 %
+          à titrer individuellement. */}
+      <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">
+        <h2 className="text-base font-semibold text-text-primary mb-1">
+          Couverture des lipides
+        </h2>
+        <p className="text-xs text-text-tertiary leading-snug mb-4">
+          Part du bolus glucides ajoutée en 2<sup>e</sup> injection quand le repas
+          est gras. En dessous de {FAT_COVERAGE_MIN_G} g de lipides, aucune
+          injection. Les protéines n&apos;entrent pas dans ce calcul.
+        </p>
+
+        <div className="space-y-2">
+          {([
+            ["moderate", `${FAT_COVERAGE_MIN_G} à ${FAT_TIER_HIGH_G} g de lipides`],
+            ["high", `${FAT_TIER_HIGH_G} à ${FAT_TIER_VERY_HIGH_G} g`],
+            ["veryHigh", `${FAT_TIER_VERY_HIGH_G} g et plus`],
+          ] as const).map(([key, label]) => (
+            <div
+              key={key}
+              className="flex items-center justify-between gap-3 bg-bg-tertiary rounded-xl px-3 py-2.5"
+            >
+              <span className="text-xs text-text-secondary">{label}</span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={40}
+                  step={1}
+                  value={Math.round(fatTiers[key] * 100)}
+                  onChange={(e) => handleFatTierChange(key, e.target.value)}
+                  className="w-16 min-h-11 num text-base font-semibold text-center bg-bg-secondary border border-border-subtle rounded-lg text-text-primary"
+                />
+                <span className="text-xs text-text-tertiary">%</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {fatTierError && <p className="mt-2 text-xs text-error">{fatTierError}</p>}
+
+        <p className="mt-3 text-[11px] text-text-tertiary leading-snug">
+          Le palier haut vient de ton dîner du 9 septembre : 25 % de ton bolus
+          glucides donnaient les 4 U qu&apos;il fallait. Les deux autres sont
+          des estimations — ajuste-les selon ce que tu observes.
+        </p>
       </section>
 
       {/* ── Sensibilité & cibles ── */}
