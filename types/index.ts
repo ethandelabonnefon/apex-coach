@@ -106,6 +106,16 @@ export interface DiabetesConfig {
   targetGlucose: number;
   targetRange: { min: number; max: number };
   insulinActiveDuration: number;
+  /**
+   * Barème de couverture des lipides pour la 2ᵉ injection (sept. 2026) :
+   * part du bolus glucides selon la quantité de lipides du repas. Optionnel
+   * — absent, le barème par défaut de `lib/fat-coverage.ts` s'applique, donc
+   * aucune migration du store n'est nécessaire.
+   *
+   * Réglable par l'utilisateur : les paliers intermédiaires sont interpolés
+   * entre deux ancrages mesurés, pas observés. Cf. le design du 10/09/2026.
+   */
+  fatCoverageTiers?: { moderate: number; high: number; veryHigh: number };
   knownPatterns: DiabetesPattern[];
   // Miroirs du profil actif (rétrocompat — Phase 5 à 9)
   ratios: { morning: number; lunch: number; snack: number; dinner: number };

@@ -1,6 +1,7 @@
 import { DIABETES_CONFIG } from './constants';
 import type { DiabetesConfig, MealTime } from '@/types';
 import type { ExerciseSource } from './exercise-insulin-adjustment';
+import { computeFatCoverage, FAT_COVERAGE_MIN_G } from './fat-coverage';
 
 // ───────────────────────────────────────────────────────────────────────
 // Phase 11 — Calibrage FPU (mai 2026, retour terrain Ethan)
@@ -21,11 +22,8 @@ import type { ExerciseSource } from './exercise-insulin-adjustment';
 //
 // Trois garde-fous cumulatifs :
 //   - FPU_CARB_EQUIVALENT_FACTOR = 6 (au lieu de 10 théorique)
-//   - LATER_DOSE_RELATIVE_CAP = 0.4 (max 40% du bolus glucides initial)
-//   - LATER_DOSE_ABSOLUTE_CAP = 8 (plafond absolu MDI)
+//   - le plafond absolu de 8U vit désormais dans lib/fat-coverage.ts
 const FPU_CARB_EQUIVALENT_FACTOR = 6;
-const LATER_DOSE_RELATIVE_CAP = 0.4;
-const LATER_DOSE_ABSOLUTE_CAP = 8;
 
 // ───────────────────────────────────────────────────────────────────────
 // Règle hypo simple (sept 2026, décision utilisateur)
@@ -236,7 +234,7 @@ export function calculateBolus(
 
     if (totalFPU >= 0.5) {
       reasoning.push(
-        `FPU : ${fatGrams}g lipides + ${proteinGrams}g protéines = ${totalFPU.toFixed(1).replace(".", ",")} FPU → équivalent ~${fpuCarbEquivalent.toFixed(0)}g glucides → ${fpuBolus.toFixed(1).replace(".", ",")}U supplémentaires`
+        `Digestion : ${fatGrams}g lipides + ${proteinGrams}g protéines = ${totalFPU.toFixed(1).replace(".", ",")} FPU. Indicateur de durée de digestion — la dose, elle, se calcule sur les seuls lipides.`
       );
     }
   }
@@ -329,34 +327,11 @@ export function calculateBolus(
   //                                de mie, snack sucré, petit-déj cérèales)
   //                                → digestion principale rapide même avec
   //                                lipides → split contre-productif
-  const fastCarbs = glycemicProfile === 'fast';
-  const meetsClinicalHigh = fatGrams >= 30 || proteinGrams >= 40;
-  const useSplit =
-    totalFPU >= 2.5 &&
-    meetsClinicalHigh &&
-    carbsGrams >= 50 &&
-    fpuBolus >= 1.5 &&
-    !fastCarbs;
-
-  // Quand split actif → 100% des glucides+correction au repas, 100% du FPU
-  // différé en 2e injection (modèle Pankowska classique).
-  //
-  // ⚠️ FIX mai 2026 (itération 2) : le FPU n'est JAMAIS intégré au bolus
-  // initial. Précédemment, pour les repas non split-worthy avec FPU
-  // notable (cas Ethan : 74g + 23 lip + 29 prot = 3.23 FPU mais
-  // fat<30/prot<40), le FPU 100% était ajouté au bolus initial →
-  // 7.4U + 3.23U = 11U → hypo systématique.
-  //
-  // Logique correcte (NHS conservative MDI) :
-  //  - useSplit = TRUE  → bolus initial = glucides+correction uniquement,
-  //                       FPU 100% différé en 2e injection
-  //  - useSplit = FALSE → bolus initial = glucides+correction uniquement,
-  //                       PAS de FPU (le bolus glucides seul suffit pour
-  //                       les repas non split-worthy). Si la glycémie
-  //                       monte tardivement, l'utilisateur peut ajuster
-  //                       son ratio ou activer manuellement un split.
-  const fpuBolusNow = 0; // jamais dans le bolus initial
-  const fpuBolusLater = useSplit ? fpuBolus : 0;
+  // Le FPU ne dose plus rien depuis septembre 2026 : la 2ᵉ injection se
+  // calcule sur les seuls lipides (lib/fat-coverage.ts). `fpuBolusNow`
+  // reste à 0 — le bolus initial n'a jamais contenu de FPU depuis le fix
+  // de mai 2026, et ça ne change pas.
+  const fpuBolusNow = 0;
 
   // ─── Règle hypo simple — Phase (sept 2026, décision utilisateur) ────────
   // « Sous 75 mg/dL, moins une unité. » Ne s'applique QUE quand le repas
@@ -385,65 +360,50 @@ export function calculateBolus(
     );
   }
 
-  // ─── Split dose 50/50 — Phase 11 (calibrage mai 2026) ─────────────────
+  // ─── Couverture des lipides — 2ᵉ injection (sept. 2026) ───────────────
+  //
+  // Remplace le calcul par FPU, qui mêlait calories des lipides ET des
+  // protéines. Mesuré sur les données d'Ethan : les protéines n'ont AUCUNE
+  // relation dose-effet avec la montée tardive, et le montant était très
+  // surestimé (5 U réclamées là où 4 suffisaient, 2 U réclamées sur un
+  // repas qui n'en demande aucune). Le détail et les ancrages sont dans
+  // lib/fat-coverage.ts.
+  //
+  // Le FPU reste calculé plus haut : il alimente le badge de complexité
+  // digestive et l'estimation de durée. Il informe, il ne dose plus.
   let splitDose: BolusResult['splitDose'];
-  if (useSplit && fpuBolusLater > 0) {
-    // ─── 3 garde-fous sécurité MDI (calibrage retour terrain Ethan) ────
-    // 1. Calcul théorique arrondi au-dessus (stylo sans demi-unités)
-    const theoretical = Math.max(1, Math.ceil(fpuBolusLater));
-    // 2. Cap relatif : max 40% du bolus glucides initial
-    const relativeMax = Math.max(1, Math.floor(carbBolus * LATER_DOSE_RELATIVE_CAP));
-    // 3. Cap absolu : 8U max en 2e injection
-    const laterUnits = Math.min(theoretical, relativeMax, LATER_DOSE_ABSOLUTE_CAP);
-    const wasCapped = theoretical > laterUnits;
-    // Délais Pankowska adaptés MDI : pic de digestion vs durée d'action
-    // du Novorapid (~3h15). Cap à 150min car au-delà la 1ère injection
-    // commence à finir et le risque d'hypo précoce baisse mais l'utilité
-    // du split aussi.
-    //   FPU 2.5-3   → 90 min  (digestion ~3-4h, mi-temps)
-    //   FPU 3-4     → 120 min (digestion ~4-5h)
-    //   FPU > 4     → 150 min (digestion 5h+, repas très lourd)
-    const delayMinutes =
-      totalFPU >= 4 ? 150 :
-      totalFPU >= 3 ? 120 :
-      90;
+  const fatCoverage = computeFatCoverage({
+    fatGrams,
+    carbBolusUnits: carbBolus,
+    tiers: config.fatCoverageTiers,
+  });
+  if (fatCoverage.units > 0) {
+    const delayMinutes = fatCoverage.delayMinutes;
     splitDose = {
       now: totalBolus,
-      later: laterUnits,
+      later: fatCoverage.units,
       delayMinutes,
     };
     const hours = Math.floor(delayMinutes / 60);
     const mins = delayMinutes % 60;
     const delayLabel = mins === 0 ? `${hours}h` : `${hours}h${mins.toString().padStart(2, '0')}`;
-    const complexityLabel =
-      digestiveComplexity === 'complex' ? 'Repas complexe' : 'Repas modéré';
-    const digestionHours = digestiveComplexity === 'complex' ? '~5h' : '~3-4h';
+    const pctLabel = Math.round(fatCoverage.pctApplied * 100);
     reasoning.push(
-      `${complexityLabel} (${totalFPU.toFixed(1).replace(".", ",")} FPU) : la digestion va durer ${digestionHours}. Split classique : ${totalBolus}U maintenant (juste les glucides), puis ${laterUnits}U dans ${delayLabel} pour couvrir les graisses/protéines.`
+      `Repas gras (${fatGrams}g de lipides) : la digestion s'étale et la glycémie monte tard. ${fatCoverage.units}U dans ${delayLabel}, soit ${pctLabel}% du bolus glucides.`
     );
-    if (wasCapped) {
+    if (fatCoverage.capped) {
       reasoning.push(
-        `Sécurité MDI : ${theoretical}U théoriques plafonnés à ${laterUnits}U (max 40% du bolus initial ou 8U absolus) pour éviter une hypo précoce.`
+        `Sécurité MDI : plafonné à ${fatCoverage.units}U en 2e injection.`
       );
     }
-    adjustments.push(`Split dose : +${laterUnits}U dans ${delayLabel}`);
-  } else if (fastCarbs && totalFPU >= 2.5 && carbsGrams >= 50) {
-    // Cas explicite : repas qui SERAIT split-worthy mais glucides rapides
-    // → on l'explique pour pédagogie
+    adjustments.push(`Couverture lipides : +${fatCoverage.units}U dans ${delayLabel}`);
+  } else if (fatGrams > 0 && fatGrams < FAT_COVERAGE_MIN_G && totalFPU >= 1.5) {
+    // Repas avec des macros mais sous le seuil de lipides. Les trois anciens
+    // messages parlaient encore de « seuils high-protein 40g » et de repas
+    // « split-worthy » : un vocabulaire qui ne correspond plus à la règle
+    // appliquée. Un seul message, aligné sur ce que le code fait vraiment.
     reasoning.push(
-      `Pas de split dose : tu manges des glucides rapides (${totalFPU.toFixed(1).replace(".", ",")} FPU mais digestion principale rapide). Le bolus initial couvre les glucides.`
-    );
-  } else if (totalFPU >= 1.5 && totalFPU < 2.5 && carbsGrams >= 40) {
-    // FPU notable mais en dessous des seuils split-worthy → warning info
-    // pour que l'utilisateur surveille la montée tardive
-    reasoning.push(
-      `FPU notable (${totalFPU.toFixed(1).replace(".", ",")} FPU) mais en dessous des seuils high-fat (30g) / high-protein (40g). Le bolus couvre les glucides — surveille la glycémie à T+3h pour détecter une montée tardive éventuelle.`
-    );
-  } else if (totalFPU >= 2.5 && !meetsClinicalHigh && carbsGrams >= 50) {
-    // Cas border-line : FPU élevé en absolu mais ni high-fat ni high-protein
-    // (cas Ethan 74/23/29 = 3.23 FPU mais fat<30 ET prot<40)
-    reasoning.push(
-      `FPU élevé (${totalFPU.toFixed(1).replace(".", ",")} FPU) mais ni high-fat (${fatGrams}g < 30g) ni high-protein (${proteinGrams}g < 40g). Le bolus couvre les glucides — surveille la glycémie à T+3h.`
+      `Pas de 2e injection : ${fatGrams}g de lipides, sous le seuil de ${FAT_COVERAGE_MIN_G}g. Tes données montrent qu'en dessous la montée tardive est négligeable. Surveille quand même la glycémie à T+3h.`
     );
   }
 

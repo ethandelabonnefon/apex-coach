@@ -3035,11 +3035,17 @@ export default function DiabetePage() {
                 {bolusResult.correctionBolus.toFixed(1)}<span className="text-xs text-text-tertiary">U</span>
               </p>
             </div>
-            {bolusResult.fpuBolus > 0 && (
+            {/* Anciennement « FPU » : affichait un nombre d'unités calculé
+                depuis les calories lipides+protéines, alors qu'il ne dosait
+                plus rien depuis le passage à la couverture par les lipides
+                (sept. 2026). Un chiffre en « U » qui ne correspond à aucune
+                injection est un mensonge à l'écran — on montre désormais la
+                vraie 2e injection. */}
+            {bolusResult.splitDose && bolusResult.splitDose.later > 0 && (
               <div className="bg-bg-tertiary rounded-lg px-3 py-2">
-                <p className="text-[10px] text-text-tertiary uppercase tracking-wide">FPU</p>
+                <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Lipides</p>
                 <p className="num text-base font-semibold text-accent-2">
-                  {bolusResult.fpuBolus.toFixed(1)}<span className="text-xs text-text-tertiary">U</span>
+                  {bolusResult.splitDose.later}<span className="text-xs text-text-tertiary">U</span>
                 </p>
               </div>
             )}
