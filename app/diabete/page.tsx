@@ -1002,7 +1002,7 @@ export default function DiabetePage() {
       mealType: 'other',
       carbsGrams: 0,
       glucoseBefore: liveValueForBolus ?? currentGlucose,
-      notes: 'split 2/2 (FPU)',
+      notes: 'split 2/2 (couverture lipides)',
       injectedAt: new Date(),
       isSplitDose: true,
       parentInjectionId: reminder.parentInjectionId,
@@ -1859,7 +1859,7 @@ export default function DiabetePage() {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}{" "}
-                      · couverture FPU
+                      · couverture lipides
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -2986,7 +2986,7 @@ export default function DiabetePage() {
                 <span className="text-sm text-accent-2/70 ml-1">U</span>
               </p>
               <p className="text-[10px] text-text-tertiary mt-0.5">
-                couverture FPU (graisses + protéines)
+                couverture des lipides
               </p>
             </div>
           )}

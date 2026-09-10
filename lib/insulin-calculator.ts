@@ -3,27 +3,14 @@ import type { DiabetesConfig, MealTime } from '@/types';
 import type { ExerciseSource } from './exercise-insulin-adjustment';
 import { computeFatCoverage, FAT_COVERAGE_MIN_G } from './fat-coverage';
 
-// ───────────────────────────────────────────────────────────────────────
-// Phase 11 — Calibrage FPU (mai 2026, retour terrain Ethan)
-// ───────────────────────────────────────────────────────────────────────
+// Le calibrage FPU (facteur 6, caps relatif et absolu) qui vivait ici a été
+// retiré en septembre 2026 : la 2ᵉ injection ne se calcule plus depuis les
+// FPU mais depuis les seuls lipides — cf. lib/fat-coverage.ts, qui porte
+// aussi les mesures qui ont motivé le changement.
 //
-// Le facteur "1 FPU = 10g équivalent glucides" est l'EXTRAPOLATION
-// THÉORIQUE MAXIMALE de Pankowska 2009. En pratique MDI (stylos),
-// les études cliniques ultérieures (Bell et al. 2015, NHS Cambridge,
-// Smart et al. 2018) recommandent un facteur empirique plus prudent :
-//   - Seulement ~50% des protéines se convertissent en glucose (gluconéogenèse)
-//   - Les lipides ralentissent l'absorption mais ne créent pas de glucose
-//   - Le risque d'hypo sévère en MDI justifie un seuil conservatif
-//
-// Calibrage Ethan retour terrain : 152g carbs + 82g lip + 94g prot
-// → FPU = 11.14 → fpuBolus théorique = 11.1U (avec factor 10)
-// → Glycémie observée à T+2h sans 2e dose : 160 mg/dL (proche cible)
-// → 12U auraient causé hypo sévère ; 6-7U max acceptable
-//
-// Trois garde-fous cumulatifs :
-//   - FPU_CARB_EQUIVALENT_FACTOR = 6 (au lieu de 10 théorique)
-//   - le plafond absolu de 8U vit désormais dans lib/fat-coverage.ts
-const FPU_CARB_EQUIVALENT_FACTOR = 6;
+// Le FPU reste calculé plus bas pour la COMPLEXITÉ DIGESTIVE uniquement :
+// un indicateur de durée, où compter les protéines est justifié puisqu'elles
+// ralentissent réellement la vidange gastrique.
 
 // ───────────────────────────────────────────────────────────────────────
 // Règle hypo simple (sept 2026, décision utilisateur)
@@ -111,7 +98,6 @@ function trendArrowChar(trend?: number): string {
 export interface BolusResult {
   carbBolus: number;
   correctionBolus: number;
-  fpuBolus: number;
   trendBolus: number;
   totalBolus: number;
   adjustments: string[];
@@ -158,7 +144,6 @@ export function calculateBolus(
 
   let carbBolus = carbsGrams / ratio;
   let correctionBolus = 0;
-  let fpuBolus = 0;
   let trendBolus = 0;
   const adjustments: string[] = [];
   const reasoning: string[] = [];
@@ -222,12 +207,6 @@ export function calculateBolus(
     const fatCalories = fatGrams * 9;
     const proteinCalories = proteinGrams * 4;
     totalFPU = (fatCalories + proteinCalories) / 100;
-    // Empirique MDI : 1 FPU ≈ 6g équivalent glucides (au lieu du 10g
-    // théorique de Pankowska). Cf constante FPU_CARB_EQUIVALENT_FACTOR
-    // en haut du fichier pour la justification scientifique.
-    const fpuCarbEquivalent = totalFPU * FPU_CARB_EQUIVALENT_FACTOR;
-    fpuBolus = fpuCarbEquivalent / ratio;
-
     if (totalFPU >= 3) digestiveComplexity = 'complex';
     else if (totalFPU >= 1) digestiveComplexity = 'moderate';
     else digestiveComplexity = 'simple';
@@ -410,7 +389,6 @@ export function calculateBolus(
   return {
     carbBolus,
     correctionBolus,
-    fpuBolus,
     trendBolus,
     totalBolus,
     adjustments,

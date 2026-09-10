@@ -7,6 +7,9 @@ import {
   DEFAULT_FAT_COVERAGE_TIERS,
   FAT_COVERAGE_ABSOLUTE_CAP_U,
 } from "./fat-coverage";
+import { calculateBolus } from "./insulin-calculator";
+import { DIABETES_CONFIG } from "./constants";
+import type { DiabetesConfig } from "@/types";
 
 /** Ratios réels d'Ethan (profil Maintien), en grammes par unité. */
 const R = { lunch: 9.09, dinner: 7.69 };
@@ -20,16 +23,53 @@ test("LE test central — le midi de sèche ne déclenche plus rien", () => {
   assert.equal(r.pctApplied, 0);
 });
 
-test("les protéines ne peuvent plus influencer la dose", () => {
-  // Le type ne les accepte même pas — ce test documente l'intention et
-  // vérifie qu'à lipides et glucides égaux le résultat est invariant.
-  const a = computeFatCoverage({ fatGrams: 50, carbBolusUnits: 12 });
-  const b = computeFatCoverage({ fatGrams: 50, carbBolusUnits: 12 });
-  assert.deepEqual(a, b);
-  assert.ok(
-    !Object.keys({ fatGrams: 0, carbBolusUnits: 0 }).includes("proteinGrams"),
-    "la signature ne doit pas exposer les protéines",
+// ─────────────────────────────────────────────────────────────────────
+// Intégration — à travers calculateBolus, le chemin réellement emprunté
+// par l'app. La fonction pure ci-dessus ne prouve rien du câblage :
+// transmission des lipides, lecture du barème depuis la config, et
+// splitDose.now qui doit rester le bolus initial.
+// ─────────────────────────────────────────────────────────────────────
+
+const cfg = {
+  ...DIABETES_CONFIG,
+  ratios: { morning: 10, lunch: 9.0909, snack: 8.333, dinner: 7.6923 },
+  insulinRatios: [
+    { id: "d", label: "Dîner", mealKey: "dinner", timeStart: "19:00", timeEnd: "21:00", ratio: 7.6923 },
+    { id: "l", label: "Déjeuner", mealKey: "lunch", timeStart: "12:00", timeEnd: "14:00", ratio: 9.0909 },
+  ],
+} as DiabetesConfig;
+
+test("intégration : à lipides égaux, les protéines ne changent RIEN à la dose", () => {
+  // LE test de la correction. 30 g contre 90 g de protéines, tout le reste
+  // identique : dose initiale ET 2ᵉ injection doivent être inchangées.
+  const peu = calculateBolus(100, "dinner", 120, false, null, 0, cfg, 0, 50, 30);
+  const beaucoup = calculateBolus(100, "dinner", 120, false, null, 0, cfg, 0, 50, 90);
+  assert.equal(beaucoup.totalBolus, peu.totalBolus, "dose initiale inchangée");
+  assert.equal(
+    beaucoup.splitDose?.later,
+    peu.splitDose?.later,
+    `2ᵉ injection inchangée (30g prot: ${peu.splitDose?.later}, 90g prot: ${beaucoup.splitDose?.later})`,
   );
+});
+
+test("intégration : le midi de sèche ne produit aucune 2ᵉ injection", () => {
+  const r = calculateBolus(60, "lunch", 120, false, null, 0, cfg, 0, 15, 60);
+  assert.equal(r.splitDose, undefined, "15 g de lipides : rien, quels que soient les 60 g de protéines");
+});
+
+test("intégration : le dîner du 9 septembre donne 4 U dans 2 h 30", () => {
+  const r = calculateBolus(109, "dinner", 120, false, null, 0, cfg, 0, 63.7, 49.5);
+  assert.equal(r.splitDose?.later, 4);
+  assert.equal(r.splitDose?.delayMinutes, 150);
+  assert.equal(r.splitDose?.now, r.totalBolus, "splitDose.now doit être le bolus initial");
+});
+
+test("intégration : le barème personnalisé de la config est bien lu", () => {
+  const perso = { ...cfg, fatCoverageTiers: { moderate: 0.05, high: 0.05, veryHigh: 0.05 } } as DiabetesConfig;
+  const parDefaut = calculateBolus(109, "dinner", 120, false, null, 0, cfg, 0, 63.7, 49.5);
+  const reglé = calculateBolus(109, "dinner", 120, false, null, 0, perso, 0, 63.7, 49.5);
+  assert.equal(parDefaut.splitDose?.later, 4);
+  assert.equal(reglé.splitDose?.later, 1, "5 % de 14,2 U = 0,71 U → 1 U");
 });
 
 test("le dîner du 9 septembre donne les 4 U réellement nécessaires", () => {
