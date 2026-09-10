@@ -19,6 +19,7 @@
  *    le calcul.
  */
 
+import { lateFatLoad } from "./fat-coverage";
 import {
   activeIOB,
   carbRemainingFraction,
@@ -184,7 +185,8 @@ export function buildCarbSources(
   );
 
   const push = (s: Omit<ActiveCarbSource, "carbsRemainingG" | "fpuRemainingG">) => {
-    const fpu = (s.fatGrams * 9 + s.proteinGrams * 4) / 100;
+    // Lipides seuls — définition partagée, cf. lateFatLoad.
+    const fpu = lateFatLoad(s.fatGrams);
     const fpuTotalG = fpu >= 1 ? fpu * FPU_GLUCOSE_FACTOR : 0;
     sources.push({
       ...s,

@@ -133,3 +133,29 @@ export function normalizeCoveragePct(raw: number): number | null {
   if (raw < FAT_COVERAGE_MIN_PCT || raw > FAT_COVERAGE_MAX_PCT) return null;
   return Math.round(raw * 1000) / 1000;
 }
+
+/**
+ * Charge tardive d'un repas, exprimée dans l'unité « FPU » historique, mais
+ * pilotée par les **lipides seuls**.
+ *
+ * Le modèle de PRÉDICTION calculait cette charge comme
+ * `(lipides×9 + protéines×4) / 100` — la même formule que l'ancien modèle de
+ * dose. Sur le midi de sèche d'Ethan (15 g de lipides, 60 g de protéines),
+ * il prédisait ainsi +63 mg/dL de montée tardive, dont **+40 attribuables aux
+ * seules protéines** — une montée que ses 47 repas exploitables disent
+ * inexistante.
+ *
+ * Conséquences vérifiées de cette sur-prédiction : le plan de nuit pouvait
+ * proposer une correction pour une montée qui n'arrive pas, et le
+ * plafonnement de dose protégeait moins (croyant la glycémie plus haute
+ * qu'elle ne sera, il ne rabotait pas quand il l'aurait fallu).
+ *
+ * Cette fonction est la définition UNIQUE partagée par le calcul de dose, la
+ * prédiction 8 h, la tuile des glucides actifs et le plan de nuit. Ces quatre
+ * modules en avaient chacun leur copie ; elles ont divergé dès que l'une a
+ * changé.
+ */
+export function lateFatLoad(fatGrams: number): number {
+  if (!Number.isFinite(fatGrams) || fatGrams <= 0) return 0;
+  return (fatGrams * 9) / 100;
+}

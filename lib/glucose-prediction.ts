@@ -23,6 +23,7 @@
  */
 
 import { iobRemainingFraction } from "./night-calibration";
+import { lateFatLoad } from "./fat-coverage";
 import {
   computeExerciseAdjustment,
   type RecentExercise,
@@ -184,7 +185,10 @@ export function fpuGlucoseRise(
   windowHours: number = FPU_WINDOW_HOURS,
 ): number {
   if (minutesAhead <= 0) return 0;
-  const fpu = (fatGrams * 9 + proteinGrams * 4) / 100;
+  // Lipides seuls — cf. lateFatLoad (lib/fat-coverage.ts) pour le motif.
+  // `proteinGrams` reste dans la signature : les appelants le passent encore
+  // et le retirer masquerait le changement au lieu de le documenter.
+  const fpu = lateFatLoad(fatGrams);
   if (fpu < 1) return 0;
   const hoursAgo = mealMinutesAgo / 60;
   if (hoursAgo >= windowHours) return 0;

@@ -30,6 +30,7 @@ import { Badge } from "@/components/ui/Badge";
 import { useGlucose } from "@/hooks/useGlucose";
 import GlucoseWidget from "@/components/glucose/GlucoseWidget";
 import ForgottenInjection from "@/components/diabete/ForgottenInjection";
+import { lateFatLoad } from "@/lib/fat-coverage";
 import GlucoseChart from "@/components/glucose/GlucoseChart";
 import CarbEntryLogger from "@/components/glucose/CarbEntryLogger";
 import { CarbsOnBoardTile } from "@/components/glucose/CarbsOnBoardTile";
@@ -1448,10 +1449,11 @@ export default function DiabetePage() {
       .sort((a, b) => b.injectedAt - a.injectedAt)[0];
     const lastMealFat = lastMeal ? resolveFat(lastMeal) : 0;
     const lastMealProtein = lastMeal ? resolveProtein(lastMeal) : 0;
-    const inferredFpu =
-      lastMealFat > 0 && lastMealProtein > 0
-        ? (lastMealFat * 9 + lastMealProtein * 4) / 100
-        : 0;
+    // Lipides seuls — définition partagée avec la dose et la prédiction
+    // (cf. lateFatLoad, lib/fat-coverage.ts). L'ancienne formule comptait
+    // les protéines et faisait prédire au plan de nuit une montée de +40
+    // mg/dL sur le midi de sèche d'Ethan, montée que ses données démentent.
+    const inferredFpu = lateFatLoad(lastMealFat);
 
     const mealHoursAgo = lastMeal?.hoursAgo;
     const mealFpu = inferredFpu;

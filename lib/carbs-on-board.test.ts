@@ -133,14 +133,17 @@ test("ratios distincts : matin et soir ne se moyennent pas", () => {
   );
 });
 
-test("FPU non couverts à T+3h → déficit détecté", () => {
-  // Pizza : 80 g glucides bien bolussés, mais 40 g lip + 30 g prot non couverts.
+test("lipides non couverts à T+3h → déficit détecté", () => {
+  // Repas franchement gras : 80 g glucides bolussés, 75 g de lipides non
+  // couverts. L'ancienne version de ce test utilisait 40 g lip + 30 g prot
+  // et dépendait des protéines pour atteindre le déficit — depuis sept. 2026
+  // seuls les lipides comptent (cf. lateFatLoad).
   const cob = computeCarbsOnBoard({
     insulinLogs: [
       log(180, {
         carbsGrams: 80,
-        fatGrams: 40,
-        proteinGrams: 30,
+        fatGrams: 75,
+        proteinGrams: 0,
         units: 8,
         mealType: "dinner",
       }),
@@ -148,8 +151,30 @@ test("FPU non couverts à T+3h → déficit détecté", () => {
     isf: ISF,
     ratios: RATIOS,
   });
-  assert.ok(cob.fpuRemainingG > 0, "les FPU sont encore en cours à T+3h");
+  assert.ok(cob.fpuRemainingG > 0, "les lipides sont encore en cours à T+3h");
   assert.equal(cob.status, "deficit");
+});
+
+test("les protéines ne créent plus de déficit fantôme", () => {
+  // LE test de la correction de sept. 2026 : à lipides et glucides égaux,
+  // ajouter 90 g de protéines ne doit rien changer. Avant, elles gonflaient
+  // la charge non couverte et la tuile réclamait de l'insuline pour rien.
+  const base = {
+    isf: ISF,
+    ratios: RATIOS,
+    insulinLogs: [
+      log(180, { carbsGrams: 80, fatGrams: 20, proteinGrams: 0, units: 9, mealType: "dinner" }),
+    ],
+  };
+  const sansProt = computeCarbsOnBoard(base);
+  const avecProt = computeCarbsOnBoard({
+    ...base,
+    insulinLogs: [
+      log(180, { carbsGrams: 80, fatGrams: 20, proteinGrams: 90, units: 9, mealType: "dinner" }),
+    ],
+  });
+  assert.equal(avecProt.fpuRemainingG, sansProt.fpuRemainingG, "90 g de protéines n'ajoutent aucune charge");
+  assert.equal(avecProt.insulinNeededU, sansProt.insulinNeededU, "ni aucun besoin d'insuline");
 });
 
 test("glucides sans insuline (CarbEntry) comptés dans le besoin", () => {
