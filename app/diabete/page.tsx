@@ -3395,39 +3395,66 @@ function BriefingSessionCard({
     ? "—"
     : new Date(startMs).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
   const durationMin = session.actualDurationMin ?? session.plannedDurationMin;
-  // Passé l'heure de fin prévue, la séance pèse encore sur le bolus pendant
-  // des heures : la carte reste donc affichée, mais le texte change — il
-  // n'est plus question d'une séance « à venir » mais d'une séance dont il
-  // faut confirmer qu'elle a bien eu lieu.
   const hasEnded = !Number.isNaN(startMs) && Date.now() > startMs + durationMin * 60_000;
 
+  // Whoop a retrouvé la séance : on SAIT qu'elle a eu lieu. Continuer à
+  // proposer « annule-la si tu n'y es pas allé » poserait alors une question
+  // dont la réponse est connue — et la carte le demandait pendant 24 h après
+  // CHAQUE séance (retour terrain du 10 sept. : « il n'y a rien qui s'est
+  // passé, je dois faire quoi ? »). Une fois confirmée, la carte informe et
+  // ne demande plus rien.
+  const confirmed = Boolean(session.whoopWorkoutId);
+
   return (
-    <div className="rounded-xl bg-diabete/10 border border-diabete/30 p-3 space-y-3 animate-slide-up">
+    <div
+      className={`rounded-xl border p-3 space-y-3 animate-slide-up ${
+        confirmed
+          ? "bg-success/10 border-success/30"
+          : "bg-diabete/10 border-diabete/30"
+      }`}
+    >
       <div className="flex items-start gap-2">
-        <Icon className="w-4 h-4 text-diabete shrink-0 mt-0.5" />
+        <Icon
+          className={`w-4 h-4 shrink-0 mt-0.5 ${confirmed ? "text-success" : "text-diabete"}`}
+        />
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold text-text-primary leading-snug">{label}</p>
+          <p className="text-xs font-semibold text-text-primary leading-snug">
+            {label}
+            {confirmed && (
+              <span className="ml-1.5 text-[10px] font-medium text-success">
+                confirmée par Whoop
+              </span>
+            )}
+          </p>
           <p className="text-[11px] text-text-secondary mt-0.5">
             Départ à <span className="num">{startLabel}</span> ·{" "}
-            <span className="num">{durationMin}</span> min {hasEnded ? "déclarées" : "prévues"}
+            <span className="num">{durationMin}</span> min{" "}
+            {confirmed ? "mesurées" : hasEnded ? "déclarées" : "prévues"}
           </p>
-          {hasEnded && (
+          {confirmed ? (
             <p className="text-[11px] text-text-tertiary mt-1 leading-snug">
-              Elle réduit encore ton bolus. Annule-la si tu n&apos;y es pas allé.
+              Prise en compte dans tes prochaines doses. Rien à faire.
             </p>
-          )}
+          ) : hasEnded ? (
+            <p className="text-[11px] text-text-tertiary mt-1 leading-snug">
+              Elle réduit encore ton bolus. Si tu y es allé, laisse-la — Whoop la
+              confirmera. Sinon, annule-la.
+            </p>
+          ) : null}
         </div>
       </div>
-      <button
-        type="button"
-        onClick={onCancel}
-        className="w-full min-h-11 flex items-center justify-center gap-2 text-center text-[11px] font-semibold text-warning bg-warning/10 hover:bg-warning/20 border border-warning/30 rounded-lg py-2.5 transition-colors tap-scale"
-      >
-        <X className="w-3.5 h-3.5 shrink-0" />
-        {hasEnded
-          ? "Annuler — je n'y suis pas allé"
-          : "Annuler — sinon ton prochain bolus sera réduit pour une séance qui n'a pas eu lieu"}
-      </button>
+      {!confirmed && (
+        <button
+          type="button"
+          onClick={onCancel}
+          className="w-full min-h-11 flex items-center justify-center gap-2 text-center text-[11px] font-semibold text-warning bg-warning/10 hover:bg-warning/20 border border-warning/30 rounded-lg py-2.5 transition-colors tap-scale"
+        >
+          <X className="w-3.5 h-3.5 shrink-0" />
+          {hasEnded
+            ? "Annuler — je n'y suis pas allé"
+            : "Annuler — sinon ton prochain bolus sera réduit pour une séance qui n'a pas eu lieu"}
+        </button>
+      )}
     </div>
   );
 }
