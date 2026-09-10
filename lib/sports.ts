@@ -49,3 +49,37 @@ export function getSport(key: string | null | undefined): SportDefinition | null
   if (!key) return null;
   return SPORTS.find((s) => s.key === key) ?? null;
 }
+
+/**
+ * Instant de FIN d'une séance déclarée (ms), définition UNIQUE.
+ *
+ * L'heure de fin mesurée par Whoop (`endedAt`, écrite par la
+ * réconciliation) prime sur la fin déduite du départ déclaré : recalculer
+ * depuis `startAt` ignorerait qu'Ethan est parti plus tôt ou plus tard que
+ * prévu. À défaut, la durée réelle (`actualDurationMin`) prime sur la durée
+ * annoncée dans le briefing, qui n'est qu'une approximation.
+ *
+ * Quatre modules avaient chacun leur copie de ce calcul (candidat
+ * post-exercice, carte de séance, fenêtre d'annulation, exemption des
+ * glucides sport) et deux d'entre elles ignoraient `endedAt` — la cause
+ * récurrente de presque tous les défauts de ce module reste la même
+ * grandeur calculée à plusieurs endroits.
+ *
+ * Renvoie `NaN` si `startAt` est illisible — les appelants doivent tester.
+ */
+export function sportSessionEndMs(session: {
+  startAt: string;
+  plannedDurationMin: number;
+  actualDurationMin?: number;
+  endedAt?: string;
+}): number {
+  if (session.endedAt) {
+    const measured = new Date(session.endedAt).getTime();
+    if (Number.isFinite(measured)) return measured;
+  }
+  const startMs = new Date(session.startAt).getTime();
+  if (!Number.isFinite(startMs)) return NaN;
+  const durationMin = session.actualDurationMin ?? session.plannedDurationMin;
+  const safeMin = Number.isFinite(durationMin) && durationMin > 0 ? durationMin : 0;
+  return startMs + safeMin * 60_000;
+}

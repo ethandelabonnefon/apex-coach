@@ -20,6 +20,7 @@
  */
 
 import { lateFatLoad } from "./fat-coverage";
+import { sportSessionEndMs } from "./sports";
 import {
   activeIOB,
   carbRemainingFraction,
@@ -42,7 +43,7 @@ import {
 // (`dose-validation.ts`). Même seuil, pas une seconde définition : importé,
 // jamais recopié.
 import { HYPO_THRESHOLD } from "./dose-validation";
-import type { CarbEntry, InsulinLog } from "@/types";
+import type { CarbEntry, DeclaredSportSession, InsulinLog } from "@/types";
 
 // ───────────────────────────────────────────────────────────────────────
 // Seuils
@@ -148,18 +149,18 @@ export interface BuildCarbSourcesOptions {
   windowMin?: number;
   /**
    * Séances déclarées au briefing pré-sport (`lib/store.ts`
-   * `declaredSportSessions`). Sert UNIQUEMENT à repérer les séances
-   * ANNULÉES : les glucides tagués `sportSessionId` d'une séance annulée
-   * redeviennent des glucides ordinaires, à couvrir par de l'insuline.
+   * `declaredSportSessions`). Sert à dater la fin de l'exemption des
+   * glucides tagués `sportSessionId` — voir `exemptionActive` plus bas.
    *
-   * Correctif sept. 2026 (revue finale F5) : sans cette entrée, les 56 g
-   * avalés pour un padel finalement annulé restaient hors de
-   * `insulinNeededU` à vie — hyperglycémie silencieuse. Tous les autres
-   * consommateurs de l'annulation la respectaient déjà.
+   * Deux correctifs successifs vivent là : une séance ANNULÉE rend ses
+   * glucides à couvrir tout de suite (F5 — sans quoi les 56 g avalés pour
+   * un padel finalement annulé restaient hors de `insulinNeededU` à vie),
+   * et une séance TERMINÉE fait de même pour ce qu'il en reste (10 sept. —
+   * 43 g invisibles après une course, jusqu'à 210 mg/dL).
    *
-   * Absente → comportement inchangé (aucune séance connue comme annulée).
+   * Absente → exemption permanente, comme avant les deux correctifs.
    */
-  declaredSportSessions?: { id: string; cancelledAt?: string }[];
+  declaredSportSessions?: DeclaredSportSession[];
 }
 
 /** Convertit un timestamp (Date | ISO | number) en ms. */
@@ -179,10 +180,32 @@ export function buildCarbSources(
   const now = opts.nowMs ?? Date.now();
   const windowMin = opts.windowMin ?? EVENT_ACTIVE_WINDOW_MIN;
   const sources: ActiveCarbSource[] = [];
-  // Séances annulées : leurs glucides redeviennent ordinaires (cf. F5).
-  const cancelledSessionIds = new Set(
-    (opts.declaredSportSessions ?? []).filter((s) => s.cancelledAt).map((s) => s.id),
+
+  /**
+   * Les glucides pris pour un effort sont exemptés de couverture PENDANT la
+   * séance seulement — l'exemption s'arrête à sa fin (sept. 2026).
+   *
+   * Pendant l'effort, le muscle capte le glucose sans insuline : réclamer
+   * une dose pour des glucides pris contre une hypo serait absurde. À
+   * l'arrêt, cette captation s'effondre et le reste non absorbé redevient
+   * un besoin d'insuline ordinaire. Le 10 septembre, les 43 g encore en
+   * digestion après la course sont restés invisibles jusqu'à 210 mg/dL.
+   *
+   * Une séance annulée n'a jamais eu lieu : l'exemption tombe tout de
+   * suite (cf. F5). Une séance inconnue du store reste exemptée — on ne
+   * peut pas dater une fin qu'on n'a pas.
+   */
+  const sportById = new Map(
+    (opts.declaredSportSessions ?? []).map((s) => [s.id, s] as const),
   );
+  const exemptionActive = (sessionId: string): boolean => {
+    const session = sportById.get(sessionId);
+    if (!session) return true;
+    if (session.cancelledAt) return false;
+    const endMs = sportSessionEndMs(session);
+    if (!Number.isFinite(endMs)) return true;
+    return now < endMs;
+  };
 
   const push = (s: Omit<ActiveCarbSource, "carbsRemainingG" | "fpuRemainingG">) => {
     // Lipides seuls — définition partagée, cf. lateFatLoad.
@@ -243,7 +266,7 @@ export function buildCarbSources(
       // heuristique sur le label ou les grammes, juste ces deux champs.
       isNonCovering:
         c.hypoEventId !== undefined ||
-        (c.sportSessionId !== undefined && !cancelledSessionIds.has(c.sportSessionId)),
+        (c.sportSessionId !== undefined && exemptionActive(c.sportSessionId)),
     });
   }
 

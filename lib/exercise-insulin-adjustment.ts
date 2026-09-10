@@ -29,6 +29,9 @@
 
 import type { GpsPoint } from "@/lib/running-tracker";
 import { totalDistance } from "@/lib/running-tracker";
+// `lib/sports.ts` n'importe de ce fichier QUE le type `ExerciseSource`
+// (effacé à la compilation) : pas de cycle à l'exécution.
+import { sportSessionEndMs } from "@/lib/sports";
 import type { DeclaredSportSession } from "@/types";
 
 /**
@@ -398,11 +401,12 @@ export function findMostRecentExercise(
     const durationMin = d.actualDurationMin ?? d.plannedDurationMin;
     // Heure de fin mesurée si la réconciliation l'a écrite, sinon déduite du
     // début déclaré : recalculer depuis `startAt` ignorerait le fait
-    // qu'Ethan est parti plus tôt ou plus tard que prévu.
-    const endedFromWhoop = d.endedAt ? new Date(d.endedAt).getTime() : NaN;
-    const endedAtMs = Number.isNaN(endedFromWhoop)
-      ? startMs + durationMin * 60_000
-      : endedFromWhoop;
+    // qu'Ethan est parti plus tôt ou plus tard que prévu. Définition
+    // partagée (`sportSessionEndMs`) avec la carte de séance, la fenêtre
+    // d'annulation, l'exemption des glucides sport et l'appoint post-séance
+    // — quatre copies qui avaient déjà divergé.
+    const endedAtMs = sportSessionEndMs(d);
+    if (!Number.isFinite(endedAtMs)) continue;
     // Même filtre que les autres sources : l'effet de sensibilité commence
     // APRÈS l'effort (endedAtMs <= nowMs), pas pendant.
     if (endedAtMs < cutoff || endedAtMs > nowMs) continue;

@@ -55,11 +55,20 @@ import {
 import {
   computeExerciseAdjustment,
   resolveRecentExercise,
+  SAME_SESSION_TOLERANCE_MIN,
   type ExerciseSource,
 } from "@/lib/exercise-insulin-adjustment";
-import { SPORTS, getSport, type SportDefinition } from "@/lib/sports";
+import { SPORTS, getSport, sportSessionEndMs, type SportDefinition } from "@/lib/sports";
+import {
+  computePostSessionAppoint,
+  isAppointBlockedByGlucose,
+  isAppointStillRelevant,
+  POST_SESSION_DELAY_MIN,
+  POST_SESSION_MIN_GLUCOSE,
+  POST_SESSION_WHOOP_GRACE_MIN,
+} from "@/lib/post-session-insulin";
 import { reconcileWithWhoop, unconfirmedSessions } from "@/lib/whoop-reconcile";
-import { buildPredictionEvents } from "@/lib/prediction-inputs";
+import { buildPredictionEvents, ratioForMeal } from "@/lib/prediction-inputs";
 import { capDoseByPrediction } from "@/lib/dose-capping";
 import { useWhoop } from "@/hooks/useWhoop";
 import NightBrain from "@/components/diabete/NightBrain";
@@ -947,7 +956,12 @@ export default function DiabetePage() {
     );
     if (pendingToSync.length === 0) return;
     for (const r of pendingToSync) {
-      scheduleReminderOnServer({ ...r, kind: "split" }); // fire-and-forget, silencieux si fail
+      // `r.kind ?? "split"` et non `kind: "split"` en dur : le store porte
+      // désormais aussi des appoints post-séance, et les forcer en split
+      // ferait pousser « fais XU pour couvrir les graisses » à la place.
+      // Les rappels créés avant sept. 2026 n'ont pas de kind — ce sont bien
+      // des splits.
+      scheduleReminderOnServer({ ...r, kind: r.kind ?? "split" }); // fire-and-forget
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // run once au mount
@@ -971,14 +985,24 @@ export default function DiabetePage() {
     if (typeof window !== "undefined" && "serviceWorker" in navigator && "Notification" in window) {
       due.forEach((r) => {
         if (Notification.permission === "granted") {
+          // Le texte DOIT suivre la nature du rappel : dire « couvre les
+          // graisses de ton repas » pour un appoint post-séance enverrait
+          // un ordre d'injection sous un motif faux.
+          const kind = r.kind ?? "split";
+          const isAppoint = kind === "post-session";
           navigator.serviceWorker.ready.then((reg) => {
-            reg.showNotification("Rappel split dose", {
-              body: `Il est temps de faire ${r.units}U pour couvrir les graisses/protéines de ton repas.`,
-              icon: "/icons/icon-192x192.png",
-              badge: "/icons/icon-192x192.png",
-              tag: `split-${r.id}`,
-              data: { url: "/diabete", type: "split" },
-            });
+            reg.showNotification(
+              isAppoint ? "Appoint post-séance" : "Rappel split dose",
+              {
+                body: isAppoint
+                  ? `Les glucides pris pour ${r.mealLabel ?? "ta séance"} finissent d'être absorbés : ${r.units}U proposées. Vérifie ta glycémie avant d'injecter.`
+                  : `Il est temps de faire ${r.units}U pour couvrir les graisses/protéines de ton repas.`,
+                icon: "/icons/icon-192x192.png",
+                badge: "/icons/icon-192x192.png",
+                tag: `${isAppoint ? "post-session" : "split"}-${r.id}`,
+                data: { url: "/diabete", type: kind },
+              },
+            );
           }).catch(() => {});
         }
         // Marque comme fired pour ne pas le re-tirer à chaque tick
@@ -994,6 +1018,21 @@ export default function DiabetePage() {
   );
 
   function handleConfirmSplitDose(reminder: SplitDoseReminder) {
+    const isAppoint = (reminder.kind ?? "split") === "post-session";
+
+    // Confirmation native — même garde-fou que partout ailleurs sur une
+    // dose : rien n'est jamais enregistré sur un seul tap.
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        isAppoint
+          ? `Enregistrer ${reminder.units}U d'appoint post-séance ?`
+          : `Enregistrer ${reminder.units}U de 2e dose (couverture lipides) ?`,
+      )
+    ) {
+      return;
+    }
+
     const injectionId = crypto.randomUUID();
     addInsulinLog({
       id: injectionId,
@@ -1002,10 +1041,18 @@ export default function DiabetePage() {
       mealType: 'other',
       carbsGrams: 0,
       glucoseBefore: liveValueForBolus ?? currentGlucose,
-      notes: 'split 2/2 (couverture lipides)',
+      notes: isAppoint
+        ? `appoint post-séance${reminder.mealLabel ? ` (${reminder.mealLabel})` : ""}`
+        : 'split 2/2 (couverture lipides)',
       injectedAt: new Date(),
+      // `isSplitDose` exclut l'injection de l'apprentissage par repas : ces
+      // deux doses n'ont pas de glucides propres, les compter comme des
+      // repas fausserait le détecteur de sur-dosage.
       isSplitDose: true,
-      parentInjectionId: reminder.parentInjectionId,
+      // Un appoint post-séance n'a pas d'injection parente — son
+      // `parentInjectionId` est l'id de la séance (cf. types/index.ts), qui
+      // n'a rien à faire dans un chaînage d'injections.
+      parentInjectionId: isAppoint ? undefined : reminder.parentInjectionId,
     });
     removeSplitDoseReminder(reminder.id);
     // Sync serveur : cancel le reminder pour que le cron ne le re-tire pas
@@ -1178,10 +1225,12 @@ export default function DiabetePage() {
   const activeBriefingSession: DeclaredSportSession | null = useMemo(() => {
     for (const s of declaredSportSessions) {
       if (s.cancelledAt) continue;
-      const startMs = new Date(s.startAt).getTime();
-      if (Number.isNaN(startMs)) continue;
-      const durationMin = s.actualDurationMin ?? s.plannedDurationMin;
-      const endMs = startMs + durationMin * 60_000;
+      // Définition partagée : l'heure de fin MESURÉE par Whoop prime sur la
+      // durée annoncée. Le calcul inline précédent l'ignorait, donc la
+      // fenêtre d'annulation et le calcul de dose ne parlaient pas de la
+      // même fin.
+      const endMs = sportSessionEndMs(s);
+      if (!Number.isFinite(endMs)) continue;
       // Fenêtre volontairement étendue à la durée pendant laquelle la
       // séance influence encore le bolus (revue des correctifs, sept.
       // 2026). S'arrêter à `endMs` rendait l'annulation introuvable dès
@@ -1217,6 +1266,105 @@ export default function DiabetePage() {
     if (!result) return;
     updateDeclaredSportSession(result.sessionId, result.updates);
   }, [whoop.connected, whoop.snapshot, declaredSportSessions, updateDeclaredSportSession]);
+
+  // ─── Appoint post-séance (10 sept. 2026) ─────────────────────────────
+  //
+  // Ethan a mangé 66 g avant sa course puis 10 g pendant, comme le briefing
+  // le conseillait. Trente minutes après la fin, il est passé de 68 à
+  // 210 mg/dL : les 43 g encore en digestion n'étaient couverts par rien.
+  // Pendant l'effort le muscle capte le glucose sans insuline ; à l'arrêt,
+  // cette captation s'effondre et les glucides arrivent à découvert.
+  //
+  // À la fin de la séance, on calcule l'appoint (glucides restants − IOB,
+  // modulé par le strain) et on le PROGRAMME 30 min plus tard — jamais pour
+  // tout de suite : à la fin de sa course il était à 68 mg/dL, l'heure où le
+  // risque d'hypoglycémie tardive est maximal. Le rappel passe par le même
+  // pipeline que les splits, qui sait déjà pousser une notif app fermée.
+  //
+  // Rien n'est injecté : le rappel propose, Ethan valide, et la glycémie est
+  // relue au moment du rappel (cf. `appointBlockedByGlucose` plus bas).
+  useEffect(() => {
+    for (const session of declaredSportSessions) {
+      // `appointScheduledAt` est le seul garde d'idempotence : sans lui ce
+      // useEffect reprogrammerait le rappel à chaque tick de 60 s.
+      if (session.cancelledAt || session.appointScheduledAt) continue;
+      const endMs = sportSessionEndMs(session);
+      if (!Number.isFinite(endMs) || nowTick < endMs) continue;
+
+      // Whoop corrige l'heure de fin (flux réel d'Ethan : il termine sur sa
+      // Watch, Whoop remonte en moins d'une minute). Tant qu'il ne l'a pas
+      // fait, on attend un peu — figer la dose sur une durée simplement
+      // annoncée alors que la mesure arrive dans 30 secondes serait dommage.
+      // Sans bracelet, la durée déclarée finit par faire foi.
+      const confirmed = Boolean(session.whoopWorkoutId);
+      if (!confirmed && nowTick < endMs + POST_SESSION_WHOOP_GRACE_MIN * 60_000) continue;
+
+      // Quoi qu'il arrive ensuite, la séance est traitée : aucun appoint ne
+      // sera reproposé pour elle. Écrit AVANT les sorties anticipées pour
+      // qu'aucun chemin ne laisse la séance repasser ici au tick suivant.
+      updateDeclaredSportSession(session.id, {
+        appointScheduledAt: new Date(nowTick).toISOString(),
+      });
+
+      // La réduction post-effort doit venir de CETTE séance. `recentExercise`
+      // désigne la séance la plus récemment terminée (Whoop prioritaire) :
+      // si elle ne correspond pas, on ne sait pas quel strain appliquer, et
+      // on préfère ne rien proposer plutôt qu'une dose non justifiée —
+      // supposer 0 % de réduction irait dans le sens de PLUS d'insuline.
+      const matchesThisSession =
+        recentExercise !== null &&
+        Math.abs(recentExercise.endedAtMs - endMs) <= SAME_SESSION_TOLERANCE_MIN * 60_000;
+      if (!matchesThisSession) continue;
+
+      const dueAtMs = endMs + POST_SESSION_DELAY_MIN * 60_000;
+      const appoint = computePostSessionAppoint({
+        session,
+        carbEntries,
+        // IOB vivant : s'il a bolussé entre la fin et maintenant, l'appoint
+        // fond tout seul au lieu de s'empiler.
+        iobUnits: iob.totalIOB,
+        // Ratio du créneau où l'insuline sera réellement faite, pas de
+        // celui où la séance s'est terminée.
+        ratioGramsPerU: ratioForMeal(
+          diabetesConfig.ratios,
+          inferMealTimeFromClock(new Date(dueAtMs)),
+        ),
+        reductionPct: exerciseAdjustment?.reductionPct ?? 0,
+      });
+
+      if (appoint.units <= 0) continue;
+      // App restée fermée : ne pas ordonner 4 U le soir pour une course de
+      // l'après-midi. Le calcul serait périmé.
+      if (!isAppointStillRelevant(appoint.dueAtMs, nowTick)) continue;
+
+      const reminder: SplitDoseReminder = {
+        // ID déterministe : `upsertReminder` est idempotent par id, donc
+        // même un double appel ne crée pas deux rappels.
+        id: `ps-${session.id}`,
+        kind: "post-session",
+        // Une séance n'a pas d'injection parente — on y met son propre id,
+        // cf. le commentaire du champ dans `types/index.ts`.
+        parentInjectionId: session.id,
+        units: appoint.units,
+        triggerAt: new Date(appoint.dueAtMs).toISOString(),
+        createdAt: new Date(nowTick).toISOString(),
+        mealLabel: getSport(session.sportKey)?.label.toLowerCase(),
+        status: "pending",
+      };
+      addSplitDoseReminder(reminder);
+      scheduleReminderOnServer(reminder);
+    }
+  }, [
+    declaredSportSessions,
+    nowTick,
+    recentExercise,
+    exerciseAdjustment,
+    carbEntries,
+    iob.totalIOB,
+    diabetesConfig.ratios,
+    updateDeclaredSportSession,
+    addSplitDoseReminder,
+  ]);
 
   // Séances déclarées que Whoop n'a pas (encore) retrouvées, terminées depuis
   // longtemps. Jamais supprimées : seulement signalées, Ethan garde la main
@@ -1826,13 +1974,13 @@ export default function DiabetePage() {
         />
       )}
 
-      {/* ── RAPPELS SPLIT DOSE en attente ── */}
+      {/* ── RAPPELS DE DOSE en attente (split lipides + appoint post-séance) ── */}
       {pendingReminders.length > 0 && (
         <section className="surface-1 rounded-3xl p-5 mb-4 border border-accent-2/30">
           <div className="flex items-center gap-2 mb-3">
             <Clock className="w-4 h-4 text-diabete" />
             <h2 className="text-base font-semibold text-text-primary">
-              Rappel{pendingReminders.length > 1 ? "s" : ""} split dose
+              Rappel{pendingReminders.length > 1 ? "s" : ""} de dose
             </h2>
           </div>
           <div className="space-y-2">
@@ -1841,6 +1989,17 @@ export default function DiabetePage() {
               const now = nowTick;
               const minutesRemaining = Math.round((triggerMs - now) / 60000);
               const isDue = minutesRemaining <= 0;
+              const isAppoint = (r.kind ?? "split") === "post-session";
+              // Garde-fou de l'appoint : la glycémie est RELUE au moment du
+              // rappel. À la fin de sa course du 10 septembre, Ethan était à
+              // 68 mg/dL — c'est l'heure du risque d'hypo tardive. Sous le
+              // seuil, la carte informe et n'offre pas le bouton : le risque
+              // d'injecter sur quelqu'un qui redescend prime sur la
+              // correction d'une hyperglycémie. Une glycémie inconnue bloque
+              // aussi — on ne valide pas une dose à l'aveugle.
+              const appointGlucose = isAppoint ? liveGlucose?.value ?? null : null;
+              const appointBlockedByGlucose =
+                isAppoint && isAppointBlockedByGlucose(appointGlucose, isDue);
               return (
                 <div
                   key={r.id}
@@ -1859,18 +2018,30 @@ export default function DiabetePage() {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}{" "}
-                      · couverture lipides
+                      ·{" "}
+                      {isAppoint
+                        ? `glucides de ${r.mealLabel ?? "ta séance"} encore en absorption`
+                        : "couverture lipides"}
                     </p>
+                    {appointBlockedByGlucose && (
+                      <p className="text-[11px] text-warning mt-1 leading-snug">
+                        {appointGlucose === null
+                          ? "Glycémie indisponible — ouvre ta lecture avant de faire cette dose."
+                          : `Glycémie à ${appointGlucose} mg/dL : trop bas juste après un effort. Attends qu'elle remonte au-dessus de ${POST_SESSION_MIN_GLUCOSE}.`}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handleConfirmSplitDose(r)}
-                      className="bg-diabete text-ink text-xs font-semibold px-3 py-2 rounded-lg tap-scale flex items-center gap-1"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Logger
-                    </button>
+                    {!appointBlockedByGlucose && (
+                      <button
+                        type="button"
+                        onClick={() => handleConfirmSplitDose(r)}
+                        className="bg-diabete text-ink text-xs font-semibold px-3 py-2 rounded-lg tap-scale flex items-center gap-1"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Logger
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleDismissSplitDose(r)}
@@ -1977,6 +2148,7 @@ export default function DiabetePage() {
         {activeBriefingSession ? (
           <BriefingSessionCard
             session={activeBriefingSession}
+            nowMs={nowTick}
             onCancel={() => handleCancelBriefingSession(activeBriefingSession)}
           />
         ) : !briefingActive ? (
@@ -3382,9 +3554,12 @@ export default function DiabetePage() {
  */
 function BriefingSessionCard({
   session,
+  nowMs,
   onCancel,
 }: {
   session: DeclaredSportSession;
+  /** Horloge du parent (tick 60 s) — la carte ne lit pas l'heure elle-même. */
+  nowMs: number;
   onCancel: () => void;
 }) {
   const sport = getSport(session.sportKey);
@@ -3395,7 +3570,8 @@ function BriefingSessionCard({
     ? "—"
     : new Date(startMs).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
   const durationMin = session.actualDurationMin ?? session.plannedDurationMin;
-  const hasEnded = !Number.isNaN(startMs) && Date.now() > startMs + durationMin * 60_000;
+  const endMs = sportSessionEndMs(session);
+  const hasEnded = Number.isFinite(endMs) && nowMs > endMs;
 
   // Whoop a retrouvé la séance : on SAIT qu'elle a eu lieu. Continuer à
   // proposer « annule-la si tu n'y es pas allé » poserait alors une question

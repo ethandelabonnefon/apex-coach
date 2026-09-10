@@ -51,3 +51,42 @@ test("retard : mentionné si le rappel a plus de 5 min", () => {
   const p = buildReminderPush(reminder({ kind: "split", triggerAt: late }));
   assert.match(p.body, /20 min/);
 });
+
+// ───────────────────────────────────────────────────────────────────────
+// Appoint post-séance (sept. 2026)
+// ───────────────────────────────────────────────────────────────────────
+
+test("appoint post-séance : la notif nomme le sport et renvoie à l'app", () => {
+  const push = buildReminderPush({
+    id: "ps-s1",
+    kind: "post-session",
+    parentInjectionId: "s1",
+    units: 4,
+    triggerAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    mealLabel: "course à pied",
+    status: "pending",
+  });
+  assert.equal(push.type, "post-session");
+  assert.equal(push.value, 4);
+  assert.match(push.body, /course à pied/);
+  assert.match(push.body, /4U/);
+  // Le corps ne doit PAS dire « injecte » sèchement : la glycémie est
+  // relue dans l'app, et sous 90 mg/dL le bouton n'est pas offert.
+  assert.match(push.body, /vérifie ta glycémie/i);
+  assert.equal(push.tag, "post-session-ps-s1");
+});
+
+test("appoint post-séance sans nom de sport : le corps reste lisible", () => {
+  const push = buildReminderPush({
+    id: "ps-s2",
+    kind: "post-session",
+    parentInjectionId: "s2",
+    units: 2,
+    triggerAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    status: "pending",
+  });
+  assert.match(push.body, /ta séance/);
+  assert.doesNotMatch(push.body, /undefined/);
+});

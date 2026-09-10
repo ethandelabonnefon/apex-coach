@@ -41,7 +41,7 @@ function initVapid() {
 }
 
 export type GlucoseAlertPayload = {
-  type: "hypo" | "hyper" | "split" | "meal-confirm" | "test";
+  type: "hypo" | "hyper" | "split" | "meal-confirm" | "post-session" | "test";
   title: string;
   body: string;
   value?: number;

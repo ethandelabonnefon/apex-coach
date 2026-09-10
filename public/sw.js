@@ -1,6 +1,6 @@
 // APEX Coach — Service Worker
 // v5 : rappels génériques (split + meal-confirm)
-const CACHE_NAME = "apex-coach-v5";
+const CACHE_NAME = "apex-coach-v6";
 
 const PRECACHE_URLS = [
   "/",
@@ -98,14 +98,19 @@ self.addEventListener("push", (event) => {
   // Tag : si payload.tag fourni (ex: "split-<id>"), on l'utilise pour
   // permettre plusieurs notifs split simultanées. Sinon fallback au type.
   const notifTag = payload.tag || payload.type || "apex-alert";
-  const isUrgent = payload.type === "hypo" || payload.type === "split";
+  // Un rappel qui ordonne une injection doit rester à l'écran jusqu'à ce
+  // qu'Ethan y touche — il est fait pour être reçu poche fermée.
+  const isUrgent =
+    payload.type === "hypo" ||
+    payload.type === "split" ||
+    payload.type === "post-session";
   const options = {
     body: payload.body || "",
     icon: "/icons/icon-192x192.png",
     badge: "/icons/icon-192x192.png",
     tag: notifTag,
-    // Les alertes hypo/hyper/split sont urgentes → renotify
-    renotify: payload.type === "hypo" || payload.type === "hyper" || payload.type === "split",
+    // Les alertes hypo/hyper et les rappels de dose sont urgents → renotify
+    renotify: isUrgent || payload.type === "hyper",
     requireInteraction: isUrgent,
     vibrate: payload.type === "hypo" ? [200, 100, 200, 100, 400] : [200, 100, 200],
     data: {

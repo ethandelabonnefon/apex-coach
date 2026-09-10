@@ -6,7 +6,8 @@
  * fire-and-forget.
  *
  * Body attendu :
- *   { id: string, kind?: 'split' | 'meal-confirm', parentInjectionId: string,
+ *   { id: string, kind?: 'split' | 'meal-confirm' | 'post-session',
+ *     parentInjectionId: string,
  *     units: number, triggerAt: string (ISO), mealLabel?: string,
  *     carbsEstimated?: number }
  *
@@ -16,7 +17,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { upsertReminder, isKvConfigured } from "@/lib/reminders/store";
-import type { Reminder } from "@/types";
+import type { Reminder, ReminderKind } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,16 +40,23 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Validation minimale. `units > 0` n'est exigé que pour un split (dose à
-  // faire) : un meal-confirm peut légitimement avoir units = 0 (glucides
-  // loggés sans insuline — oubli, correction à zéro) où `units` n'est
-  // qu'un contexte d'affichage.
-  const isSplit = body.kind !== "meal-confirm";
+  // Nature du rappel. Inconnue ou absente → 'split' : c'est la seule qui
+  // existait avant septembre 2026, donc le repli rétrocompatible.
+  const kind: ReminderKind =
+    body.kind === "meal-confirm" || body.kind === "post-session"
+      ? body.kind
+      : "split";
+
+  // Validation minimale. `units > 0` est exigé de tout rappel qui ORDONNE
+  // une injection (split, appoint post-séance) : un meal-confirm peut
+  // légitimement avoir units = 0 (glucides loggés sans insuline — oubli,
+  // correction à zéro) où `units` n'est qu'un contexte d'affichage.
+  const ordersADose = kind !== "meal-confirm";
   if (
     !body.id ||
     !body.parentInjectionId ||
     typeof body.units !== "number" ||
-    (isSplit && body.units <= 0) ||
+    (ordersADose && body.units <= 0) ||
     body.units < 0 ||
     !body.triggerAt
   ) {
@@ -57,7 +65,7 @@ export async function POST(req: NextRequest) {
         ok: false,
         error: "missing_fields",
         message:
-          "Required: id, parentInjectionId, units (>0 for split, >=0 for meal-confirm), triggerAt (ISO).",
+          "Required: id, parentInjectionId, units (>0 for split & post-session, >=0 for meal-confirm), triggerAt (ISO).",
       },
       { status: 400 },
     );
@@ -74,7 +82,7 @@ export async function POST(req: NextRequest) {
 
   const reminder: Reminder = {
     id: body.id,
-    kind: body.kind === "meal-confirm" ? "meal-confirm" : "split",
+    kind,
     parentInjectionId: body.parentInjectionId,
     units: body.units,
     triggerAt: body.triggerAt,

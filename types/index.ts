@@ -181,20 +181,27 @@ export interface InsulinLog {
 }
 
 /** Nature d'un rappel serveur. */
-export type ReminderKind = 'split' | 'meal-confirm';
+export type ReminderKind = 'split' | 'meal-confirm' | 'post-session';
 
 /**
  * Rappel programmé côté serveur (KV) et tiré par le cron, donc reçu même
- * app fermée. Deux natures :
- *  - 'split'        : 2e injection d'un split dose (couverture FPU)
+ * app fermée. Trois natures :
+ *  - 'split'        : 2e injection d'un split dose (couverture lipides)
  *  - 'meal-confirm' : confirmation des glucides réellement mangés (T+20)
+ *  - 'post-session' : appoint qui couvre les glucides du sport encore en
+ *                     digestion, 30 min après la fin de la séance
+ *                     (`lib/post-session-insulin.ts`)
  */
 export interface Reminder {
   id: string;
   /** Absent sur les rappels créés avant septembre 2026 → lire comme 'split'. */
   kind?: ReminderKind;
+  /**
+   * split / meal-confirm : l'injection d'origine. post-session : l'id de la
+   * `DeclaredSportSession`, qui n'a pas d'injection parente.
+   */
   parentInjectionId: string;
-  /** split : dose à faire · meal-confirm : dose déjà faite (contexte). */
+  /** split & post-session : dose à faire · meal-confirm : dose déjà faite. */
   units: number;
   triggerAt: string;        // ISO timestamp
   createdAt: string;        // ISO
@@ -464,5 +471,14 @@ export interface DeclaredSportSession {
   endedAt?: string;
   whoopWorkoutId?: string;
   cancelledAt?: string;
+  /**
+   * ISO du moment où l'appoint post-séance a été programmé (sept. 2026).
+   * Sert UNIQUEMENT d'idempotence : le `useEffect` qui détecte la fin de
+   * séance tourne à chaque tick de 60 s, ce drapeau l'empêche de
+   * reprogrammer le rappel soixante fois par heure. Sa présence ne dit rien
+   * de ce qu'Ethan a fait du rappel — il peut l'avoir enregistré, ignoré,
+   * ou n'avoir jamais eu d'appoint à faire (`skipReason`).
+   */
+  appointScheduledAt?: string;
   createdAt: string;
 }

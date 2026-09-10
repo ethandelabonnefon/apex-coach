@@ -22,7 +22,7 @@ import {
   type CarbDelta,
   type TopUpContext,
 } from "./carbs-on-board";
-import type { InsulinLog } from "@/types";
+import type { DeclaredSportSession, InsulinLog } from "@/types";
 import { buildHypoCarbEntry } from "./hypo-resucrage";
 import { HYPO_THRESHOLD } from "./dose-validation";
 
@@ -951,25 +951,40 @@ test("un CarbEntry portant à la fois hypoEventId ET sportSessionId reste non-co
   assert.ok(cob.carbsRemainingG > 0, "les grammes restent visibles dans le COB");
 });
 
-test("F5 : les glucides d'une séance ANNULÉE redeviennent à couvrir", () => {
-  const now = Date.now();
-  const entry = {
-    id: "c1",
-    carbsGrams: 56,
-    eatenAt: new Date(now - 20 * 60_000).toISOString(),
-    sportSessionId: "s1",
-  };
-  const common = {
-    insulinLogs: [],
-    carbEntries: [entry],
-    isf: 100,
-    ratios: { morning: 6.67, lunch: 10, snack: 8.33, dinner: 10 },
-    nowMs: now,
-  };
+const NOW_F5 = Date.now();
 
+/** Padel de 90 min démarré il y a `startedMinAgo` minutes. */
+function padel(startedMinAgo: number, over: Partial<DeclaredSportSession> = {}): DeclaredSportSession {
+  return {
+    id: "s1",
+    sportKey: "padel",
+    family: "intermittent",
+    startAt: new Date(NOW_F5 - startedMinAgo * 60_000).toISOString(),
+    plannedDurationMin: 90,
+    createdAt: new Date(NOW_F5 - (startedMinAgo + 10) * 60_000).toISOString(),
+    ...over,
+  };
+}
+
+const F5_COMMON = {
+  insulinLogs: [],
+  carbEntries: [
+    {
+      id: "c1",
+      carbsGrams: 56,
+      eatenAt: new Date(NOW_F5 - 20 * 60_000).toISOString(),
+      sportSessionId: "s1",
+    },
+  ],
+  isf: 100,
+  ratios: { morning: 6.67, lunch: 10, snack: 8.33, dinner: 10 },
+  nowMs: NOW_F5,
+};
+
+test("F5 : les glucides d'une séance ANNULÉE redeviennent à couvrir", () => {
   const active = computeCarbsOnBoard({
-    ...common,
-    declaredSportSessions: [{ id: "s1" }],
+    ...F5_COMMON,
+    declaredSportSessions: [padel(10)],
   });
   assert.equal(
     active.insulinNeededU,
@@ -978,8 +993,10 @@ test("F5 : les glucides d'une séance ANNULÉE redeviennent à couvrir", () => {
   );
 
   const cancelled = computeCarbsOnBoard({
-    ...common,
-    declaredSportSessions: [{ id: "s1", cancelledAt: new Date(now - 5 * 60_000).toISOString() }],
+    ...F5_COMMON,
+    declaredSportSessions: [
+      padel(10, { cancelledAt: new Date(NOW_F5 - 5 * 60_000).toISOString() }),
+    ],
   });
   assert.ok(
     cancelled.insulinNeededU > 0,
@@ -989,4 +1006,55 @@ test("F5 : les glucides d'une séance ANNULÉE redeviennent à couvrir", () => {
     cancelled.carbsRemainingG > 0,
     "les grammes comptent toujours dans le COB, annulée ou non",
   );
+});
+
+test("LE correctif du 10 septembre : l'exemption s'arrête à la FIN de la séance", () => {
+  // Ethan a mangé 66 g avant sa course puis 10 g pendant. Trente minutes
+  // après la fin, il est monté de 68 à 210 mg/dL : les 43 g encore en
+  // digestion n'étaient couverts par rien, et l'app ne les voyait même pas.
+  // Pendant l'effort le muscle les capte sans insuline ; à l'arrêt, non.
+  const pendant = computeCarbsOnBoard({
+    ...F5_COMMON,
+    declaredSportSessions: [padel(10)], // commencée il y a 10 min, 90 prévues
+  });
+  assert.equal(pendant.insulinNeededU, 0, "pendant l'effort : toujours exempté");
+
+  const apres = computeCarbsOnBoard({
+    ...F5_COMMON,
+    declaredSportSessions: [padel(120)], // commencée il y a 2 h, donc finie
+  });
+  assert.ok(
+    apres.insulinNeededU > 0,
+    `séance terminée : le reste redevient à couvrir, reçu ${apres.insulinNeededU} U`,
+  );
+  assert.equal(
+    apres.sources[0].isNonCovering,
+    false,
+    "la source n'est plus marquée non-couvrante une fois la séance finie",
+  );
+});
+
+test("l'heure de fin mesurée par Whoop décide de l'exemption, pas la durée annoncée", () => {
+  // 90 min annoncées mais Whoop a mesuré 40 : à T+60 la séance est finie
+  // depuis 20 min, l'exemption doit être tombée.
+  const cob = computeCarbsOnBoard({
+    ...F5_COMMON,
+    declaredSportSessions: [
+      padel(60, {
+        actualDurationMin: 40,
+        endedAt: new Date(NOW_F5 - 20 * 60_000).toISOString(),
+        whoopWorkoutId: "w1",
+      }),
+    ],
+  });
+  assert.ok(
+    cob.insulinNeededU > 0,
+    "la fin mesurée (il y a 20 min) prime sur les 90 min annoncées",
+  );
+});
+
+test("une séance inconnue du store reste exemptée — on ne date pas une fin qu'on n'a pas", () => {
+  const cob = computeCarbsOnBoard({ ...F5_COMMON, declaredSportSessions: [] });
+  assert.equal(cob.insulinNeededU, 0);
+  assert.equal(cob.sources[0].isNonCovering, true);
 });

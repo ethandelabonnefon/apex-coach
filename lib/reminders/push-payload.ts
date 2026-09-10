@@ -7,7 +7,7 @@
 import type { Reminder } from "@/types";
 
 export interface ReminderPush {
-  type: "split" | "meal-confirm";
+  type: "split" | "meal-confirm" | "post-session";
   title: string;
   body: string;
   value?: number;
@@ -38,6 +38,19 @@ export function buildReminderPush(reminder: Reminder): ReminderPush {
       value: reminder.carbsEstimated,
       url: "/diabete",
       tag: `meal-confirm-${reminder.id}`,
+    };
+  }
+
+  if (kind === "post-session") {
+    // `mealLabel` porte ici le nom du sport ("course à pied").
+    const sportHint = reminder.mealLabel ? ` ta ${reminder.mealLabel}` : " ta séance";
+    return {
+      type: "post-session",
+      title: "Appoint post-séance",
+      body: `Les glucides pris pour${sportHint} finissent d'être absorbés : ${reminder.units}U proposées. Vérifie ta glycémie dans l'app avant d'injecter.${lateHint}`,
+      value: reminder.units,
+      url: "/diabete",
+      tag: `post-session-${reminder.id}`,
     };
   }
 
