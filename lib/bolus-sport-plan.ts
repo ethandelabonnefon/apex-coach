@@ -37,6 +37,8 @@ export const START_TARGET_OTHER = 130;
  * toute la durée : si elle passe sous ce plancher, il manque des glucides.
  */
 export const DURING_FLOOR = 80;
+/** Plancher de réalisme du prédicteur (mg/dL) — même valeur que son clamp. */
+export const PREDICTION_CLAMP_FLOOR = 40;
 /** Sous ce total, on ne propose rien : une bouchée ne vaut pas un conseil. */
 export const MIN_ADVISED_CARBS_G = 15;
 /** Montée glycémique par gramme de glucides rapides (mg/dL/g), comme le briefing. */
@@ -160,7 +162,18 @@ export function computeBolusSportPlan(input: {
   // Les deux écarts ne s'additionnent pas : les glucides pris avant le
   // départ relèvent TOUTE la courbe, donc le creux aussi. On retient le
   // plus exigeant des deux.
-  const raw = Math.max(startGapCarbsG, duringGapCarbsG);
+  //
+  // Quand la courbe touche son plancher de réalisme (40 mg/dL, clamp du
+  // prédicteur), la profondeur réelle du creux est masquée : « 40 » peut
+  // vouloir dire −20 comme −200. Mesuré : 30 g à 95 mg/dL, 0 U, course de
+  // 60 min → creux « 40 » → 15 g conseillés, alors que la seule course
+  // prélève ~40 g. Dans ce cas on se rabat sur la règle de durée du
+  // consensus, qui ne dépend pas de la courbe.
+  const curveBottomedOut = predictedDuringMin !== null && predictedDuringMin <= PREDICTION_CLAMP_FLOOR;
+  const durationFallback = curveBottomedOut
+    ? exerciseCarbsForDuration(family, durationMin, iob)
+    : 0;
+  const raw = Math.max(startGapCarbsG, duringGapCarbsG, durationFallback);
   const carbsG = raw > 0 ? Math.min(MAX_PRE_SPORT_CARBS_G, Math.max(MIN_ADVISED_CARBS_G, raw)) : 0;
   const carbsReason: CarbsReason =
     carbsG === 0

@@ -60,11 +60,18 @@ import {
 } from "@/lib/exercise-insulin-adjustment";
 import {
   SPORTS,
+  findMatchingSession,
   getSport,
   resolveBriefingSessionState,
   sportSessionEndMs,
   type SportDefinition,
 } from "@/lib/sports";
+import { computeBolusSportPlan } from "@/lib/bolus-sport-plan";
+import {
+  carbSensitivity,
+  upcomingExerciseImpactMgDl,
+  type UpcomingExercise,
+} from "@/lib/glucose-prediction";
 import {
   computePostSessionAppoint,
   isAppointBlockedByGlucose,
@@ -342,8 +349,31 @@ export default function DiabetePage() {
   const [mealTimeTouched, setMealTimeTouched] = useState(false);
   const [currentGlucose, setCurrentGlucose] = useState(120);
   const [isPreWorkout, setIsPreWorkout] = useState(false);
-  const [workoutType, setWorkoutType] = useState<"muscu" | "running" | null>(null);
+  // Briefing au moment du bolus (sept. 2026) : le toggle ouvre le MÊME
+  // sélecteur que la section briefing (12 sports, 3 familles), plus le
+  // binaire Muscu/Running. `workoutType` reste dérivé pour tous les
+  // consommateurs existants (calculateBolus, notes, plafond).
+  const [preWorkoutSportKey, setPreWorkoutSportKey] = useState<string | null>(null);
   const [minutesUntilWorkout, setMinutesUntilWorkout] = useState(60);
+  const [preWorkoutDurationMin, setPreWorkoutDurationMin] = useState(45);
+  const [preWorkoutDurationTouched, setPreWorkoutDurationTouched] = useState(false);
+  // Case « et je prends X g » — cochée par défaut quand des glucides sont
+  // conseillés. Décocher enregistre l'injection et déclare la séance sans
+  // taguer de glucides.
+  const [preWorkoutTakeCarbs, setPreWorkoutTakeCarbs] = useState(true);
+  const preWorkoutSport = getSport(preWorkoutSportKey);
+  const workoutType: ExerciseSource | null = preWorkoutSport?.family ?? null;
+  const safePreWorkoutDurationMin = Math.min(
+    300,
+    Number.isFinite(preWorkoutDurationMin) ? Math.max(0, preWorkoutDurationMin) : 0,
+  );
+  function handleSelectPreWorkoutSport(key: string) {
+    setPreWorkoutSportKey(key);
+    if (!preWorkoutDurationTouched) {
+      const def = getSport(key);
+      if (def) setPreWorkoutDurationMin(def.defaultDurationMin);
+    }
+  }
 
   // ─── Phase 11 — FPU + trend arrow ─────────────
   const [fatGrams, setFatGrams] = useState<number>(0);
@@ -658,6 +688,32 @@ export default function DiabetePage() {
     ]
   );
 
+  // ─── Effort à venir, pour la simulation du plafond (sept. 2026) ─────
+  // L'effort est modélisé comme un PRÉLÈVEMENT de glucose (g/h du consensus
+  // Riddell) converti via la sensibilité du créneau — voir
+  // `upcomingExerciseImpactMgDl`. Sans lui, le plafond validait une dose
+  // « dont la trajectoire tient » sans avoir vu la course.
+  const upcomingExercise = useMemo<UpcomingExercise | undefined>(() => {
+    if (!isPreWorkout || !workoutType) return undefined;
+    const csf = carbSensitivity(
+      diabetesConfig.insulinSensitivityFactor,
+      ratioForMeal(diabetesConfig.ratios, mealTime),
+    );
+    return {
+      startMinute: minutesUntilWorkout,
+      durationMin: safePreWorkoutDurationMin,
+      impactMgDl: upcomingExerciseImpactMgDl(workoutType, safePreWorkoutDurationMin, csf),
+    };
+  }, [
+    isPreWorkout,
+    workoutType,
+    minutesUntilWorkout,
+    safePreWorkoutDurationMin,
+    diabetesConfig.insulinSensitivityFactor,
+    diabetesConfig.ratios,
+    mealTime,
+  ]);
+
   // Le calculateur produit une dose candidate ; le prédicteur la valide.
   // Sans ce garde-fou, l'app propose des doses que son propre moteur
   // annonce comme hypoglycémiantes (cas mesuré : 10 U → 40 mg/dL prédits).
@@ -679,6 +735,7 @@ export default function DiabetePage() {
         isf: diabetesConfig.insulinSensitivityFactor,
         ratios: diabetesConfig.ratios,
         sport: recentExercise ?? undefined,
+        upcomingExercise,
         // C1 : le split FPU programmé par le MÊME clic « Enregistrer
         // l'injection » (cf. handleLogInjection plus bas) doit être vu par
         // le plafond — sinon il valide une dose que l'app reprogramme
@@ -700,6 +757,7 @@ export default function DiabetePage() {
       bolusResult.splitDose,
       bolusResult.carbBolus,
       recentExercise,
+      upcomingExercise,
       glucoseForBolus,
       liveGlucoseAgeMin,
       insulinLogs,
@@ -753,7 +811,8 @@ export default function DiabetePage() {
   function handleLogInjection() {
     if (finalUnits <= 0) return;
     const overridden = unitsOverride !== null && unitsOverride !== cappedDose.units;
-    const baseNote = isPreWorkout ? `pré-${workoutType}` : "";
+    const baseNote =
+      isPreWorkout && preWorkoutSport ? `pré-${preWorkoutSport.label.toLowerCase()}` : "";
     // I4 (revue finale) : le calculateur proposait la CANDIDATE
     // (`cappedDose.originalUnits`), pas la dose déjà plafonnée
     // (`cappedDose.units`) — la note d'override pointait sur le mauvais
@@ -780,6 +839,24 @@ export default function DiabetePage() {
     const splitNote = bolusResult.splitDose ? `split 1/2` : "";
     const notes = [baseNote, cappedNote, overrideNote, splitNote].filter(Boolean).join(" · ");
     const injectionId = crypto.randomUUID();
+
+    // Briefing au moment du bolus (sept. 2026) : la dose réduite pour un
+    // effort DÉCLARE la séance et tague les glucides acceptés — la même
+    // écriture que la section briefing. C'est ce fil qui manquait : sans
+    // lui, rien en aval (exemption, appoint post-séance, sensibilité,
+    // apprentissage, nuit) ne savait pourquoi la dose était basse.
+    let sportSessionId: string | undefined;
+    if (isPreWorkout && preWorkoutSport) {
+      const takeCarbs =
+        preWorkoutTakeCarbs && bolusSportPlan !== null && bolusSportPlan.carbsG > 0;
+      sportSessionId = declareSportSession(
+        preWorkoutSport,
+        Date.now() + minutesUntilWorkout * 60_000,
+        safePreWorkoutDurationMin,
+        takeCarbs ? bolusSportPlan.carbsG : null,
+      );
+    }
+
     addInsulinLog({
       id: injectionId,
       units: finalUnits,
@@ -788,6 +865,7 @@ export default function DiabetePage() {
       carbsGrams,
       glucoseBefore: glucoseForBolus,
       notes,
+      sportSessionId,
       injectedAt: new Date(),
       fatGrams: fatGrams > 0 ? fatGrams : undefined,
       proteinGrams: proteinGrams > 0 ? proteinGrams : undefined,
@@ -850,6 +928,41 @@ export default function DiabetePage() {
 
     setCarbsUncertain(false);
     setUnitsOverride(null);
+    // La séance est déclarée : le toggle se referme, sinon il réduirait
+    // aussi la dose suivante pour le même effort.
+    if (isPreWorkout) {
+      setIsPreWorkout(false);
+      setPreWorkoutSportKey(null);
+    }
+  }
+
+  /**
+   * Pas d'injection (dose ramenée à 0 par la prédiction) mais un effort à
+   * déclarer : même écriture de séance + glucides que l'enregistrement,
+   * sans InsulinLog. Confirmation native comme partout.
+   */
+  function handleDeclareWithoutInjection() {
+    if (!isPreWorkout || !preWorkoutSport) return;
+    const takeCarbs =
+      preWorkoutTakeCarbs && bolusSportPlan !== null && bolusSportPlan.carbsG > 0;
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        takeCarbs
+          ? `Déclarer ${preWorkoutSport.label.toLowerCase()} dans ${minutesUntilWorkout} min et enregistrer ${bolusSportPlan!.carbsG} g de glucides, sans injection ?`
+          : `Déclarer ${preWorkoutSport.label.toLowerCase()} dans ${minutesUntilWorkout} min, sans injection ?`,
+      )
+    ) {
+      return;
+    }
+    declareSportSession(
+      preWorkoutSport,
+      Date.now() + minutesUntilWorkout * 60_000,
+      safePreWorkoutDurationMin,
+      takeCarbs ? bolusSportPlan!.carbsG : null,
+    );
+    setIsPreWorkout(false);
+    setPreWorkoutSportKey(null);
   }
 
   function handleDeleteInjection(id: string, units: number) {
@@ -1387,15 +1500,43 @@ export default function DiabetePage() {
   function createBriefingSession(sport: SportDefinition, carbsGrams: number | null) {
     if (briefingSessionSubmittedRef.current) return;
     briefingSessionSubmittedRef.current = true;
-    const sessionId = crypto.randomUUID();
-    addDeclaredSportSession({
-      id: sessionId,
-      sportKey: sport.key,
-      family: sport.family,
-      startAt: new Date(Date.now() + briefingMinutes * 60_000).toISOString(),
-      plannedDurationMin: safeBriefingDurationMin,
-      createdAt: new Date().toISOString(),
-    });
+    declareSportSession(
+      sport,
+      Date.now() + briefingMinutes * 60_000,
+      safeBriefingDurationMin,
+      carbsGrams,
+    );
+  }
+
+  /**
+   * Déclare une séance (ou réutilise celle qui existe déjà à ± 45 min du
+   * même départ) et tague les glucides acceptés. Partagée par la section
+   * briefing et par le calculateur (briefing au moment du bolus, sept.
+   * 2026) : une seule écriture, pas deux systèmes. Renvoie l'id de la
+   * séance, pour relier l'injection.
+   */
+  function declareSportSession(
+    sport: SportDefinition,
+    startAtMs: number,
+    durationMin: number,
+    carbsGrams: number | null,
+  ): string {
+    const existing = findMatchingSession(
+      declaredSportSessions,
+      startAtMs,
+      SAME_SESSION_TOLERANCE_MIN * 60_000,
+    );
+    const sessionId = existing?.id ?? crypto.randomUUID();
+    if (!existing) {
+      addDeclaredSportSession({
+        id: sessionId,
+        sportKey: sport.key,
+        family: sport.family,
+        startAt: new Date(startAtMs).toISOString(),
+        plannedDurationMin: durationMin,
+        createdAt: new Date().toISOString(),
+      });
+    }
     if (carbsGrams !== null && carbsGrams > 0) {
       addCarbEntry({
         id: crypto.randomUUID(),
@@ -1405,6 +1546,7 @@ export default function DiabetePage() {
         label: `Avant ${sport.label.toLowerCase()}`,
       });
     }
+    return sessionId;
   }
 
   // Annulation — confirmation native, libellé qui dit ce qu'elle évite (une
@@ -1430,88 +1572,26 @@ export default function DiabetePage() {
     updateSplitDoseReminder(reminderId, { triggerAt: newTrigger.toISOString() });
   }
 
-  // ─── Pre-workout advisor (Bloc 1.4 + Bloc 6.3) ───────────────────
-  const advisorState = useMemo(() => {
+  // ─── Plan sport au moment du bolus (sept. 2026) ─────────────────────
+  // LIT la courbe du plafond pour la dose retenue — un seul modèle décide
+  // de la réduction ET des glucides. Cf. lib/bolus-sport-plan.ts.
+  const bolusSportPlan = useMemo(() => {
     if (!isPreWorkout || !workoutType) return null;
-    const isf = diabetesConfig.insulinSensitivityFactor;
-    const activeDuration = diabetesConfig.insulinActiveDuration;
-    // Estimation simple de la baisse causée par l'IOB d'ici le sport
-    const fractionDuringWindow = Math.min(1, minutesUntilWorkout / activeDuration);
-    const estimatedDropFromIOB = iob.totalIOB * isf * fractionDuringWindow;
-    const estimatedGlucoseAtWorkout = Math.round(currentGlucose - estimatedDropFromIOB);
-
-    // Phase 11 Bloc 6.3 — impact réel basé sur les séances trackées
-    // (fallback sur les valeurs académiques si < 3 séances).
-    const personalizedImpact = computeAvgSportImpact(
-      enrichedSportSessions,
-      workoutType,
-      3,
-    );
-    const usedPersonalImpact = personalizedImpact !== null;
-
-    let tone: 'safe' | 'caution' | 'risk' = 'safe';
-    let message = '';
-    let carbsNeeded = 0;
-
-    if (workoutType === 'muscu') {
-      if (estimatedGlucoseAtWorkout < 120) {
-        tone = 'risk';
-        carbsNeeded = Math.max(15, Math.ceil((140 - estimatedGlucoseAtWorkout) / 4));
-        message = `Risque d'hypo en début de séance. Mange ${carbsNeeded}g de glucides avant.`;
-      } else if (estimatedGlucoseAtWorkout > 250) {
-        tone = 'caution';
-        message = "Glycémie trop haute pour la muscu. Fais ta correction et attends 30min.";
-      } else {
-        tone = 'safe';
-        if (usedPersonalImpact) {
-          const sign = personalizedImpact >= 0 ? "+" : "";
-          message = `Tu es safe pour la muscu. D'après tes séances, ta glycémie va ${personalizedImpact >= 0 ? "monter" : "descendre"} de ${sign}${personalizedImpact} mg/dL en moyenne.`;
-        } else {
-          message = "Tu es safe pour la muscu. La glycémie va probablement monter de +30 à +50 mg/dL pendant la séance.";
-        }
-      }
-    } else {
-      // running
-      if (estimatedGlucoseAtWorkout < 140) {
-        tone = 'risk';
-        carbsNeeded = Math.max(15, Math.ceil((150 - estimatedGlucoseAtWorkout) / 4));
-        message = `Risque d'hypo en running. Mange ${carbsNeeded}g de glucides rapides avant.`;
-      } else if (estimatedGlucoseAtWorkout > 250) {
-        tone = 'caution';
-        message = "Glycémie trop haute. Vérifie les cétones avant de courir.";
-      } else {
-        tone = 'safe';
-        if (usedPersonalImpact) {
-          const sign = personalizedImpact >= 0 ? "+" : "";
-          message = `Tu es safe pour le running. D'après tes séances, ta glycémie va ${personalizedImpact >= 0 ? "monter" : "descendre"} de ${sign}${personalizedImpact} mg/dL en moyenne. Emporte du sucre au cas où.`;
-        } else {
-          message = "Tu es safe pour le running. Emporte du sucre au cas où.";
-        }
-      }
-    }
-
-    // Glycémie estimée pendant le sport — affinée si personalisée
-    const estimatedDuringWorkout = usedPersonalImpact
-      ? estimatedGlucoseAtWorkout + personalizedImpact
-      : estimatedGlucoseAtWorkout;
-
-    return {
-      tone,
-      message,
-      estimatedGlucoseAtWorkout,
-      estimatedDuringWorkout,
-      carbsNeeded,
-      personalizedImpact,
-      usedPersonalImpact,
-    };
+    return computeBolusSportPlan({
+      family: workoutType,
+      minutesUntilWorkout,
+      durationMin: safePreWorkoutDurationMin,
+      curveWithReducedDose: cappedDose.curve,
+      iobAfterDoseU: iob.totalIOB + cappedDose.units,
+    });
   }, [
     isPreWorkout,
     workoutType,
     minutesUntilWorkout,
+    safePreWorkoutDurationMin,
+    cappedDose.curve,
+    cappedDose.units,
     iob.totalIOB,
-    currentGlucose,
-    diabetesConfig,
-    enrichedSportSessions,
   ]);
 
   // ─── Phase G — Bedtime Advisor inputs ────────────────
@@ -2158,31 +2238,8 @@ export default function DiabetePage() {
           </p>
         ) : (
           <div className="space-y-3 animate-slide-up">
-            {/* Sélecteur sport — 12 sports rangés en 3 familles (sept. 2026) */}
-            <div className="space-y-3">
-              {BRIEFING_SPORT_GROUPS.map((group) => (
-                <div key={group.title}>
-                  <p className="label mb-1.5">{group.title}</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {SPORTS.filter((s) => group.families.includes(s.family)).map((sport) => {
-                      const Icon = SPORT_ICONS[sport.key] ?? Activity;
-                      const active = briefingSportKey === sport.key;
-                      return (
-                        <button
-                          key={sport.key}
-                          type="button"
-                          onClick={() => handleSelectBriefingSport(sport.key)}
-                          className={`flex flex-col items-center justify-center gap-1 min-h-11 py-2 px-1 text-[11px] font-medium rounded-lg border transition-all tap-scale ${sportChipClasses(group.token, active)}`}
-                        >
-                          <Icon className="w-3.5 h-3.5" />
-                          <span className="leading-tight text-center">{sport.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
+            {/* Sélecteur sport — composant partagé avec le calculateur */}
+            <SportPicker value={briefingSportKey} onSelect={handleSelectBriefingSport} />
 
             {/* Quand fais-tu ton sport ? — boutons discrets (le slider était
                 trompeur : les repères ne correspondaient pas à l'échelle). */}
@@ -2829,7 +2886,7 @@ export default function DiabetePage() {
               type="button"
               onClick={() => {
                 setIsPreWorkout(!isPreWorkout);
-                if (isPreWorkout) setWorkoutType(null);
+                if (isPreWorkout) setPreWorkoutSportKey(null);
               }}
               className={`relative w-12 h-6 rounded-full transition-colors shrink-0 ${
                 isPreWorkout ? "bg-diabete" : "bg-border-strong"
@@ -2846,32 +2903,8 @@ export default function DiabetePage() {
 
           {isPreWorkout && (
             <div className="space-y-3 animate-slide-up">
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setWorkoutType("muscu")}
-                  className={`flex items-center gap-2 justify-center py-2.5 text-xs font-medium rounded-lg border transition-all tap-scale ${
-                    workoutType === "muscu"
-                      ? "bg-muscu/15 border-muscu/40 text-muscu"
-                      : "bg-bg-tertiary border-border-subtle text-text-secondary"
-                  }`}
-                >
-                  <Dumbbell className="w-3.5 h-3.5" />
-                  Muscu
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWorkoutType("running")}
-                  className={`flex items-center gap-2 justify-center py-2.5 text-xs font-medium rounded-lg border transition-all tap-scale ${
-                    workoutType === "running"
-                      ? "bg-running/15 border-running/40 text-running"
-                      : "bg-bg-tertiary border-border-subtle text-text-secondary"
-                  }`}
-                >
-                  <Footprints className="w-3.5 h-3.5" />
-                  Running
-                </button>
-              </div>
+              <SportPicker value={preWorkoutSportKey} onSelect={handleSelectPreWorkoutSport} />
+
               <BolusInput
                 label="Dans combien de minutes"
                 unit="min"
@@ -2881,52 +2914,122 @@ export default function DiabetePage() {
                 max={360}
               />
 
-              {/* Pre-workout advisor */}
-              {advisorState && (
-                <div
-                  className={`rounded-xl p-3 border ${
-                    advisorState.tone === 'risk'
-                      ? 'bg-error/10 border-error/30 text-error'
-                      : advisorState.tone === 'caution'
-                      ? 'bg-warning/10 border-warning/30 text-warning'
-                      : 'bg-success/10 border-success/30 text-success'
-                  }`}
-                >
-                  <div className="flex items-start gap-2">
-                    {workoutType === 'muscu' ? (
-                      <Dumbbell className="w-4 h-4 shrink-0 mt-0.5" />
-                    ) : (
-                      <Footprints className="w-4 h-4 shrink-0 mt-0.5" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold leading-snug">
-                        {advisorState.message}
-                      </p>
-                      <p className="text-[11px] mt-1 opacity-80">
-                        Glycémie estimée à T+{minutesUntilWorkout}min :{" "}
-                        <span className="num font-semibold">
-                          {advisorState.estimatedGlucoseAtWorkout}
-                        </span>{" "}
-                        mg/dL
-                        {advisorState.usedPersonalImpact && (
-                          <>
-                            {" · "}
-                            <span className="num font-semibold">
-                              ~{advisorState.estimatedDuringWorkout}
-                            </span>{" "}
-                            pendant
-                          </>
-                        )}
-                      </p>
-                      {advisorState.usedPersonalImpact && (
-                        <p className="text-[10px] mt-0.5 opacity-60">
-                          basé sur tes séances trackées
+              <div>
+                <p className="label mb-1.5">Durée prévue</p>
+                <div className="relative">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={preWorkoutDurationMin}
+                    onChange={(e) => {
+                      setPreWorkoutDurationTouched(true);
+                      const v = Number(e.target.value);
+                      setPreWorkoutDurationMin(Number.isFinite(v) ? Math.max(0, v) : 0);
+                    }}
+                    min={0}
+                    max={300}
+                    className="num w-full min-h-11 bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-2.5 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-text-tertiary uppercase tracking-wide pointer-events-none">
+                    min
+                  </span>
+                </div>
+              </div>
+
+              {!preWorkoutSport && (
+                <p className="text-[11px] text-text-tertiary italic px-1">
+                  Choisis un sport ci-dessus pour voir la dose et les glucides.
+                </p>
+              )}
+
+              {/* Plan sport : dose réduite ET glucides, sur la même courbe
+                  (sept. 2026). Remplace l'ancien advisor qui empilait
+                  −50 % ET « mange 15 g » sans les confronter. */}
+              {preWorkoutSport && bolusSportPlan && (() => {
+                const plan = bolusSportPlan;
+                const Icon = SPORT_ICONS[preWorkoutSport.key] ?? Activity;
+                const reductionLabel = bolusResult.adjustments.find((a) => a.includes("% bolus"));
+                const tone: "risk" | "caution" | "safe" =
+                  plan.carbsG > 0
+                    ? plan.predictedDuringMin !== null && plan.predictedDuringMin < 70
+                      ? "risk"
+                      : "caution"
+                    : "safe";
+                return (
+                  <div
+                    className={`rounded-xl p-3 border ${
+                      tone === "risk"
+                        ? "bg-error/10 border-error/30"
+                        : tone === "caution"
+                        ? "bg-warning/10 border-warning/30"
+                        : "bg-success/10 border-success/30"
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <Icon
+                        className={`w-4 h-4 shrink-0 mt-0.5 ${
+                          tone === "risk" ? "text-error" : tone === "caution" ? "text-warning" : "text-success"
+                        }`}
+                      />
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="text-xs font-semibold text-text-primary leading-snug">
+                          {preWorkoutSport.label} dans{" "}
+                          <span className="num">{minutesUntilWorkout}</span> min ·{" "}
+                          <span className="num">{safePreWorkoutDurationMin}</span> min
                         </p>
-                      )}
+                        <p className="text-[11px] text-text-secondary">
+                          {reductionLabel
+                            ? cappedDose.capped
+                              ? `Dose réduite pour l'effort (${reductionLabel.replace(" bolus", "").replace(/\s*\(.*\)/, "")}), puis ramenée à ${cappedDose.units} U par la prédiction`
+                              : `Dose réduite pour l'effort (${reductionLabel.replace(" bolus", "").replace(/\s*\(.*\)/, "")}) : ${cappedDose.units} U`
+                            : workoutType === "muscu"
+                            ? "Pas de réduction : la muscu fait plutôt monter la glycémie."
+                            : "Trop loin pour réduire la dose : l'insuline du repas aura fini d'agir."}
+                        </p>
+                        {plan.predictedAtStart !== null ? (
+                          <p className="text-[11px] text-text-secondary">
+                            Glycémie prédite au départ :{" "}
+                            <span className="num font-semibold text-text-primary">{plan.predictedAtStart}</span>
+                            {plan.predictedDuringMin !== null && (
+                              <>
+                                {" "}· minimum pendant :{" "}
+                                <span className="num font-semibold text-text-primary">{plan.predictedDuringMin}</span>
+                              </>
+                            )}{" "}
+                            mg/dL
+                          </p>
+                        ) : (
+                          <p className="text-[11px] text-text-tertiary">
+                            Pas de prédiction disponible (capteur absent ou lecture périmée) — conseil sur la seule durée.
+                          </p>
+                        )}
+                        <p
+                          className={`text-xs font-semibold ${
+                            plan.carbsG > 0
+                              ? tone === "risk" ? "text-error" : "text-warning"
+                              : "text-success"
+                          }`}
+                        >
+                          {plan.carbsG > 0
+                            ? `Prends ${plan.carbsG} g de glucides rapides avant de partir`
+                            : "Rien à manger avant : la dose réduite suffit"}
+                        </p>
+                        {plan.carbsG > 0 && (
+                          <label className="flex items-center gap-2 text-[11px] text-text-secondary cursor-pointer select-none pt-1">
+                            <input
+                              type="checkbox"
+                              checked={preWorkoutTakeCarbs}
+                              onChange={(e) => setPreWorkoutTakeCarbs(e.target.checked)}
+                              className="accent-[var(--diabete)] w-4 h-4"
+                            />
+                            et je prends {plan.carbsG} g (enregistrés avec la séance)
+                          </label>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
         </div>
@@ -3051,29 +3154,10 @@ export default function DiabetePage() {
             </button>
           </div>
 
-          {/* Plafonnement prédictif (septembre 2026) */}
-          {isPreWorkout ? (
-            // I6 (revue finale) : `capDoseByPrediction` ne modélise PAS la
-            // séance à venir (calculateBolus réduit la candidate pour elle,
-            // mais le plafond simule sans son effet hypoglycémiant). Que
-            // `cappedDose` soit capped ou non ici ne dit donc RIEN sur la
-            // sécurité réelle de la dose vis-à-vis du sport — afficher
-            // « ta trajectoire tient » serait promettre à moitié. On le dit
-            // explicitement plutôt que d'afficher un badge qui n'en est pas
-            // un pour ce cas précis.
-            <div className="mt-3 rounded-xl border border-warning/25 bg-warning/5 p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <ShieldAlert className="w-4 h-4 text-warning" />
-                <p className="text-sm font-semibold text-text-primary">
-                  Dose non vérifiée par la prédiction
-                </p>
-              </div>
-              <p className="text-xs text-text-secondary">
-                Séance {workoutType === "muscu" ? "muscu" : workoutType === "running" ? "running" : "sportive"}{" "}
-                prévue non modélisée par le plafond prédictif — vérifie ta glycémie avant de partir.
-              </p>
-            </div>
-          ) : cappedDose.capped ? (
+          {/* Plafonnement prédictif (septembre 2026). La séance déclarée au
+              toggle est désormais DANS la simulation (`upcomingExercise`) :
+              plus de bannière « non modélisée ». */}
+          {cappedDose.capped ? (
             <div className="mt-3 rounded-xl border border-warning/25 bg-warning/5 p-3">
               <div className="flex items-center gap-2 mb-1">
                 <ShieldAlert className="w-4 h-4 text-warning" />
@@ -3310,6 +3394,22 @@ export default function DiabetePage() {
           >
             Enregistrer l&apos;injection ({finalUnits}U)
           </button>
+
+          {/* Dose ramenée à zéro par la prédiction, mais une séance à
+              déclarer : le flux doit rester complet (séance + glucides),
+              sinon Ethan repasse par deux écrans. */}
+          {isPreWorkout && preWorkoutSport && finalUnits <= 0 && (
+            <button
+              type="button"
+              onClick={handleDeclareWithoutInjection}
+              className="w-full mt-2 min-h-11 border border-diabete/40 text-diabete font-semibold py-3 rounded-xl hover:bg-diabete/10 transition-colors tap-scale"
+            >
+              Déclarer la séance sans injection
+              {preWorkoutTakeCarbs && bolusSportPlan && bolusSportPlan.carbsG > 0
+                ? ` (+ ${bolusSportPlan.carbsG} g)`
+                : ""}
+            </button>
+          )}
 
           {bolusResult.reasoning.length > 0 && (
             <details className="mt-3">
@@ -3551,6 +3651,47 @@ export default function DiabetePage() {
  * du toggle du briefing, pour que l'annulation reste toujours trouvable
  * (sinon une séance fantôme réduirait le prochain bolus sans raison).
  */
+/**
+ * Sélecteur de sport partagé (sept. 2026) — 12 sports rangés en 3
+ * familles. Utilisé par le calculateur (briefing au moment du bolus) ET
+ * par la section briefing : un seul composant, pas deux grilles qui
+ * divergent.
+ */
+function SportPicker({
+  value,
+  onSelect,
+}: {
+  value: string | null;
+  onSelect: (key: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      {BRIEFING_SPORT_GROUPS.map((group) => (
+        <div key={group.title}>
+          <p className="label mb-1.5">{group.title}</p>
+          <div className="grid grid-cols-3 gap-2">
+            {SPORTS.filter((s) => group.families.includes(s.family)).map((sport) => {
+              const Icon = SPORT_ICONS[sport.key] ?? Activity;
+              const active = value === sport.key;
+              return (
+                <button
+                  key={sport.key}
+                  type="button"
+                  onClick={() => onSelect(sport.key)}
+                  className={`flex flex-col items-center justify-center gap-1 min-h-11 py-2 px-1 text-[11px] font-medium rounded-lg border transition-all tap-scale ${sportChipClasses(group.token, active)}`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  <span className="leading-tight text-center">{sport.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function BriefingSessionCard({
   session,
   nowMs,

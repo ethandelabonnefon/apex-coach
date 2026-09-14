@@ -105,3 +105,27 @@ test("une séance illisible est ignorée sans planter", () => {
   assert.equal(r.shown, null);
   assert.equal(r.canDeclare, true);
 });
+
+import { findMatchingSession } from "./sports";
+
+test("déduplication : une séance déclarée 20 min plus tôt au briefing est réutilisée", () => {
+  const start = NOW + 40 * 60_000;
+  const existing = sess(+85, { id: "briefing" }); // départ = fin − 45 = NOW + 40
+  const found = findMatchingSession([existing], start + 20 * 60_000, 45 * 60_000);
+  assert.equal(found?.id, "briefing");
+});
+
+test("déduplication : au-delà de la tolérance, ou annulée, aucune correspondance", () => {
+  const start = NOW + 40 * 60_000;
+  const far = sess(+85 + 60, { id: "loin" }); // départ à +100 min
+  assert.equal(findMatchingSession([far], start, 45 * 60_000), null);
+  const cancelled = sess(+85, { id: "annulee", cancelledAt: new Date(NOW).toISOString() });
+  assert.equal(findMatchingSession([cancelled], start, 45 * 60_000), null);
+});
+
+test("déduplication : la plus proche gagne quand plusieurs sont dans la tolérance", () => {
+  const start = NOW + 40 * 60_000;
+  const a = sess(+85 + 30, { id: "a" }); // +70
+  const b = sess(+85 + 5, { id: "b" });  // +45
+  assert.equal(findMatchingSession([a, b], start, 45 * 60_000)?.id, "b");
+});

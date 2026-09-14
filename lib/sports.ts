@@ -136,3 +136,31 @@ export function resolveBriefingSessionState(
   }
   return { shown: null, canDeclare: true };
 }
+
+/**
+ * Séance déclarée existante qui correspond à un nouveau départ prévu
+ * (briefing au moment du bolus, sept. 2026). Déclarer au calculateur puis
+ * retourner dans la section briefing pour la même séance ne doit pas
+ * créer un doublon — même tolérance que la réconciliation Whoop
+ * (`SAME_SESSION_TOLERANCE_MIN`). Une séance annulée ne compte jamais.
+ */
+export function findMatchingSession(
+  sessions: readonly DeclaredSportSession[],
+  startAtMs: number,
+  toleranceMs: number,
+): DeclaredSportSession | null {
+  if (!Number.isFinite(startAtMs)) return null;
+  let best: DeclaredSportSession | null = null;
+  let bestGap = Infinity;
+  for (const s of sessions) {
+    if (s.cancelledAt) continue;
+    const sMs = new Date(s.startAt).getTime();
+    if (!Number.isFinite(sMs)) continue;
+    const gap = Math.abs(sMs - startAtMs);
+    if (gap <= toleranceMs && gap < bestGap) {
+      best = s;
+      bestGap = gap;
+    }
+  }
+  return best;
+}

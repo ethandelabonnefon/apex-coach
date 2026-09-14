@@ -181,3 +181,18 @@ test("le scénario d'Ethan, bout en bout : 70 g à 19 h, course à +40 min, dose
   assert.ok(plan.carbsG >= MIN_ADVISED_CARBS_G && plan.carbsG <= 30,
     `avec la dose déjà réduite de moitié, l'appoint doit rester modeste (reçu ${plan.carbsG} g)`);
 });
+
+test("courbe au plancher (40) : la règle de durée reprend la main, le creux étant masqué", () => {
+  // 30 g à 95 mg/dL, 0 U, course de 60 min : la courbe touche 40 et ne dit
+  // plus combien il manque. La seule course prélève ~40 g.
+  const curve: PredictionPoint[] = [];
+  for (let m = 0; m <= 240; m += 15) {
+    curve.push({ minute: m, at: 0, value: m < 30 ? 110 : m <= 90 ? 40 : 60 });
+  }
+  const r = computeBolusSportPlan({
+    family: "running", minutesUntilWorkout: 30, durationMin: 60,
+    curveWithReducedDose: curve, iobAfterDoseU: 0,
+  });
+  assert.equal(r.predictedDuringMin, 40);
+  assert.ok(r.carbsG >= 30, `au plancher, la durée doit imposer ≥ 30 g (reçu ${r.carbsG})`);
+});

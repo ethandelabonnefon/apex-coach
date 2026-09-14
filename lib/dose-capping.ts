@@ -431,15 +431,20 @@ export function capDoseByPrediction(
 
   // Aucune dose ne tient, et il n'y a pas de plancher à faire respecter
   // (pas de glucides à couvrir, ou candidate déjà nulle) : on ne propose rien.
+  // La trajectoire à 0 U reste exposée : le plan sport en a besoin pour
+  // dire combien de glucides manquent AVANT l'effort — sans elle, il
+  // retombait sur la règle de durée et affichait « capteur indisponible »
+  // alors que le capteur allait très bien.
+  const atZero = simulateMinAfterGrace(0, ctx, baseEvents);
   return {
     units: 0,
     originalUnits: candidate,
     capped: true,
     heldAtFloor: false,
     predictedMinBefore: before.min,
-    predictedMinAfter: null,
+    predictedMinAfter: atZero?.min ?? null,
     predictedMinMinute: before.minute,
     reason: `Aucune dose ne garde ta glycémie au-dessus de ${PREDICTION_SAFETY_LIMIT} mg/dL. Traite d'abord, mange ensuite.`,
-    curve: null,
+    curve: atZero?.curve ?? null,
   };
 }
