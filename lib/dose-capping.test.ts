@@ -571,3 +571,44 @@ test("fix round 1 : discriminance — capped et heldAtFloor mesurent deux choses
   assert.equal(reduiteJusquauPlancher.heldAtFloor, true);
   assert.equal(reduiteJusquauPlancher.capped, true, "réduite jusqu'au plancher : capped doit être vrai");
 });
+
+// ───────────────────────────────────────────────────────────────────────
+// Effort à venir dans la simulation (briefing au moment du bolus, sept. 2026)
+// ───────────────────────────────────────────────────────────────────────
+
+import { upcomingExerciseImpactMgDl } from "./glucose-prediction";
+
+test("l'effort à venir est enfin vu par le plafond : une dose pleine avant une course est rabotée", () => {
+  // 70 g, 7 U (ratio 10), course de 45 min dans 40 min. Sans l'effort dans
+  // la simulation, cette trajectoire « tenait » et l'UI devait afficher
+  // « séance non modélisée ». Avec, le plafond voit la chute et agit.
+  const meal = { carbsGrams: 70, fatGrams: 0, proteinGrams: 0, mealType: "lunch" as const };
+  const sans = capDoseByPrediction(7, ctx({ currentGlucose: 120, pendingMeal: meal, carbBolusUnits: 7 }));
+  const avec = capDoseByPrediction(7, ctx({
+    currentGlucose: 120,
+    pendingMeal: meal,
+    carbBolusUnits: 7,
+    upcomingExercise: {
+      startMinute: 40,
+      durationMin: 45,
+      impactMgDl: upcomingExerciseImpactMgDl("running", 45, ISF / RATIOS.lunch),
+    },
+  }));
+  assert.equal(sans.capped, false, "sans effort, 7 U tiennent");
+  assert.equal(avec.capped, true, "avec la course, 7 U ne tiennent plus");
+  assert.ok(avec.units < 7);
+});
+
+test("la courbe de la dose retenue est exposée", () => {
+  const r = capDoseByPrediction(6, ctx({
+    currentGlucose: 140,
+    pendingMeal: { carbsGrams: 60, fatGrams: 0, proteinGrams: 0, mealType: "lunch" },
+  }));
+  assert.ok(r.curve && r.curve.length > 10, "la trajectoire simulée doit être lisible par l'appelant");
+  assert.equal(r.curve![0].minute, 0);
+});
+
+test("sans capteur, pas de courbe", () => {
+  const r = capDoseByPrediction(6, ctx({ currentGlucose: null }));
+  assert.equal(r.curve, null);
+});

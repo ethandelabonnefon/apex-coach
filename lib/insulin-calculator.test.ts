@@ -15,6 +15,8 @@ import {
   getInsulinOnBoard,
 } from "./insulin-calculator";
 import { activeIOB } from "./glucose-prediction";
+import { DIABETES_CONFIG } from "./constants";
+import type { DiabetesConfig } from "@/types";
 
 /** Date locale au jour arbitraire, heure/minute contrôlées. */
 function at(hours: number, minutes = 0): Date {
@@ -269,4 +271,34 @@ test("règle hypo simple : très petit repas dont la dose tomberait sous 0 → c
   assert.equal(result.carbBolus, 0.5);
   assert.ok(result.totalBolus >= 0, `totalBolus ne doit jamais être négatif, reçu ${result.totalBolus}`);
   assert.equal(result.totalBolus, 0);
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// Réduction pré-effort dans calculateBolus (briefing au moment du bolus,
+// sept. 2026) — non-régression running/muscu + nouvelle famille intermittente
+// ───────────────────────────────────────────────────────────────────────
+
+test("pré-effort : running et muscu donnent exactement les doses d'avant", () => {
+  const cfg = { ...DIABETES_CONFIG, ratios: { morning: 10, lunch: 10, snack: 10, dinner: 10 } } as DiabetesConfig;
+  const sans = calculateBolus(70, "dinner", 120, false, null, 0, cfg, 0);
+  const running45 = calculateBolus(70, "dinner", 120, true, "running", 45, cfg, 0);
+  const running90 = calculateBolus(70, "dinner", 120, true, "running", 90, cfg, 0);
+  const muscu = calculateBolus(70, "dinner", 120, true, "muscu", 30, cfg, 0);
+  assert.equal(sans.carbBolus, 7);
+  assert.equal(running45.carbBolus, 3.5, "−50 % sous 60 min");
+  assert.ok(Math.abs(running90.carbBolus - 4.9) < 1e-9, "−30 % entre 60 et 120 min");
+  assert.equal(muscu.carbBolus, 7, "muscu : aucune réduction");
+});
+
+test("pré-effort : le padel dans 30 min réduit de 25 %", () => {
+  const cfg = { ...DIABETES_CONFIG, ratios: { morning: 10, lunch: 10, snack: 10, dinner: 10 } } as DiabetesConfig;
+  const padel = calculateBolus(70, "dinner", 120, true, "intermittent", 30, cfg, 0);
+  assert.ok(Math.abs(padel.carbBolus - 5.25) < 1e-9, `attendu 5,25 U, reçu ${padel.carbBolus}`);
+  assert.ok(padel.adjustments.some((a) => a.includes("-25%")), "l'ajustement est affiché");
+});
+
+test("pré-effort : le scénario d'Ethan — 70 g à 19 h, course à +40 min → 7 U deviennent 4 U", () => {
+  const cfg = { ...DIABETES_CONFIG, ratios: { morning: 10, lunch: 10, snack: 10, dinner: 10 } } as DiabetesConfig;
+  const r = calculateBolus(70, "dinner", 120, true, "running", 40, cfg, 0);
+  assert.equal(r.totalBolus, 4, `attendu 4 U (3,5 arrondi), reçu ${r.totalBolus}`);
 });

@@ -26,6 +26,7 @@ import { iobRemainingFraction } from "./night-calibration";
 import { lateFatLoad } from "./fat-coverage";
 import {
   computeExerciseAdjustment,
+  type ExerciseSource,
   type RecentExercise,
 } from "./exercise-insulin-adjustment";
 
@@ -446,6 +447,20 @@ export interface PredictGlucoseInput {
    * au fil de l'horizon (le % est recalculé à chaque pas dans le futur).
    */
   sport?: RecentExercise;
+  /**
+   * Séance À VENIR (briefing au moment du bolus, sept. 2026). Modélise
+   * l'effet de l'effort lui-même sur la glycémie : rampe linéaire de
+   * `impactMgDl` sur la durée de la séance, maintenue ensuite. Négatif =
+   * baisse (aérobie), positif = montée (résistance), 0 = stable
+   * (intermittent — la chute arrive APRÈS, couverte par l'appoint
+   * post-séance et la sensibilité ↑, pas ici). Distinct de `sport`, qui
+   * modélise une séance PASSÉE.
+   *
+   * Sans cette entrée, le plafond prédictif validait une dose « dont la
+   * trajectoire tient » sans avoir vu la course qui allait la faire chuter
+   * — d'où la bannière « séance non modélisée » qu'il fallait afficher.
+   */
+  upcomingExercise?: UpcomingExercise;
   /** DIA / pic (défauts 195 / 75). */
   dia?: number;
   peak?: number;
@@ -457,6 +472,59 @@ export interface PredictGlucoseInput {
   stepMinutes?: number;
   /** Heure de référence (défaut Date.now()). */
   nowMs?: number;
+}
+
+export interface UpcomingExercise {
+  /** Minutes entre maintenant et le début de l'effort (≥ 0). */
+  startMinute: number;
+  durationMin: number;
+  /** Effet total de l'effort sur la glycémie (mg/dL), atteint à la fin. */
+  impactMgDl: number;
+}
+
+/**
+ * Glucose consommé par le muscle pendant l'effort (g/h), par famille.
+ *
+ * Consensus Riddell et al. 2017 : un effort aérobie réclame 30 à 60 g de
+ * glucides par heure pour tenir la glycémie — c'est la mesure de ce que le
+ * muscle prélève. 40 g/h est le milieu de cette fourchette. L'intermittent
+ * (sports co, raquette, CrossFit) en prélève moins pendant : l'adrénaline
+ * soutient la glycémie, la chute arrive après. La résistance ne prélève
+ * rien pendant et fait plutôt monter (Yardley 2013) — voir
+ * `MUSCU_IMPACT_MG_DL`.
+ *
+ * ⚠️ Ce ne sont PAS les « −60 mg/dL » académiques du briefing : ceux-là
+ * décrivent la chute NETTE observée chez quelqu'un correctement dosé, où
+ * l'insuline absorbe déjà les glucides. Ici on modélise le prélèvement
+ * brut, pour qu'une dose RÉDUITE trouve en face l'effort qui la justifie.
+ * Mesuré avant cette correction : 70 g, dose ramenée de 7 à 4 U, course de
+ * 45 min → le modèle prédisait 350 mg/dL, comme si la course ne consommait
+ * rien.
+ */
+export const EXERCISE_GLUCOSE_UPTAKE_G_PER_H: Record<ExerciseSource, number> = {
+  running: 40,
+  "cardio-other": 40,
+  intermittent: 20,
+  muscu: 0,
+};
+
+/** Montée pendant la résistance (mg/dL) — valeur académique du briefing. */
+export const MUSCU_IMPACT_MG_DL = 40;
+
+/**
+ * Effet total d'un effort à venir sur la glycémie (mg/dL), à passer dans
+ * `UpcomingExercise.impactMgDl`. `csf` = sensibilité aux glucides
+ * (mg/dL par g), typiquement `ISF / ratio`.
+ */
+export function upcomingExerciseImpactMgDl(
+  family: ExerciseSource,
+  durationMin: number,
+  csf: number,
+): number {
+  if (family === "muscu") return MUSCU_IMPACT_MG_DL;
+  const hours = Number.isFinite(durationMin) && durationMin > 0 ? durationMin / 60 : 0;
+  const sens = Number.isFinite(csf) && csf > 0 ? csf : 10;
+  return -(EXERCISE_GLUCOSE_UPTAKE_G_PER_H[family] * hours * sens);
 }
 
 export interface PredictionPoint {
@@ -568,6 +636,12 @@ function effectsAt(
     }
   }
 
+  // 3ter. Effort À VENIR : rampe linéaire de l'impact sur la durée de la
+  // séance, maintenue après. Avant le départ, rien.
+  if (input.upcomingExercise) {
+    glucose += upcomingExerciseEffect(input.upcomingExercise, minutesAhead);
+  }
+
   // 4. Effet basal net (dérive mesurée) — UNIQUEMENT sur les heures nocturnes
   // à jeun de l'horizon. Évite que la dérive nuit écrase la digestion du soir.
   const nightHours = nightFastingHours(nowMs, minutesAhead);
@@ -596,6 +670,20 @@ function effectsAt(
 
   // 8. Clamp réalisme
   return Math.min(350, Math.max(40, Math.round(glucose)));
+}
+
+/**
+ * Part de l'impact d'un effort à venir déjà réalisée à `minutesAhead`.
+ * Exportée pour être testée seule.
+ */
+export function upcomingExerciseEffect(ex: UpcomingExercise, minutesAhead: number): number {
+  if (!Number.isFinite(ex.impactMgDl) || ex.impactMgDl === 0) return 0;
+  const start = Number.isFinite(ex.startMinute) ? Math.max(0, ex.startMinute) : 0;
+  const duration = Number.isFinite(ex.durationMin) && ex.durationMin > 0 ? ex.durationMin : 0;
+  if (minutesAhead <= start) return 0;
+  if (duration === 0) return ex.impactMgDl;
+  const fraction = Math.min(1, (minutesAhead - start) / duration);
+  return ex.impactMgDl * fraction;
 }
 
 /**

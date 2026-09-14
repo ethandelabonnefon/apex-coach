@@ -541,3 +541,42 @@ export function _countValidGpsPoints(points: GpsPoint[] | undefined): number {
   if (!points) return 0;
   return totalDistance(points) > 50 ? points.length : 0;
 }
+
+// ───────────────────────────────────────────────────────────────────────
+// Réduction PRÉ-effort du bolus repas (briefing au moment du bolus,
+// sept. 2026)
+// ───────────────────────────────────────────────────────────────────────
+
+/**
+ * Part du bolus GLUCIDES à retirer quand un effort suit le repas (0-50).
+ *
+ * Consensus Riddell et al. 2017 : quand un bolus repas précède l'effort de
+ * moins de 90 min, la réduction de dose est le levier principal, les
+ * glucides le levier d'appoint. Les lignes `running`/`cardio-other` et
+ * `muscu` reprennent la table qui vivait dans `calculateBolus` depuis mai
+ * (−50 % / −30 % ; muscu 0 — Yardley 2013, la résistance fait MONTER la
+ * glycémie). La ligne `intermittent` est nouvelle : « réduction faible ou
+ * nulle » pour le mixte, la glycémie tient pendant le match (adrénaline)
+ * et chute après — c'est l'appoint post-séance qui couvre la chute, pas
+ * une sous-dose du repas.
+ *
+ * S'applique au bolus glucides SEUL — jamais à la correction ni à la
+ * 2ᵉ injection lipides. Au-delà de 120 min, rien : l'insuline du repas
+ * aura largement fini d'agir au départ.
+ */
+export function preWorkoutReductionPct(
+  family: ExerciseSource,
+  minutesUntilWorkout: number,
+): number {
+  if (!Number.isFinite(minutesUntilWorkout) || minutesUntilWorkout > 120) return 0;
+  const soon = minutesUntilWorkout <= 60;
+  switch (family) {
+    case "running":
+    case "cardio-other":
+      return soon ? 50 : 30;
+    case "intermittent":
+      return soon ? 25 : 15;
+    case "muscu":
+      return 0;
+  }
+}

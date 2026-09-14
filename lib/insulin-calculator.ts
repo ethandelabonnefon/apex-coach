@@ -1,6 +1,6 @@
 import { DIABETES_CONFIG } from './constants';
 import type { DiabetesConfig, MealTime } from '@/types';
-import type { ExerciseSource } from './exercise-insulin-adjustment';
+import { preWorkoutReductionPct, type ExerciseSource } from './exercise-insulin-adjustment';
 import { computeFatCoverage, FAT_COVERAGE_MIN_G } from './fat-coverage';
 
 // Le calibrage FPU (facteur 6, caps relatif et absolu) qui vivait ici a été
@@ -115,7 +115,7 @@ export function calculateBolus(
   mealTime: MealTime,
   currentGlucose: number,
   isPreWorkout: boolean = false,
-  workoutType: 'muscu' | 'running' | null = null,
+  workoutType: ExerciseSource | null = null,
   minutesUntilWorkout: number = 0,
   configOverride?: DiabetesConfig,
   /** Insuline encore active (IOB) — on l'utilise pour réduire la PART CORRECTION
@@ -237,22 +237,24 @@ export function calculateBolus(
     );
   }
 
-  // Ajustements pré-entraînement (s'appliquent uniquement au bolus glucides)
+  // Ajustements pré-entraînement (s'appliquent uniquement au bolus glucides).
+  // Table partagée `preWorkoutReductionPct` (lib/exercise-insulin-adjustment.ts)
+  // — les 4 familles du briefing, plus seulement muscu/running (sept. 2026).
   if (isPreWorkout && workoutType) {
-    if (workoutType === 'running') {
-      if (minutesUntilWorkout <= 60) {
-        const reduction = 0.5;
-        carbBolus *= reduction;
-        adjustments.push(`-50% bolus (running dans <1h)`);
-        reasoning.push(`Running dans ${minutesUntilWorkout}min: réduction bolus de 50% car cardio prolongé fait baisser ~60 mg/dL`);
-      } else if (minutesUntilWorkout <= 120) {
-        const reduction = 0.7;
-        carbBolus *= reduction;
-        adjustments.push(`-30% bolus (running dans <2h)`);
-        reasoning.push(`Running dans ${minutesUntilWorkout}min: réduction bolus de 30%`);
-      }
+    const pct = preWorkoutReductionPct(workoutType, minutesUntilWorkout);
+    const label = exerciseFamilyLabel(workoutType);
+    if (pct > 0) {
+      carbBolus *= 1 - pct / 100;
+      adjustments.push(`-${pct}% bolus (${label} dans ${minutesUntilWorkout <= 60 ? '<1h' : '<2h'})`);
+      reasoning.push(
+        workoutType === 'intermittent'
+          ? `${label} dans ${minutesUntilWorkout}min: réduction bolus de ${pct}% — la glycémie tient pendant l'effort, c'est après qu'elle chute (l'appoint post-séance s'en charge)`
+          : `${label} dans ${minutesUntilWorkout}min: réduction bolus de ${pct}% car cardio prolongé fait baisser ~60 mg/dL`,
+      );
     } else if (workoutType === 'muscu') {
       reasoning.push(`Muscu prévue: pas de réduction car la muscu fait MONTER la glycémie (+45 mg/dL en moyenne). Prévoir correction post-séance si >180.`);
+    } else {
+      reasoning.push(`${label} dans ${minutesUntilWorkout}min: trop loin pour réduire le bolus, l'insuline du repas aura fini d'agir.`);
     }
   }
 
@@ -549,7 +551,17 @@ export function exerciseCarbsForDuration(
  *  - intermittent : stable pendant le match (adrénaline la soutient) — la
  *    chute réelle arrive APRÈS, ce que le message dédié plus bas couvre.
  */
-function academicSportImpact(workoutType: ExerciseSource): number {
+/** Libellé court d'une famille d'effort, pour le raisonnement affiché. */
+export function exerciseFamilyLabel(family: ExerciseSource): string {
+  switch (family) {
+    case 'running': return 'Running';
+    case 'cardio-other': return 'Cardio';
+    case 'intermittent': return 'Sport intermittent';
+    case 'muscu': return 'Muscu';
+  }
+}
+
+export function academicSportImpact(workoutType: ExerciseSource): number {
   switch (workoutType) {
     case 'muscu':
       return 40;

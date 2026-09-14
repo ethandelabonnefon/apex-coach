@@ -514,3 +514,46 @@ test("désync IOB/COB: passé le DIA, les glucides montent encore alors que l'IO
   assert.equal(dropFullDIA, 0, "IOB épuisé → plus de baisse");
   assert.ok(riseAfterDIA > 0, "les glucides continuent de faire monter");
 });
+
+// ───────────────────────────────────────────────────────────────────────
+// Effort à venir (briefing au moment du bolus, sept. 2026)
+// ───────────────────────────────────────────────────────────────────────
+
+import { upcomingExerciseEffect } from "./glucose-prediction";
+
+test("effort à venir : rien avant le départ, rampe pendant, plein après", () => {
+  const run = { startMinute: 40, durationMin: 45, impactMgDl: -60 };
+  assert.equal(upcomingExerciseEffect(run, 0), 0);
+  assert.equal(upcomingExerciseEffect(run, 40), 0, "au départ exact, rien encore");
+  assert.ok(Math.abs(upcomingExerciseEffect(run, 62.5) - -30) < 1e-9, "à mi-séance, la moitié");
+  assert.equal(upcomingExerciseEffect(run, 85), -60, "à la fin, tout");
+  assert.equal(upcomingExerciseEffect(run, 300), -60, "maintenu après");
+});
+
+test("effort à venir : la muscu monte, l'intermittent ne bouge pas pendant", () => {
+  assert.equal(upcomingExerciseEffect({ startMinute: 0, durationMin: 60, impactMgDl: 40 }, 60), 40);
+  assert.equal(upcomingExerciseEffect({ startMinute: 0, durationMin: 90, impactMgDl: 0 }, 90), 0);
+});
+
+test("effort à venir : la courbe du plafond voit la course", () => {
+  // Repas 60 g couvert par 6 U à 120 mg/dL : sans course, la trajectoire
+  // reste en cible ; avec une course de 45 min dans 40 min, elle descend.
+  const base = {
+    currentGlucose: 120,
+    isf: 100,
+    events: [{ minutesAgo: 0, units: 6, carbsGrams: 60, carbSensitivity: 10 }],
+    horizonMinutes: 180,
+    stepMinutes: 15,
+    nowMs: Date.UTC(2026, 8, 14, 17, 0, 0),
+  };
+  const sans = predictGlucoseCurve(base);
+  const avec = predictGlucoseCurve({
+    ...base,
+    upcomingExercise: { startMinute: 40, durationMin: 45, impactMgDl: -60 },
+  });
+  const at = (p: { curve: { minute: number; value: number }[] }, m: number) =>
+    p.curve.find((x) => x.minute === m)!.value;
+  assert.equal(at(avec, 30), at(sans, 30), "avant le départ : identique");
+  assert.ok(at(avec, 90) < at(sans, 90), "après la course : plus bas");
+  assert.ok(avec.min.value < sans.min.value, "le minimum prédit baisse — le plafond le verra");
+});

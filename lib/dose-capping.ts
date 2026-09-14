@@ -28,6 +28,8 @@
 import {
   carbSensitivity,
   predictGlucoseCurve,
+  type PredictionPoint,
+  type UpcomingExercise,
   type PredictionEvent,
   type PendingSplit,
 } from "./glucose-prediction";
@@ -128,6 +130,14 @@ export interface DoseCappingContext {
    */
   sport?: RecentExercise;
   /**
+   * Effort À VENIR déclaré au moment du bolus (briefing au moment du bolus,
+   * sept. 2026). Transmis tel quel à `predictGlucoseCurve` : la simulation
+   * voit enfin la course qui va faire chuter la trajectoire. Avant, le
+   * plafond validait une dose « dont la trajectoire tient » sans elle, et
+   * l'UI devait afficher « séance non modélisée ».
+   */
+  upcomingExercise?: UpcomingExercise;
+  /**
    * 2e dose (split FPU) programmée par le MÊME clic « Enregistrer
    * l'injection ». Le plafond doit la voir : sans elle, il valide une dose
    * que l'app reprogramme aussitôt après coup (C1, final-fix-brief.md) —
@@ -188,6 +198,14 @@ export interface CappedDose {
   predictedMinMinute: number | null;
   /** `null` si aucun plafonnement n'a eu lieu et qu'il n'y a rien à signaler. */
   reason: string | null;
+  /**
+   * Trajectoire simulée pour la dose RETENUE (`units`), déjà calculée par
+   * le plafonnement — rendue visible pour que le conseil de glucides
+   * pré-effort lise la glycémie prédite au départ sur LA MÊME courbe, au
+   * lieu d'en recalculer une avec un autre modèle. `null` quand rien n'a
+   * été simulé (pas de capteur, lecture périmée, candidate nulle).
+   */
+  curve: PredictionPoint[] | null;
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -197,6 +215,7 @@ export interface CappedDose {
 interface SimResult {
   min: number;
   minute: number;
+  curve: PredictionPoint[];
 }
 
 /**
@@ -249,6 +268,7 @@ function simulateMinAfterGrace(
     events,
     isf: ctx.isf,
     sport: ctx.sport,
+    upcomingExercise: ctx.upcomingExercise,
     pendingSplit: ctx.pendingSplit,
     horizonMinutes,
     stepMinutes: CAPPING_STEP_MIN,
@@ -262,7 +282,7 @@ function simulateMinAfterGrace(
   for (const p of afterGrace) {
     if (p.value < best.value) best = p;
   }
-  return { min: best.value, minute: best.minute };
+  return { min: best.value, minute: best.minute, curve: prediction.curve };
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -283,6 +303,7 @@ function unchanged(
     predictedMinAfter: min?.min ?? null,
     predictedMinMinute: min?.minute ?? null,
     reason,
+    curve: min?.curve ?? null,
   };
 }
 
@@ -371,6 +392,7 @@ export function capDoseByPrediction(
         predictedMinAfter: after.min,
         predictedMinMinute: before.minute,
         reason: `À ${candidate} U, ta glycémie descendrait à ${before.min} mg/dL.`,
+        curve: after.curve,
       };
     }
   }
@@ -403,6 +425,7 @@ export function capDoseByPrediction(
       predictedMinAfter: atFloor?.min ?? null,
       predictedMinMinute: before.minute,
       reason: `Dose maintenue à ${floor} U (bolus glucides − ${CARB_BOLUS_FLOOR_MARGIN} U minimum) alors que la prédiction réclamerait moins — surveille ta glycémie de près dans les heures qui suivent.`,
+      curve: atFloor?.curve ?? null,
     };
   }
 
@@ -417,5 +440,6 @@ export function capDoseByPrediction(
     predictedMinAfter: null,
     predictedMinMinute: before.minute,
     reason: `Aucune dose ne garde ta glycémie au-dessus de ${PREDICTION_SAFETY_LIMIT} mg/dL. Traite d'abord, mange ensuite.`,
+    curve: null,
   };
 }

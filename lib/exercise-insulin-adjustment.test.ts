@@ -143,3 +143,29 @@ test("I5 : durée nulle/négative (horloge Whoop incohérente) est plancherisée
   assert.ok(r !== null);
   assert.ok(r && r.durationMin >= 1, `durationMin doit être planchérisée à 1, reçu ${r?.durationMin}`);
 });
+
+// ───────────────────────────────────────────────────────────────────────
+// Réduction PRÉ-effort (briefing au moment du bolus, sept. 2026)
+// ───────────────────────────────────────────────────────────────────────
+
+import { preWorkoutReductionPct } from "./exercise-insulin-adjustment";
+
+test("réduction pré-effort : la table complète, bornes comprises", () => {
+  // Non-régression : running et muscu gardent exactement les valeurs de mai.
+  assert.equal(preWorkoutReductionPct("running", 45), 50);
+  assert.equal(preWorkoutReductionPct("running", 60), 50, "60 min inclus dans « bientôt »");
+  assert.equal(preWorkoutReductionPct("running", 61), 30);
+  assert.equal(preWorkoutReductionPct("running", 120), 30, "120 min inclus");
+  assert.equal(preWorkoutReductionPct("running", 121), 0);
+  assert.equal(preWorkoutReductionPct("cardio-other", 30), 50, "vélo / natation comme la course");
+  assert.equal(preWorkoutReductionPct("muscu", 30), 0);
+  assert.equal(preWorkoutReductionPct("muscu", 90), 0);
+  // Nouveau : intermittent, réduction faible.
+  assert.equal(preWorkoutReductionPct("intermittent", 30), 25);
+  assert.equal(preWorkoutReductionPct("intermittent", 90), 15);
+  assert.equal(preWorkoutReductionPct("intermittent", 180), 0);
+});
+
+test("réduction pré-effort : un délai illisible ne réduit rien", () => {
+  assert.equal(preWorkoutReductionPct("running", NaN), 0);
+});

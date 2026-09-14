@@ -178,6 +178,14 @@ export interface InsulinLog {
    * conclurait à tort « trop d'insuline, mange des glucides ».
    */
   carbsUncertain?: boolean;
+  /**
+   * Séance déclarée pour laquelle cette dose a été RÉDUITE (briefing au
+   * moment du bolus, sept. 2026). Avant, la seule trace était
+   * `notes: "pré-running"` — un texte que personne ne lisait. Ce champ
+   * relie la dose basse à sa raison ; les modules en aval (apprentissage,
+   * appoint post-séance) passent par la séance elle-même.
+   */
+  sportSessionId?: string;
 }
 
 /** Nature d'un rappel serveur. */
