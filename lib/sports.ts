@@ -10,6 +10,7 @@
  */
 
 import type { ExerciseSource } from "./exercise-insulin-adjustment";
+import type { DeclaredSportSession } from "@/types";
 
 export interface SportDefinition {
   key: string;
@@ -82,4 +83,56 @@ export function sportSessionEndMs(session: {
   const durationMin = session.actualDurationMin ?? session.plannedDurationMin;
   const safeMin = Number.isFinite(durationMin) && durationMin > 0 ? durationMin : 0;
   return startMs + safeMin * 60_000;
+}
+
+/**
+ * Durée pendant laquelle la carte d'une séance reste affichée après sa
+ * fin (ms) : la fenêtre maximale pendant laquelle une séance pèse encore
+ * sur le bolus (bracket 24 h de `computeExerciseAdjustment`). Tant que la
+ * réduction d'insuline est active, l'annulation doit rester trouvable —
+ * un padel déclaré puis annulé dans sa tête réduirait le dîner sans
+ * qu'Ethan puisse rien y faire.
+ */
+export const BRIEFING_CARD_WINDOW_MS = 24 * 3_600_000;
+
+export interface BriefingSessionState {
+  /** Séance à montrer dans la carte (annulation ou info), ou `null`. */
+  shown: DeclaredSportSession | null;
+  /** Le formulaire de déclaration peut-il être offert ? */
+  canDeclare: boolean;
+}
+
+/**
+ * Quelle séance afficher dans le briefing, et peut-on en déclarer une
+ * nouvelle — deux questions DISTINCTES (bug du 14 sept. 2026).
+ *
+ * Avant, la carte et le formulaire étaient les deux branches d'un même
+ * ternaire, et la carte s'affichait pendant les 24 h de la fenêtre
+ * d'ajustement. Le formulaire était donc inaccessible 24 h après CHAQUE
+ * séance : impossible de déclarer une 2ᵉ séance le même jour, ni celle du
+ * lendemain la veille au soir. Depuis que la carte d'une séance confirmée
+ * par Whoop ne propose plus rien (« Rien à faire »), c'était un cul-de-sac.
+ *
+ * Règle : la carte reste pendant toute la fenêtre (pour annuler ou
+ * informer) ; le formulaire est disponible dès que la séance affichée est
+ * TERMINÉE. Une séance en cours ou à venir bloque encore la déclaration —
+ * on ne déclare pas deux séances qui se chevauchent, on annule la première.
+ *
+ * `sessions` est lu dans l'ordre du store (plus récente en tête) : avec
+ * deux séances dans la fenêtre, c'est la plus récente qui est montrée.
+ */
+export function resolveBriefingSessionState(
+  sessions: readonly DeclaredSportSession[],
+  nowMs: number,
+  windowMs: number = BRIEFING_CARD_WINDOW_MS,
+): BriefingSessionState {
+  for (const s of sessions) {
+    if (s.cancelledAt) continue;
+    const endMs = sportSessionEndMs(s);
+    if (!Number.isFinite(endMs)) continue;
+    if (nowMs < endMs + windowMs) {
+      return { shown: s, canDeclare: nowMs >= endMs };
+    }
+  }
+  return { shown: null, canDeclare: true };
 }

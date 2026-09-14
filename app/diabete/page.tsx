@@ -58,7 +58,13 @@ import {
   SAME_SESSION_TOLERANCE_MIN,
   type ExerciseSource,
 } from "@/lib/exercise-insulin-adjustment";
-import { SPORTS, getSport, sportSessionEndMs, type SportDefinition } from "@/lib/sports";
+import {
+  SPORTS,
+  getSport,
+  resolveBriefingSessionState,
+  sportSessionEndMs,
+  type SportDefinition,
+} from "@/lib/sports";
 import {
   computePostSessionAppoint,
   isAppointBlockedByGlucose,
@@ -1213,40 +1219,27 @@ export default function DiabetePage() {
     enrichedSportSessions,
   ]);
 
-  // Durée pendant laquelle une séance pèse encore sur le bolus (bracket
-  // maximal de computeExerciseAdjustment).
-  const ADJUSTMENT_WINDOW_MS = 24 * 3_600_000;
+  // Séance à montrer dans le briefing + droit d'en déclarer une nouvelle.
+  // Deux questions distinctes (bug du 14 sept. 2026) : la carte reste
+  // visible pendant toute la fenêtre d'ajustement (24 h) pour que
+  // l'annulation d'une séance fantôme reste trouvable, mais le formulaire
+  // se libère dès que la séance est TERMINÉE — sinon impossible de
+  // déclarer une 2ᵉ séance le même jour. Indépendant du toggle
+  // `briefingActive`. Cf. `resolveBriefingSessionState` (lib/sports.ts).
+  const briefingState = useMemo(
+    () => resolveBriefingSessionState(declaredSportSessions, nowTick),
+    [declaredSportSessions, nowTick],
+  );
+  const activeBriefingSession = briefingState.shown;
+  const canDeclareBriefingSession = briefingState.canDeclare;
 
-  // Séance déclarée qui pèse encore sur le bolus — indépendante du
-  // toggle `briefingActive` : si Ethan désactive le briefing après avoir
-  // déclaré, l'annulation doit rester trouvable (garde-fou anti-hyper
-  // fantôme). Cf. findMostRecentExercise (lib/exercise-insulin-adjustment.ts)
-  // pour la même logique de fenêtre côté calcul.
-  const activeBriefingSession: DeclaredSportSession | null = useMemo(() => {
-    for (const s of declaredSportSessions) {
-      if (s.cancelledAt) continue;
-      // Définition partagée : l'heure de fin MESURÉE par Whoop prime sur la
-      // durée annoncée. Le calcul inline précédent l'ignorait, donc la
-      // fenêtre d'annulation et le calcul de dose ne parlaient pas de la
-      // même fin.
-      const endMs = sportSessionEndMs(s);
-      if (!Number.isFinite(endMs)) continue;
-      // Fenêtre volontairement étendue à la durée pendant laquelle la
-      // séance influence encore le bolus (revue des correctifs, sept.
-      // 2026). S'arrêter à `endMs` rendait l'annulation introuvable dès
-      // l'heure de fin prévue passée, alors que la réduction d'insuline,
-      // elle, reste active jusqu'à 24 h : un padel déclaré puis annulé
-      // dans sa tête réduisait le dîner sans qu'Ethan puisse rien y faire.
-      if (nowTick < endMs + ADJUSTMENT_WINDOW_MS) return s;
-    }
-    return null;
-  }, [declaredSportSessions, nowTick]);
-
-  // Réarme le garde-fou anti double-tap dès que la séance active disparaît
-  // (annulée ou terminée) — permet de déclarer la séance suivante.
+  // Réarme le garde-fou anti double-tap dès qu'une nouvelle déclaration
+  // redevient possible — et non plus seulement quand la carte disparaît :
+  // c'était le second verrou du bug du 14 septembre, qui aurait laissé le
+  // bouton grisé même une fois le formulaire réaffiché.
   useEffect(() => {
-    if (!activeBriefingSession) briefingSessionSubmittedRef.current = false;
-  }, [activeBriefingSession]);
+    if (canDeclareBriefingSession) briefingSessionSubmittedRef.current = false;
+  }, [canDeclareBriefingSession]);
 
   // ─── Réconciliation Whoop (Task 6, sept. 2026) ───────────────────────
   // Le briefing crée une durée APPROXIMATIVE ; dès que Whoop retrouve la
@@ -2145,13 +2138,19 @@ export default function DiabetePage() {
           </div>
         )}
 
-        {activeBriefingSession ? (
+        {/* La carte et le formulaire ne s'excluent plus : une séance
+            terminée garde sa carte (annuler / info) ET laisse déclarer la
+            suivante. Seule une séance en cours ou à venir masque le
+            formulaire. */}
+        {activeBriefingSession && (
           <BriefingSessionCard
             session={activeBriefingSession}
             nowMs={nowTick}
             onCancel={() => handleCancelBriefingSession(activeBriefingSession)}
           />
-        ) : !briefingActive ? (
+        )}
+
+        {activeBriefingSession && !canDeclareBriefingSession ? null : !briefingActive ? (
           <p className="text-xs text-text-tertiary leading-relaxed">
             Active si tu prévois un sport bientôt. On regarde ton IOB, ta
             glycémie live et tes split doses pour te donner des conseils
