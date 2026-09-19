@@ -32,7 +32,7 @@ interface WhoopStatus {
 export default function WhoopConnection() {
   return (
     <Suspense fallback={
-      <section className="surface-1 rounded-2xl p-5 mb-4">
+      <section className="panel mb-4">
         <div className="flex items-center gap-2 text-xs text-text-tertiary">
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
           Chargement...
@@ -73,7 +73,7 @@ function WhoopConnectionInner() {
   useEffect(() => {
     const w = searchParams?.get("whoop");
     if (w === "connected") {
-      setToast({ kind: "ok", msg: "Whoop connecté ✅" });
+      setToast({ kind: "ok", msg: "Whoop connecté" });
       // Nettoie les params URL
       router.replace("/diabete/parametres");
       fetchStatus();
@@ -111,13 +111,15 @@ function WhoopConnectionInner() {
 
   // ─── Rendering ─────────────────────────────────
   return (
-    <section className="surface-1 rounded-2xl p-5 mb-4">
-      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+    <section className="panel mb-4">
+      <div className="panel-hd">
         <div className="flex items-center gap-2">
-          <Activity className="w-4 h-4 text-running" />
-          <h2 className="text-base font-semibold text-text-primary">Whoop</h2>
+          <div className="flex items-center gap-2">
+            <Activity className="w-4 h-4 text-running" />
+            <h2>Whoop</h2>
+          </div>
           {status?.connected && (
-            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-success/15 text-success border border-success/30">
+            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-md font-semibold bg-success/15 text-success border border-success/30">
               <CheckCircle2 className="w-3 h-3" />
               Connecté
             </span>
@@ -212,7 +214,7 @@ function WhoopConnectionInner() {
       {/* Connecté */}
       {!loading && status?.connected && (
         <>
-          <div className="rounded-lg bg-bg-tertiary border border-border-subtle px-3 py-2.5 mb-3">
+          <div className="rounded-lg bg-bg-secondary border border-border-subtle px-3 py-2.5 mb-3">
             <p className="text-[10px] uppercase tracking-wide text-text-tertiary font-semibold mb-1">
               Lien actif
             </p>
@@ -234,7 +236,7 @@ function WhoopConnectionInner() {
             type="button"
             onClick={handleDisconnect}
             disabled={actionLoading}
-            className="bg-bg-tertiary border border-border-default text-text-secondary hover:text-error hover:border-error/40 font-medium px-4 py-2 rounded-lg transition-colors tap-scale flex items-center gap-2 text-sm disabled:opacity-50"
+            className="bg-bg-secondary border border-border-default text-text-secondary hover:text-error hover:border-error/40 font-medium px-4 py-2 rounded-lg transition-colors tap-scale flex items-center gap-2 text-sm disabled:opacity-50"
           >
             {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlink className="w-4 h-4" />}
             Déconnecter

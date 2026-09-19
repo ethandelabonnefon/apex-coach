@@ -47,13 +47,8 @@ export default function RecoveryFigure() {
 
   return (
     <section className="mb-6 animate-in">
-      <div className="surface-1 relative overflow-hidden p-5">
+      <div className="panel relative overflow-hidden">
         {/* halo teinté en fond, discret */}
-        <div
-          aria-hidden
-          className="absolute -top-16 -right-16 h-48 w-48 rounded-full opacity-[0.10] blur-3xl"
-          style={{ background: "var(--accent-2)" }}
-        />
 
         <div className="relative flex items-center gap-1.5 mb-1">
           <Activity size={12} className="text-accent-2" />
@@ -68,7 +63,7 @@ export default function RecoveryFigure() {
         <div className="relative h-[320px] w-full" role="img" aria-label={`Figure de récupération Whoop : ${band.label}`}>
           {!ready && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="skeleton h-40 w-16 rounded-full opacity-60" />
+              <div className="skeleton h-40 w-16 rounded-md opacity-60" />
             </div>
           )}
           <RecoveryFigureCanvas

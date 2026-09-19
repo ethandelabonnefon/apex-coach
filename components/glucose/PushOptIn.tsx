@@ -160,7 +160,7 @@ export default function PushOptIn() {
       setState({ kind: "testing" });
       await fetch("/api/push/test");
       setState({ kind: "subscribed" });
-      flashToast("Notif test envoyée ✅");
+      flashToast("Notif test envoyée");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "inconnu";
       setState({ kind: "error", message: msg });
@@ -192,7 +192,7 @@ export default function PushOptIn() {
           `Test échoué${data.reason ? ` (${data.reason})` : ` (HTTP ${res.status})`}`,
         );
       } else {
-        flashToast("Notif test envoyée ✅");
+        flashToast("Notif test envoyée");
       }
     } finally {
       setState({ kind: "subscribed" });
@@ -202,7 +202,7 @@ export default function PushOptIn() {
   // ─── Rendu ────────────────────────────────────
 
   return (
-    <section className="surface-1 rounded-3xl p-5">
+    <section className="panel">
       <div className="flex items-start gap-3 mb-3">
         <div className="shrink-0 w-10 h-10 rounded-xl bg-diabete/10 flex items-center justify-center">
           <Bell className="w-5 h-5 text-diabete" />
@@ -319,14 +319,14 @@ function Body({
             <button
               type="button"
               onClick={onTest}
-              className="bg-bg-tertiary hover:bg-bg-hover text-text-primary text-xs font-medium py-2.5 rounded-xl transition-colors border border-border-subtle tap-scale"
+              className="bg-bg-secondary hover:bg-bg-hover text-text-primary text-xs font-medium py-2.5 rounded-xl transition-colors border border-border-subtle tap-scale"
             >
               Tester
             </button>
             <button
               type="button"
               onClick={onUnsubscribe}
-              className="bg-bg-tertiary hover:bg-bg-hover text-text-tertiary text-xs font-medium py-2.5 rounded-xl transition-colors border border-border-subtle tap-scale flex items-center justify-center gap-1.5"
+              className="bg-bg-secondary hover:bg-bg-hover text-text-tertiary text-xs font-medium py-2.5 rounded-xl transition-colors border border-border-subtle tap-scale flex items-center justify-center gap-1.5"
             >
               <BellOff className="w-3.5 h-3.5" />
               Désactiver

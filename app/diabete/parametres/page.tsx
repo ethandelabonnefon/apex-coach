@@ -124,7 +124,7 @@ function RatioSentence({
                   if (e.key === "Enter") commit();
                   if (e.key === "Escape") cancel();
                 }}
-                className="num w-16 bg-bg-tertiary border border-diabete/50 rounded-lg px-2 py-1.5 text-lg font-semibold text-diabete focus:outline-none focus:border-diabete"
+                className="num w-16 bg-bg-secondary border border-diabete/50 rounded-lg px-2 py-1.5 text-lg font-semibold text-diabete focus:outline-none focus:border-diabete"
               />
               <span className="text-diabete font-semibold">
                 {unitWord} pour 10g de glucide
@@ -458,12 +458,12 @@ export default function DiabeteParametresPage() {
   const isfInternal = diabetesConfig.insulinSensitivityFactor;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto pb-32 stagger">
+    <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 lg:py-8 pb-32 stagger">
       {/* Header */}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <p className="label">Diabète · Paramètres</p>
-          <h1 className="mt-1 text-2xl font-semibold text-text-primary">
+          <p className="eyebrow">Diabète · Paramètres</p>
+          <h1 className="h-title">
             Mon programme d&apos;insuline
           </h1>
         </div>
@@ -486,10 +486,10 @@ export default function DiabeteParametresPage() {
       )}
 
       {/* ── Profils ratios (Sèche / PDM / Par défaut…) ── */}
-      <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">
+      <section className="panel mb-4">
         <div className="flex items-start justify-between gap-3 mb-4">
           <div>
-            <h2 className="text-base font-semibold text-text-primary">Profil actif</h2>
+            <h2 className="text-[15px] font-semibold">Profil actif</h2>
             <p className="text-xs text-text-tertiary mt-1">
               Chaque profil stocke tes ratios, ton ISF et ta basale. Bascule pour la sèche ou la PDM.
             </p>
@@ -511,7 +511,7 @@ export default function DiabeteParametresPage() {
             const isRenaming = renamingProfile === p.id;
             if (isRenaming) {
               return (
-                <div key={p.id} className="flex items-center gap-1 bg-bg-tertiary border border-diabete/50 rounded-full px-3 py-1.5">
+                <div key={p.id} className="flex items-center gap-1 bg-bg-secondary border border-diabete/50 rounded-md px-3 py-1.5">
                   <input
                     autoFocus
                     value={renameDraft}
@@ -544,7 +544,7 @@ export default function DiabeteParametresPage() {
                 key={p.id}
                 onClick={() => { if (!isActive) setActiveRatioProfile(p.id); flash(); }}
                 onDoubleClick={() => { setRenamingProfile(p.id); setRenameDraft(p.name); }}
-                className={`group flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium border transition-all tap-scale ${
+                className={`group flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium border transition-all tap-scale ${
                   isActive
                     ? "bg-diabete/15 border-diabete/40 text-diabete glow-accent-2"
                     : "bg-bg-tertiary border-border-subtle text-text-secondary hover:border-diabete/30 hover:text-text-primary"
@@ -563,13 +563,13 @@ export default function DiabeteParametresPage() {
           {!creatingProfile ? (
             <button
               onClick={() => setCreatingProfile(true)}
-              className="flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium border border-dashed border-border-default text-text-tertiary hover:text-diabete hover:border-diabete/40 tap-scale"
+              className="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium border border-dashed border-border-default text-text-tertiary hover:text-diabete hover:border-diabete/40 tap-scale"
             >
               <Copy className="w-3 h-3" />
               Nouveau profil
             </button>
           ) : (
-            <div className="flex items-center gap-1 bg-bg-tertiary border border-diabete/50 rounded-full px-3 py-1.5">
+            <div className="flex items-center gap-1 bg-bg-secondary border border-diabete/50 rounded-md px-3 py-1.5">
               <input
                 autoFocus
                 placeholder="Nom du profil…"
@@ -623,7 +623,7 @@ export default function DiabeteParametresPage() {
                         if (e.key === "Escape") setEditingBasal(false);
                       }}
                       onBlur={commitBasal}
-                      className="num w-16 bg-bg-tertiary border border-diabete/50 rounded-lg px-2 py-1 text-base font-semibold text-diabete focus:outline-none"
+                      className="num w-16 bg-bg-secondary border border-diabete/50 rounded-lg px-2 py-1 text-base font-semibold text-diabete focus:outline-none"
                     />
                     <span className="text-text-secondary text-sm">U / soir</span>
                   </>
@@ -697,10 +697,10 @@ export default function DiabeteParametresPage() {
       </section>
 
       {/* ── 4 ratios en phrases naturelles ── */}
-      <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">
+      <section className="panel mb-4">
         <div className="flex items-start justify-between gap-3 mb-4">
           <div className="flex-1">
-            <h2 className="text-base font-semibold text-text-primary">
+            <h2 className="text-[15px] font-semibold">
               Ratios insuline / glucides
             </h2>
             <p className="text-xs text-text-tertiary mt-1">
@@ -762,7 +762,7 @@ export default function DiabeteParametresPage() {
           lipides sur 90 jours. D'où le réglage — c'est aussi ce que
           recommande la littérature, qui donne une fourchette de 24 à 75 %
           à titrer individuellement. */}
-      <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">
+      <section className="panel mb-4">
         <h2 className="text-base font-semibold text-text-primary mb-1">
           Couverture des lipides
         </h2>
@@ -780,7 +780,7 @@ export default function DiabeteParametresPage() {
           ] as const).map(([key, label]) => (
             <div
               key={key}
-              className="flex items-center justify-between gap-3 bg-bg-tertiary rounded-xl px-3 py-2.5"
+              className="flex items-center justify-between gap-3 bg-bg-secondary border border-border-default rounded-xl px-3 py-2.5"
             >
               <span className="text-xs text-text-secondary">{label}</span>
               <div className="flex items-center gap-1.5 shrink-0">
@@ -810,7 +810,7 @@ export default function DiabeteParametresPage() {
       </section>
 
       {/* ── Sensibilité & cibles ── */}
-      <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">
+      <section className="panel mb-4">
         <h2 className="text-base font-semibold text-text-primary mb-4">
           Sensibilité &amp; cibles
         </h2>
@@ -824,7 +824,7 @@ export default function DiabeteParametresPage() {
                 inputMode="decimal"
                 value={unitsPer50mg}
                 onChange={(e) => setUnitsPer50mg(e.target.value)}
-                className="num w-20 bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
+                className="num w-20 bg-bg-secondary border border-border-subtle rounded-lg px-3 py-2 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
               />
               <span className="text-sm text-text-secondary">U pour</span>
               <span className="num text-sm font-semibold text-text-primary">50 mg/dL</span>
@@ -845,7 +845,7 @@ export default function DiabeteParametresPage() {
                 onChange={(e) => setTargetGlucose(Number(e.target.value))}
                 min={70}
                 max={150}
-                className="num w-24 bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
+                className="num w-24 bg-bg-secondary border border-border-subtle rounded-lg px-3 py-2 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
               />
               <span className="text-sm text-text-secondary">mg/dL</span>
             </div>
@@ -861,7 +861,7 @@ export default function DiabeteParametresPage() {
                 onChange={(e) => setTargetMin(Number(e.target.value))}
                 min={50}
                 max={100}
-                className="num w-20 bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
+                className="num w-20 bg-bg-secondary border border-border-subtle rounded-lg px-3 py-2 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
               />
               <span className="text-text-tertiary">—</span>
               <input
@@ -871,7 +871,7 @@ export default function DiabeteParametresPage() {
                 onChange={(e) => setTargetMax(Number(e.target.value))}
                 min={140}
                 max={250}
-                className="num w-20 bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
+                className="num w-20 bg-bg-secondary border border-border-subtle rounded-lg px-3 py-2 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
               />
               <span className="text-sm text-text-secondary">mg/dL</span>
             </div>
@@ -888,7 +888,7 @@ export default function DiabeteParametresPage() {
                 min={120}
                 max={360}
                 step={15}
-                className="num w-24 bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
+                className="num w-24 bg-bg-secondary border border-border-subtle rounded-lg px-3 py-2 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
               />
               <span className="text-sm text-text-secondary">
                 minutes
@@ -912,7 +912,7 @@ export default function DiabeteParametresPage() {
       <WhoopConnection />
 
       {/* ── Patterns connus ── */}
-      <section className="surface-1 rounded-3xl p-5 sm:p-6">
+      <section className="panel">
         <h2 className="text-base font-semibold text-text-primary mb-4">Patterns connus</h2>
         <div className="space-y-2">
           {diabetesConfig.knownPatterns.map((p, i) => (
@@ -941,10 +941,12 @@ export default function DiabeteParametresPage() {
         <StoreBackupPanel />
       </div>
 
-      <section className="surface-1 rounded-3xl p-5 sm:p-6">
-        <div className="flex items-center gap-2 mb-2">
-          <Download className="w-4 h-4 text-diabete" />
-          <h2 className="text-base font-semibold text-text-primary">Exporter mes données</h2>
+      <section className="panel">
+        <div className="panel-hd">
+          <div className="flex items-center gap-2">
+            <Download className="w-4 h-4 text-diabete" />
+            <h2>Exporter mes données</h2>
+          </div>
         </div>
         <p className="text-xs text-text-tertiary mt-1 leading-snug">
           Télécharge tout ton historique en un fichier : injections, glucides, hypos, séances, réglages. Ta seule sauvegarde — le stockage du navigateur peut être vidé.
@@ -963,10 +965,12 @@ export default function DiabeteParametresPage() {
           Périmètre STRICT demandé par Ethan : UNIQUEMENT hypoEvents. Rien
           d'autre (injections, sport, glucides, glycémies, repas,
           diagnostics) n'est effacé. Pas d'option "tout effacer". */}
-      <section className="surface-1 rounded-3xl p-5 sm:p-6 mt-4 border border-error/25">
-        <div className="flex items-center gap-2 mb-2">
-          <AlertTriangle className="w-4 h-4 text-error" />
-          <h2 className="text-base font-semibold text-text-primary">Zone dangereuse</h2>
+      <section className="panel mt-4 border border-error/25">
+        <div className="panel-hd">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-error" />
+            <h2>Zone dangereuse</h2>
+          </div>
         </div>
         <p className="text-sm font-medium text-text-primary">
           Réinitialiser l&apos;apprentissage des hypoglycémies

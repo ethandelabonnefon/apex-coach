@@ -93,7 +93,7 @@ export default function WhoopCard({ variant = "compact" }: WhoopCardProps) {
   // ─── Mode full ─────────────────────────────────
   if (loading && !snapshot) {
     return (
-      <section className="surface-1 rounded-3xl p-8 flex items-center justify-center">
+      <section className="panel flex items-center justify-center">
         <Loader2 className="w-5 h-5 animate-spin text-text-tertiary" />
       </section>
     );
@@ -101,7 +101,7 @@ export default function WhoopCard({ variant = "compact" }: WhoopCardProps) {
 
   if (!connected) {
     return (
-      <section className="surface-1 rounded-3xl p-6 sm:p-8 text-center">
+      <section className="panel text-center">
         <Activity className="w-8 h-8 text-text-tertiary mx-auto mb-3" />
         <h2 className="text-base font-semibold text-text-primary mb-2">
           Whoop non connecté
@@ -124,7 +124,7 @@ export default function WhoopCard({ variant = "compact" }: WhoopCardProps) {
 
   if (!snapshot) {
     return (
-      <section className="surface-1 rounded-3xl p-6 sm:p-8 text-center">
+      <section className="panel text-center">
         <AlertTriangle className="w-6 h-6 text-warning mx-auto mb-3" />
         <p className="text-sm text-warning mb-1">Erreur de chargement Whoop</p>
         {error && <p className="text-[11px] text-text-tertiary">{error}</p>}
@@ -145,7 +145,7 @@ export default function WhoopCard({ variant = "compact" }: WhoopCardProps) {
 // ─── États d'erreur compacts (visibles, pas null) ───────────────
 function ReconnectCard({ reason }: { reason: string }) {
   return (
-    <section className="surface-1 rounded-3xl p-4 mb-4 border border-warning/30 bg-warning/5">
+    <section className="panel mb-4 border border-warning/30 bg-warning/5">
       <div className="flex items-start gap-3">
         <div className="shrink-0 w-9 h-9 rounded-xl bg-warning/15 flex items-center justify-center">
           <AlertTriangle className="w-4 h-4 text-warning" />
@@ -180,7 +180,7 @@ function ErrorCard({
   onRetry: () => void;
 }) {
   return (
-    <section className="surface-1 rounded-3xl p-4 mb-4 border border-error/20 bg-error/5">
+    <section className="panel mb-4 border border-error/20 bg-error/5">
       <div className="flex items-start gap-3">
         <div className="shrink-0 w-9 h-9 rounded-xl bg-error/15 flex items-center justify-center">
           <AlertTriangle className="w-4 h-4 text-error" />
@@ -197,7 +197,7 @@ function ErrorCard({
             <button
               type="button"
               onClick={onRetry}
-              className="inline-flex items-center gap-1.5 bg-bg-tertiary border border-border-default text-text-primary font-semibold px-3 py-1.5 rounded-lg text-xs tap-scale hover:bg-bg-hover transition-colors"
+              className="inline-flex items-center gap-1.5 bg-bg-secondary border border-border-default text-text-primary font-semibold px-3 py-1.5 rounded-lg text-xs tap-scale hover:bg-bg-hover transition-colors"
             >
               <RefreshCw className="w-3 h-3" />
               Réessayer
@@ -220,7 +220,7 @@ function CompactCard({ snapshot, loading }: { snapshot: WhoopSnapshot; loading: 
   const rec = recoveryColor(snapshot.recoveryScore);
   const str = strainColor(snapshot.cycleStrain);
   return (
-    <section className="surface-1 rounded-3xl p-5 mb-4">
+    <section className="panel mb-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Activity className="w-4 h-4 text-running" />
@@ -309,7 +309,7 @@ function FullCard({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <section className="surface-1 rounded-3xl p-5 sm:p-6">
+      <section className="panel">
         <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
           <div className="flex items-center gap-2">
             <Activity className="w-5 h-5 text-running" />
@@ -326,7 +326,7 @@ function FullCard({
               onClick={onRefresh}
               disabled={loading}
               aria-label="Rafraîchir Whoop"
-              className="w-8 h-8 rounded-full bg-bg-tertiary border border-border-subtle flex items-center justify-center text-text-secondary hover:text-running transition-colors tap-scale disabled:opacity-50"
+              className="w-8 h-8 rounded-lg bg-bg-secondary border border-border-subtle flex items-center justify-center text-text-secondary hover:text-running transition-colors tap-scale disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
             </button>
@@ -375,10 +375,12 @@ function FullCard({
       </section>
 
       {/* Sommeil */}
-      <section className="surface-1 rounded-3xl p-5 sm:p-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Moon className="w-4 h-4 text-accent-2" />
-          <h2 className="text-base font-semibold text-text-primary">Sommeil dernière nuit</h2>
+      <section className="panel">
+        <div className="panel-hd">
+          <div className="flex items-center gap-2">
+            <Moon className="w-4 h-4 text-accent-2" />
+            <h2>Sommeil dernière nuit</h2>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <MiniStat
@@ -397,12 +399,14 @@ function FullCard({
 
       {/* Dernier workout */}
       {snapshot.lastWorkout && (
-        <section className="surface-1 rounded-3xl p-5 sm:p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Footprints className="w-4 h-4 text-running" />
-            <h2 className="text-base font-semibold text-text-primary">
+        <section className="panel">
+          <div className="panel-hd">
+            <div className="flex items-center gap-2">
+              <Footprints className="w-4 h-4 text-running" />
+              <h2>
               Dernière séance
             </h2>
+            </div>
           </div>
           <div className="surface-2 rounded-xl p-4">
             <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
@@ -488,7 +492,7 @@ function Gauge({
       </div>
       <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(0,0,0,0.08)" }}>
         <div
-          className="h-full rounded-full transition-all"
+          className="h-full rounded-md transition-all"
           style={{ width: `${pct}%`, background: color }}
         />
       </div>
@@ -510,7 +514,7 @@ function MiniStat({
   color?: string;
 }) {
   return (
-    <div className="bg-bg-tertiary rounded-lg px-3 py-2.5">
+    <div className="bg-bg-secondary border border-border-default rounded-lg px-3 py-2.5">
       <div className="flex items-center gap-1 mb-1">
         {icon}
         <p className="text-[9px] uppercase tracking-wide text-text-tertiary font-semibold">

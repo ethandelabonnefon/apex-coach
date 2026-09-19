@@ -21,8 +21,8 @@ const STORAGE_KEY = "apex-theme";
 
 /** Couleur de la barre d'état PWA par thème résolu (= --bg-primary). */
 const THEME_COLOR: Record<ResolvedTheme, string> = {
-  light: "#f5f5f7",
-  dark: "#000000",
+  light: "#eef1f4",
+  dark: "#14191f",
 };
 
 function readStoredChoice(): ThemeChoice {

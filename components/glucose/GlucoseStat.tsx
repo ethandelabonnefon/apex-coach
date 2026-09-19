@@ -70,7 +70,7 @@ export default function GlucoseStat({
   return (
     <Link
       href={href}
-      className="group surface-1 p-3 sm:p-4 tap-scale hover:bg-bg-tertiary transition-colors block"
+      className="group surface-1 p-3 sm:p-4 tap-scale hover:bg-bg-hover transition-colors block"
     >
       <div className="flex items-center gap-1.5 mb-2">
         <Droplet size={12} className="text-diabete" />

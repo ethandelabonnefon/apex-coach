@@ -9,7 +9,7 @@
 - **State**: Zustand 5.0.12 avec persistence localStorage (`apex-coach-storage`)
 - **Styling**: Tailwind CSS 4 + PostCSS, design system premium (tokens via `@theme`)
 - **Design System**: clsx 2.1.1, tailwind-merge 3.5, class-variance-authority 0.7.1
-- **Fonts**: Geist Sans (primary, via `next/font`), Geist Mono (chiffres/métriques via `.num`/`.num-hero`), Inter (fallback). JetBrains Mono abandonné en brand v1.
+- **Fonts** (brand v5, sept. 2026) : Bricolage Grotesque (titres, `--font-display`), Instrument Sans (texte, `--font-sans`), IBM Plex Mono (données via `.num`/`.num-hero`/`.mono`/`.label`, `--font-mono`) — toutes via `next/font/google` dans `app/layout.tsx`.
 - **AI**: Anthropic Claude Sonnet 5 (`claude-sonnet-5`, `@anthropic-ai/sdk` v0.80.0) - toutes les routes API. Migré depuis `claude-sonnet-4-20250514` (retiré le 15 juin 2026) le 3 juillet 2026, avec `thinking: {type: "disabled"}` sur chaque appel (Sonnet 5 active le thinking adaptatif par défaut, ce qui consommait le budget max_tokens avant le JSON)
 - **Charts**: Recharts 3.8.1
 - **Dates**: date-fns 4.1.0
@@ -22,14 +22,11 @@
 apex-coach/
 ├── app/                          # Pages & API routes (App Router)
 │   ├── page.tsx                  # Dashboard principal
-│   ├── layout.tsx                # Layout racine (Geist font, nav, coach)
+│   ├── layout.tsx                # Layout racine (fonts next/font, nav)
 │   ├── globals.css               # Styles globaux + thème dark
 │   ├── api/
 │   │   ├── analyze-photos/       # Vision Claude : analyse morpho photos
-│   │   ├── coach-chat/           # Chat IA interactif (actions + modifications)
-│   │   ├── generate-muscu-program/ # Génération programme muscu (retry 529/503)
 │   │   ├── generate-running-plan/  # Plan running semi-marathon
-│   │   ├── update-programs/      # Comparaison diagnostics + MAJ programme
 │   │   ├── glucose/              # Proxy LibreLink Up (current + history)
 │   │   ├── push/                 # Web Push : subscribe + test (VAPID)
 │   │   ├── whoop/                # OAuth Whoop : auth/callback/status/sync/disconnect
@@ -43,16 +40,14 @@ apex-coach/
 │   │   ├── parametres/           # Config ratios insuline, ISF, cibles
 │   │   └── patterns/             # 4 patterns glycémiques documentés
 │   ├── muscu/
-│   │   ├── page.tsx              # Programme actif, volume/muscle, body map
-│   │   ├── progression/          # Analyse volume, plateaux, surcharge
-│   │   └── seance/[id]/          # Séance individuelle (exercices, tracking)
+│   │   └── page.tsx              # Page d'attente — module calendrier & séances à venir (sept. 2026)
 │   ├── running/
 │   │   ├── page.tsx              # Plan 14 semaines semi-marathon
 │   │   └── zones/                # Zones Z1-Z5 (allures, FC, sensations)
 │   ├── nutrition/                # Diagnostic nutrition, TDEE, macro tracking
 │   ├── profil/
 │   │   ├── page.tsx              # Editeur profil utilisateur
-│   │   └── diagnostic/           # Page diagnostic unifiée (3 onglets)
+│   │   └── diagnostic/           # Page diagnostic (onglets Morphologie + Running)
 │   └── diagnostic/               # Ancien formulaire diagnostic (legacy)
 │
 ├── components/
@@ -65,43 +60,22 @@ apex-coach/
 │   ├── diabete/                  # HypoLogger, HypoFeedback, BedtimeAdvisor, CorrectionSuggestion…
 │   ├── whoop/                    # WhoopCard (compact/full), WhoopConnection
 │   ├── running/                  # RunningTracker, RunningMap (Leaflet)
-│   ├── coach/
-│   │   ├── CoachButton.tsx       # FAB flottant draggable (z-40, safe zones)
-│   │   ├── CoachPanel.tsx        # Panel chat IA
-│   │   └── CoachProvider.tsx     # Context provider état coach
-│   ├── body-map/                 # Carte musculaire visuelle (15 muscles)
 │   ├── diagnostic/
-│   │   ├── MuscuDiagnosticForm.tsx    # 5 étapes muscu + T1D
 │   │   ├── RunningDiagnosticForm.tsx  # 5 étapes running + T1D
 │   │   ├── PhotoCapture.tsx           # Capture photos (sans capture= pour iOS)
 │   │   ├── DiagnosticSummary.tsx      # Résumé avant soumission
 │   │   └── SectionEditor.tsx          # Sections éditables post-diagnostic
-│   ├── musculation/              # PersonalizationBadge, ModifyDaysModal, ReasoningModal
-│   ├── nutrition/                # NutritionDiagnosticForm, NutritionResults
-│   └── programs/                 # ProgramUpdateModal
+│   └── nutrition/                # NutritionDiagnosticForm, NutritionResults
 │
 ├── lib/
 │   ├── utils.ts                  # cn() — merge Tailwind classes (clsx + tailwind-merge)
 │   ├── store.ts                  # Zustand store (profil, diabète, programmes, diagnostics)
-│   ├── constants.ts              # Defaults (USER_PROFILE, DIABETES_CONFIG, MUSCU_PROGRAM)
-│   ├── program-generation-flow.ts # Orchestrateur : AI-first + fallback local
+│   ├── constants.ts              # Defaults (USER_PROFILE, DIABETES_CONFIG, HALF_MARATHON_PLAN)
 │   ├── insulin-calculator.ts     # Bolus, correction, IOB, impact glycémique
 │   ├── running-science.ts        # VMA, zones, prédictions courses, conseils glucose
-│   ├── muscu-science.ts          # 1RM (Epley), volume, plateaux, phases
 │   ├── nutrition-calculator.ts   # BMR + NEAT + TEF + exercice = TDEE + macros
 │   ├── meal-distribution.ts      # Répartition macros par repas
-│   ├── coach-actions.ts          # Actions coach (change_exercise, add_session, adjust_volume)
-│   ├── diagnostic-comparison.ts  # Diff ancien/nouveau diagnostic
-│   ├── body-analysis/            # Analyse mensurations, force, combinaison
 │   ├── calculators/              # Fonctions calcul nutrition + running
-│   ├── data/
-│   │   ├── exercises.ts          # Base de données 50+ exercices (61KB)
-│   │   ├── exercises-database.ts # Types (MuscleGroup, Equipment, Exercise)
-│   │   └── split-templates.ts    # Templates PPL, Upper/Lower, Full Body, Bro
-│   ├── generators/
-│   │   ├── program-generator-local.ts  # Générateur déterministe (fallback)
-│   │   ├── exercise-selector.ts        # Sélection par morpho/mobilité/équipement
-│   │   └── volume-calculator.ts        # Volume cible par muscle selon statut
 │   ├── insulin-calculator.ts     # Bolus, FPU, split dose, IOB (getInsulinOnBoard), pre-sport
 │   ├── bedtime-advisor.ts        # Phase G : prédiction glycémie nuit + reco split
 │   ├── hypo-resucrage.ts         # Phase H : GRG perso, suggestCarbs, classifyHypoContext
@@ -127,7 +101,9 @@ apex-coach/
 
 ## Design System
 
-> ⚠️ **Brand v2 "Apple Health" (juillet 2026)** : l'app est passée en light mode, copie conforme du langage visuel de l'app Santé iOS — fond `#F2F2F7`, cartes blanches, couleurs système iOS (bleu `#007AFF` accent, orange `#FF9500` muscu, rose `#FF2D55` running, vert `#34C759` nutrition, indigo `#5856D6` diabète), SF Pro via `-apple-system`, `.num`/`.num-hero` en sans bold tabular (plus de mono). Les tokens de `globals.css` gardent les mêmes noms mais de nouvelles valeurs ; tous les hex legacy dark ont été convertis dans le code. **Source de vérité = `BRAND.md`. La section ci-dessous décrit l'ancien système dark v1/v2, conservée uniquement pour l'historique des noms de tokens/composants.**
+> ⚠️ **Brand v5 "Instrument" (septembre 2026)** : refonte visuelle complète sans toucher à l'architecture ni aux calculs. Fond gris bleuté `#EEF1F4`, cartes blanc cassé bordées 1 px, anthracite `#1E252D` ; **cobalt `#1F4FD8` = cardio / interactif**, **vert `#178C5E` = glycémie**, **ambre `#C97B12` = alerte uniquement**, acier `#5B6B7A` = nutrition / neutre. Titres Bricolage Grotesque, texte Instrument Sans, **toute donnée en IBM Plex Mono** (`.num`). Rayons ≤ 12 px (16 max), plus de capsules ni de halos ni d'effet verre. Dark = mêmes rôles, valeurs éclaircies. **Source de vérité = `BRAND.md`**, prototypes de référence dans `/Users/ethandelabonnefon/Test/`. **Kit de composants CSS** dans `globals.css` (mêmes recettes que les protos) : `.panel` + `.panel-hd` (carte bordée à en-tête souligné), `.mgrid` / `.cell` (grille de métriques cloisonnée, `.v` valeur mono + `.l` libellé), `.led` (statut), `.pill`, `.chip`, `.seg`, `.alert` / `.note` / `.info`, `.row-item`, `.eyebrow` + `.h-title` (en-tête de page). Les pages utilisent ces classes plutôt que des blocs `bg-bg-tertiary` ou des tuiles d'icônes colorées. Le module musculation (programme IA, séances, body map, coach flottant) a été retiré le 19/09/2026 — `/muscu` est une page d'attente en attendant le module calendrier & séances ; `completedWorkouts` reste dans le store car lu par le diabète.
+
+> (Historique) **Brand v2 "Apple Health" (juillet 2026)** : l'app est passée en light mode, copie conforme du langage visuel de l'app Santé iOS — fond `#F2F2F7`, cartes blanches, couleurs système iOS (bleu `#007AFF` accent, orange `#FF9500` muscu, rose `#FF2D55` running, vert `#34C759` nutrition, indigo `#5856D6` diabète), SF Pro via `-apple-system`, `.num`/`.num-hero` en sans bold tabular (plus de mono). Les tokens de `globals.css` gardent les mêmes noms mais de nouvelles valeurs ; tous les hex legacy dark ont été convertis dans le code. **Source de vérité = `BRAND.md`. La section ci-dessous décrit l'ancien système dark v1/v2, conservée uniquement pour l'historique des noms de tokens/composants.**
 
 ### (Historique) Phase 2 — "Precision Instrument", avril 2026 · brand v1 juin 2026
 

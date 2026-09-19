@@ -90,32 +90,34 @@ export default function SportGlucoseCorrelation({
   const hasAnySession = (muscuSessions.length + runningSessions.length) > 0;
   if (!hasAnySession) {
     return (
-      <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Dumbbell className="w-4 h-4 text-diabete" />
-          <h2 className="text-base font-semibold text-text-primary">
+      <section className="panel mb-4">
+        <div className="panel-hd">
+          <div className="flex items-center gap-2">
+            <Dumbbell className="w-4 h-4 text-diabete" />
+            <h2>
             Corrélation sport ↔ glycémie
           </h2>
+          </div>
         </div>
         <p className="text-xs text-text-tertiary text-center py-6">
-          Aucune séance loggée pour l&apos;instant. Termine une séance dans /muscu/seance/[id]
-          ou logue un running pour voir l&apos;impact réel sur ta glycémie.
+          Aucune séance loggée pour l&apos;instant. Logue un running ou une séance
+          de force pour voir l&apos;impact réel sur ta glycémie.
         </p>
       </section>
     );
   }
 
   return (
-    <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">
+    <section className="panel mb-4">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <Icon className="w-4 h-4" style={{ color: accentColor }} />
-          <h2 className="text-base font-semibold text-text-primary">
+          <h2 className="text-[15px] font-semibold">
             Corrélation sport ↔ glycémie
           </h2>
         </div>
         {/* Tabs */}
-        <div className="flex items-center gap-1 bg-bg-tertiary rounded-lg p-0.5">
+        <div className="flex items-center gap-1 bg-bg-secondary border border-border-default rounded-lg p-0.5">
           <button
             type="button"
             onClick={() => setTab("muscu")}
@@ -311,7 +313,7 @@ function Stat({
       ? "text-error"
       : "text-text-primary";
   return (
-    <div className="bg-bg-tertiary rounded-lg px-3 py-2.5">
+    <div className="bg-bg-secondary border border-border-default rounded-lg px-3 py-2.5">
       <p className="text-[10px] text-text-tertiary uppercase tracking-wide">{label}</p>
       <p className={`num text-base font-semibold mt-0.5 ${valueColor}`}>{value}</p>
       {hint && <p className="text-[9px] text-text-tertiary mt-0.5">{hint}</p>}

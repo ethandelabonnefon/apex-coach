@@ -151,7 +151,7 @@ export default function NightBrain({
   }
 
   return (
-    <section className="surface-1 rounded-3xl p-5 mb-4 border border-accent-2/30">
+    <section className="panel mb-4 border border-accent-2/30">
       {/* Header */}
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="flex items-center gap-2 min-w-0">
@@ -204,7 +204,7 @@ export default function NightBrain({
                     {/* Numéro + icône */}
                     <div className="shrink-0 flex flex-col items-center gap-1">
                       <span
-                        className={`w-6 h-6 rounded-full ${tone.ring} ${tone.text} text-xs font-bold flex items-center justify-center num`}
+                        className={`w-6 h-6 rounded-md ${tone.ring} ${tone.text} text-xs font-bold flex items-center justify-center num`}
                       >
                         {badge}
                       </span>
@@ -222,7 +222,7 @@ export default function NightBrain({
                           type="button"
                           onClick={() => handleAction(step)}
                           disabled={done}
-                          className={`mt-2 text-[11px] font-semibold ${tone.text} bg-bg-tertiary border border-border-default hover:bg-bg-hover transition-colors px-3 py-1.5 rounded-md tap-scale inline-flex items-center gap-1 disabled:opacity-50`}
+                          className={`mt-2 text-[11px] font-semibold ${tone.text} bg-bg-secondary border border-border-default hover:bg-bg-hover transition-colors px-3 py-1.5 rounded-md tap-scale inline-flex items-center gap-1 disabled:opacity-50`}
                         >
                           {done ? (
                             <>
@@ -374,7 +374,7 @@ function CalibrationLine({
                 key={choice.daysAgo}
                 type="button"
                 onClick={() => handleChoice(choice.daysAgo, choice.label)}
-                className="px-2.5 py-1 rounded-lg bg-bg-tertiary border border-border-default text-[10px] font-medium text-text-secondary hover:border-diabete/50 hover:text-diabete transition-colors tap-scale"
+                className="px-2.5 py-1 rounded-lg bg-bg-secondary border border-border-default text-[10px] font-medium text-text-secondary hover:border-diabete/50 hover:text-diabete transition-colors tap-scale"
               >
                 {choice.label}
               </button>
@@ -424,7 +424,7 @@ function BreakdownRow({
   tone: "info" | "warning";
 }) {
   return (
-    <div className="bg-bg-tertiary rounded-md px-2 py-1.5 flex items-center justify-between">
+    <div className="bg-bg-secondary border border-border-default rounded-md px-2 py-1.5 flex items-center justify-between">
       <span className="text-text-tertiary uppercase tracking-wide text-[9px] font-semibold">
         {label}
       </span>

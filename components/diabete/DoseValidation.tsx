@@ -8,8 +8,7 @@
  * jamais un ratio : c'est la page qui le fait, après confirmation.
  */
 
-import { AlertTriangle, CheckCircle2, HelpCircle, Loader2, WifiOff } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
+import { Loader2, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
   formatRatio,
@@ -50,26 +49,18 @@ function SlotCard({
 
   const tone =
     analysis.verdict === "over-bolus"
-      ? { icon: AlertTriangle, color: "text-warning", badge: "warning" as const }
+      ? { led: "amber", pill: "amber", text: "À revoir" }
       : analysis.verdict === "ok"
-        ? { icon: CheckCircle2, color: "text-success", badge: "success" as const }
-        : { icon: HelpCircle, color: "text-text-tertiary", badge: "default" as const };
-  const Icon = tone.icon;
+        ? { led: "green", pill: "green", text: "OK" }
+        : { led: "steel", pill: "", text: "Données insuffisantes" };
 
   return (
-    <div className="surface-2 rounded-2xl p-4">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="flex items-center gap-2">
-          <Icon className={`w-4 h-4 ${tone.color}`} />
-          <h3 className="text-sm font-semibold text-text-primary">{label}</h3>
-        </div>
-        <Badge variant={tone.badge} size="sm">
-          {analysis.verdict === "over-bolus"
-            ? "sur-dose"
-            : analysis.verdict === "ok"
-              ? "correct"
-              : "pas assez de données"}
-        </Badge>
+    <div className="row-item items-start">
+      <span className={`led ${tone.led} mt-1.5`} />
+      <div className="min-w-0 flex-1">
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <h3 className="t">{label}</h3>
+        <span className={`pill ${tone.pill}`}>{tone.text}</span>
       </div>
 
       {analysis.verdict === "insufficient-data" ? (
@@ -125,6 +116,7 @@ function SlotCard({
           </Button>
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -166,7 +158,7 @@ export function DoseValidation({
     );
   }
   return (
-    <div className="grid sm:grid-cols-2 gap-3">
+    <div>
       {analyses.map((a) => (
         <SlotCard key={a.mealType} analysis={a} onApply={onApply} />
       ))}

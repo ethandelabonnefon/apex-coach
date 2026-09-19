@@ -11,9 +11,8 @@
  */
 
 import { useEffect, useState } from "react";
-import { Pulse } from "@/components/ui/Pulse";
 import { useGlucose } from "@/hooks/useGlucose";
-import { glucoseToneColor, formatReadingAge } from "@/lib/libre-link/utils";
+import { glucoseToneColor, formatReadingAge, trendStringToNumber } from "@/lib/libre-link/utils";
 
 type Props = {
   /** Valeur de repli (lecture manuelle la plus récente du store) */
@@ -28,6 +27,22 @@ function toneToPulse(
   if (tone === "target") return "success";
   if (tone === "hypo" || tone === "hyper") return "error";
   return "warning";
+}
+
+/**
+ * Vitesse de tendance Libre (mg/dL/min) — slide rule Abbott, mêmes valeurs
+ * que `lib/glucose-prediction.ts` (fonction privée là-bas). Affichage
+ * seulement : la projection « dans 30 min » de cette carte est un repère
+ * de lecture, pas une entrée de calcul.
+ */
+function trendVelocityMgPerMin(arrow?: number): number {
+  switch (arrow) {
+    case 1: return -1.5;
+    case 2: return -0.7;
+    case 4: return 0.7;
+    case 5: return 1.5;
+    default: return 0;
+  }
 }
 
 function glucoseStatusText(value: number): string {
@@ -61,72 +76,80 @@ export default function GlucoseWidget({ fallbackValue, fallbackRecordedAt }: Pro
   const color = hasLive ? glucoseToneColor(current!.tone) : undefined;
   const pulseTone = hasLive ? toneToPulse(current!.tone) : "warning";
 
-  return (
-    <div className="surface-2 rounded-2xl p-5 flex items-center gap-5">
-      <div className="shrink-0">
-        <Pulse tone={pulseTone} size="lg" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 mb-1">
-          <p className="label">Glycémie</p>
-          {hasLive && (
-            <span
-              className="dot-pulse h-1.5 w-1.5 rounded-full bg-success"
-              aria-label="Live"
-              title="Live FreeStyle Libre"
-            />
-          )}
-        </div>
+  const led = hasLive
+    ? pulseTone === "success" ? "green" : pulseTone === "warning" ? "amber" : "red"
+    : "steel";
 
-        {displayValue !== undefined ? (
-          <>
-            <div className="flex items-baseline gap-1.5">
-              <span
-                className="num-hero text-4xl sm:text-5xl font-semibold leading-none"
-                style={color ? { color } : undefined}
-              >
-                {displayValue}
-              </span>
-              {hasLive && (
-                <span className="text-lg text-text-secondary font-semibold">
-                  {current!.arrow}
-                </span>
-              )}
-              <span className="text-xs text-text-tertiary">mg/dL</span>
-            </div>
-            <p className="mt-1 text-xs text-text-secondary">
-              {hasLive ? current!.statusLabel : glucoseStatusText(displayValue)}
-              {displayDate && (
-                <>
-                  {" · "}
-                  <span className="num text-text-tertiary">
-                    {formatReadingAge(displayDate, nowMs)}
-                  </span>
-                </>
-              )}
-              {hasLive && (
-                <>
-                  {" · "}
-                  <span className="text-text-tertiary">{current!.trendLabel}</span>
-                </>
-              )}
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="num-hero text-4xl sm:text-5xl font-semibold text-text-tertiary leading-none">
-              {loading ? "…" : "—"}
-            </p>
-            <p className="mt-1 text-xs text-text-tertiary">
-              {notConfigured
-                ? "LibreLink non connecté"
-                : loading
+  return (
+    <div className="panel">
+      <div className="panel-hd">
+        <div className="flex items-center gap-2">
+          <span className={`led ${led}`} />
+          <b className="whitespace-nowrap">Glycémie live</b>
+        </div>
+        <span className={`pill ${hasLive ? "green" : ""}`}>
+          {hasLive
+            ? `FreeStyle · ${displayDate ? formatReadingAge(displayDate, nowMs).replace(/^il y a /, "") : "live"}`
+            : notConfigured
+              ? "non connecté"
+              : displayDate
+                ? `manuel · ${formatReadingAge(displayDate, nowMs)}`
+                : "—"}
+        </span>
+      </div>
+
+      {displayValue !== undefined ? (
+        <>
+        <div className="flex items-start gap-3">
+          <span className="num-hero text-[52px] leading-none" style={color ? { color } : undefined}>
+            {displayValue}
+          </span>
+          {hasLive && (
+            <span className="text-2xl mt-1 font-semibold" style={color ? { color } : undefined}>
+              {current!.arrow}
+            </span>
+          )}
+          <div className="ml-auto text-right">
+            {hasLive ? (
+              <>
+                <p className="text-[11px] text-text-tertiary">Tendance</p>
+                <p className="num text-sm">
+                  {(() => {
+                    const v = trendVelocityMgPerMin(trendStringToNumber(current!.trend));
+                    return v === 0 ? "stable" : `${v > 0 ? "+" : "−"}${Math.abs(v).toFixed(1).replace(".", ",")} /min`;
+                  })()}
+                </p>
+                <p className="text-[11px] text-text-tertiary mt-1.5">Dans 30 min</p>
+                <p className="num text-sm">
+                  ≈ {Math.round(displayValue + trendVelocityMgPerMin(trendStringToNumber(current!.trend)) * 30)}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[11px] text-text-tertiary">Statut</p>
+                <p className="text-sm font-semibold text-text-primary">{glucoseStatusText(displayValue)}</p>
+              </>
+            )}
+          </div>
+        </div>
+        {hasLive && (
+          <p className="text-xs text-text-secondary mt-1">{current!.statusLabel} · {current!.trendLabel}</p>
+        )}
+        </>
+      ) : (
+        <div className="flex items-start gap-3">
+          <span className="num-hero text-[52px] leading-none text-text-tertiary">
+            {loading ? "…" : "—"}
+          </span>
+          <p className="ml-auto text-xs text-text-tertiary text-right mt-2">
+            {notConfigured
+              ? "LibreLink non connecté"
+              : loading
                 ? "Récupération…"
                 : "Aucune lecture disponible"}
-            </p>
-          </>
-        )}
-      </div>
+          </p>
+        </div>
+      )}
     </div>
   );
 }

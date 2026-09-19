@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { Card, PageHeader, Button, Badge, SectionTitle, InfoBox } from "@/components/ui";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useStore } from "@/lib/store";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
@@ -155,7 +156,7 @@ const MEASUREMENT_LABELS: Record<string, string> = {
   calf: "Mollet",
 };
 
-const CHART_COLORS = ["var(--success)", "var(--chart-2)", "var(--accent-2)", "var(--warning)", "var(--error)", "#ffcc00", "var(--success)", "var(--accent-2)"];
+const CHART_COLORS = ["var(--success)", "var(--chart-2)", "var(--accent-2)", "var(--warning)", "var(--error)", "var(--chart-3)", "var(--success)", "var(--accent-2)"];
 
 function MensurationsSection() {
   const { diagnosticHistory } = useStore();
@@ -186,7 +187,6 @@ function MensurationsSection() {
         <Card>
           <SectionTitle>Mes Mensurations</SectionTitle>
           <div className="text-center py-8">
-            <span className="text-3xl mb-3 block">📏</span>
             <p className="text-text-secondary text-sm">Aucune mensuration enregistrée</p>
             <p className="text-text-tertiary text-xs mt-1">Complète le diagnostic morphologique pour voir tes mensurations ici</p>
           </div>
@@ -276,7 +276,7 @@ function MensurationsSection() {
                 <button
                   key={key}
                   onClick={() => toggleMetric(key)}
-                  className={`text-[10px] px-2 py-1 rounded-full border transition-all ${
+                  className={`text-[10px] px-2 py-1 rounded-md border transition-all ${
                     selectedMetrics.includes(key)
                       ? "border-border-strong text-text-primary"
                       : "border-border-subtle text-text-disabled hover:text-text-secondary"
@@ -442,15 +442,16 @@ export default function ProfilPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto pb-32">
+    <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 lg:py-8 pb-32">
       <PageHeader
-        title="Mon Profil"
-        subtitle="Configure tes informations personnelles, diabete et entrainement"
+        title="Profil"
+        subtitle="Informations personnelles, diabète et entraînement"
         action={
           <div className="flex items-center gap-3">
             {saved && (
-              <span className="text-xs text-[var(--success)] animate-pulse">Sauvegarde !</span>
+              <span className="text-xs text-[var(--success)]">Sauvegardé</span>
             )}
+            <ThemeToggle />
             <Button onClick={handleSaveAll}>Sauvegarder</Button>
           </div>
         }
@@ -461,8 +462,8 @@ export default function ProfilPage() {
         <SectionTitle>Accès rapide</SectionTitle>
         <div className="space-y-1">
           {[
-            { href: "/profil/diagnostic", icon: "🔬", label: "Mon Diagnostic", desc: "Morphologie, muscu, running" },
-            { href: "/diabete", icon: "💉", label: "Paramètres Diabète", desc: "Ratios, FSI, cible glycémique" },
+            { href: "/profil/diagnostic", label: "Mon Diagnostic", desc: "Morphologie, running" },
+            { href: "/diabete", label: "Paramètres Diabète", desc: "Ratios, FSI, cible glycémique" },
           ].map((item) => (
             <Link
               key={item.href}
@@ -470,7 +471,6 @@ export default function ProfilPage() {
               className="flex items-center justify-between p-3 rounded-xl hover:bg-bg-hover transition-colors"
             >
               <div className="flex items-center gap-3">
-                <span className="text-xl">{item.icon}</span>
                 <div>
                   <p className="text-sm font-medium">{item.label}</p>
                   <p className="text-xs text-text-tertiary">{item.desc}</p>
@@ -770,7 +770,7 @@ export default function ProfilPage() {
             {/* Macro split visual */}
             <div className="pt-3">
               <p className="text-xs text-text-tertiary mb-2">Repartition calorique</p>
-              <div className="flex h-3 rounded-full overflow-hidden">
+              <div className="flex h-3 rounded-md overflow-hidden">
                 {(() => {
                   const pCal = targetProtein * 4;
                   const cCal = targetCarbs * 4;

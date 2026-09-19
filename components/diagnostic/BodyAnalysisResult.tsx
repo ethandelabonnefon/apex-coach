@@ -23,11 +23,11 @@ export default function BodyAnalysisResult({ analysis, photos }: BodyAnalysisRes
   });
 
   const sectionIcons: Record<string, { icon: string; color: string }> = {
-    "retard": { icon: "📉", color: "orange" },
-    "asymétrie": { icon: "⚖️", color: "blue" },
-    "masse grasse": { icon: "📊", color: "purple" },
-    "points forts": { icon: "💪", color: "green" },
-    "recommandation": { icon: "🎯", color: "green" },
+    "retard": { icon: "", color: "orange" },
+    "asymétrie": { icon: "", color: "blue" },
+    "masse grasse": { icon: "", color: "purple" },
+    "points forts": { icon: "", color: "green" },
+    "recommandation": { icon: "", color: "green" },
   };
 
   function getSectionStyle(title: string): { icon: string; color: string } {
@@ -35,7 +35,7 @@ export default function BodyAnalysisResult({ analysis, photos }: BodyAnalysisRes
     for (const [key, val] of Object.entries(sectionIcons)) {
       if (lower.includes(key)) return val;
     }
-    return { icon: "📋", color: "gray" };
+    return { icon: "", color: "gray" };
   }
 
   return (

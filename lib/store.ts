@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { STORE_KEY, wouldWipeInsulinLogs } from '@/lib/store-backup/payload';
-import { USER_PROFILE, DIABETES_CONFIG, DIABETES_PROFILES_DEFAULT, MUSCU_PROGRAM } from './constants';
+import { USER_PROFILE, DIABETES_CONFIG, DIABETES_PROFILES_DEFAULT } from './constants';
 import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile, SplitDoseReminder, HypoEvent, CarbEntry, DeclaredSportSession } from '@/types';
 import type { NightPredictionRecord } from '@/lib/night-calibration';
 import { computeRatioStamps, hasNewRatioStamps } from '@/lib/dose-validation';
@@ -31,40 +31,6 @@ export interface DiagnosticEntry {
   photos: string[];
   analysis: { ratios: { label: string; value: number; ideal: string; status: string }[]; recommendations: string[] } | null;
   photoAnalysis: string | null;
-}
-
-export interface ProgramChange {
-  id: string;
-  date: string;
-  programType: 'muscu' | 'running';
-  triggerReason: string;
-  changesSummary: string[];
-  comparativeAnalysis: { aspect: string; before: string; after: string; reasoning: string }[];
-  exerciseChanges: { oldExercise: string; newExercise: string; reason: string }[];
-  volumeAdjustments: Record<string, { before: number; after: number; reason: string }>;
-  priorities: { rank: number; muscle: string; reason: string }[];
-  predictions: Record<string, string>;
-  fullAnalysis: string;
-  acknowledged: boolean;
-}
-
-// Active program (generated or static fallback)
-export interface ActiveProgram {
-  id: string;
-  name: string;
-  splitType: string;
-  daysPerWeek: number;
-  currentWeek: number;
-  currentPhase: string;
-  sessions: { id: string; name: string; day: string; focus: string; duration: number; exercises: { order: number; name: string; sets: number; reps: string; rir: number; rest: number; reasoning?: string; cues?: string[]; alternatives?: (string | { name: string; reason: string })[]; weight?: unknown }[]; notes?: unknown }[];
-  volumeDistribution: Record<string, { setsPerWeek: number; status: string; justification: string }>;
-  generationReasoning: string;
-  generatedFrom: { morphologyDate?: string; muscuDiagDate?: string; bodyMapDate?: string };
-  predictions: Record<string, string>;
-  t1dProtocol: { preworkout: string; postworkout: string; alerts: string[] };
-  createdAt: string;
-  version: number;
-  isGenerated: boolean; // true = AI-generated, false = static fallback
 }
 
 interface AppState {
@@ -124,15 +90,10 @@ interface AppState {
   meals: Meal[];
   addMeal: (meal: Meal) => void;
 
-  // Muscu
-  muscuProgram: typeof MUSCU_PROGRAM;
+  // Séances de force loggées (lues par le diabète : corrélation sport-glucose,
+  // sensibilité post-exercice). Le module calendrier/séances y écrira.
   completedWorkouts: CompletedWorkout[];
   addCompletedWorkout: (workout: CompletedWorkout) => void;
-
-  // Active generated program
-  activeProgram: ActiveProgram | null;
-  setActiveProgram: (program: ActiveProgram | null) => void;
-  hasActiveProgram: () => boolean;
 
   // Running
   currentRunningWeek: number;
@@ -150,19 +111,6 @@ interface AppState {
   // Diagnostic History
   diagnosticHistory: DiagnosticEntry[];
   addDiagnosticEntry: (entry: DiagnosticEntry) => void;
-
-  // Program Changes
-  programChanges: ProgramChange[];
-  addProgramChange: (change: ProgramChange) => void;
-  acknowledgeProgramChange: (id: string) => void;
-  pendingProgramChanges: () => ProgramChange[];
-
-  // Muscu Diagnostic
-  muscuDiagnosticCompleted: boolean;
-  muscuDiagnosticData: Record<string, unknown>;
-  setMuscuDiagnosticData: (data: Record<string, unknown>) => void;
-  generatedMuscuProgram: Record<string, unknown> | null;
-  setGeneratedMuscuProgram: (program: Record<string, unknown> | null) => void;
 
   // Running Diagnostic
   runningDiagnosticCompleted: boolean;
@@ -513,14 +461,8 @@ export const useStore = create<AppState>()(
       meals: [],
       addMeal: (meal) => set((s) => ({ meals: [meal, ...s.meals].slice(0, 500) })),
 
-      muscuProgram: MUSCU_PROGRAM,
       completedWorkouts: [],
       addCompletedWorkout: (workout) => set((s) => ({ completedWorkouts: [workout, ...s.completedWorkouts] })),
-
-      // Active generated program
-      activeProgram: null,
-      setActiveProgram: (program) => set({ activeProgram: program }),
-      hasActiveProgram: () => false, // computed in selectors
 
       currentRunningWeek: 1,
       setRunningWeek: (week) => set({ currentRunningWeek: week }),
@@ -542,27 +484,6 @@ export const useStore = create<AppState>()(
       addDiagnosticEntry: (entry) => set((s) => ({
         diagnosticHistory: [entry, ...s.diagnosticHistory].slice(0, 50),
       })),
-
-      // Program Changes
-      programChanges: [],
-      addProgramChange: (change) => set((s) => ({
-        programChanges: [change, ...s.programChanges].slice(0, 100),
-      })),
-      acknowledgeProgramChange: (id) => set((s) => ({
-        programChanges: s.programChanges.map((c) =>
-          c.id === id ? { ...c, acknowledged: true } : c
-        ),
-      })),
-      pendingProgramChanges: () => {
-        return [];
-      },
-
-      // Muscu Diagnostic
-      muscuDiagnosticCompleted: false,
-      muscuDiagnosticData: {},
-      setMuscuDiagnosticData: (data) => set({ muscuDiagnosticData: data, muscuDiagnosticCompleted: true }),
-      generatedMuscuProgram: null,
-      setGeneratedMuscuProgram: (program) => set({ generatedMuscuProgram: program }),
 
       // Running Diagnostic
       runningDiagnosticCompleted: false,

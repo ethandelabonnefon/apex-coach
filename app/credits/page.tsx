@@ -46,7 +46,7 @@ export default function CreditsPage() {
 
       <ul className="space-y-4">
         {CREDITS.map((c) => (
-          <li key={c.title} className="surface-1 p-5">
+          <li key={c.title} className="panel">
             <p className="text-base font-semibold tracking-tight">{c.title}</p>
             <p className="text-sm text-text-secondary mt-1">
               par{" "}

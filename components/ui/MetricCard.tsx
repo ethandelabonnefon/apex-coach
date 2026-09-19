@@ -70,7 +70,7 @@ export const MetricCard = forwardRef<HTMLDivElement, MetricCardProps>(
       <div
         ref={ref}
         className={cn(
-          "relative surface-1 p-4 overflow-hidden transition-colors hover:bg-bg-tertiary",
+          "relative surface-1 p-4 overflow-hidden transition-colors hover:bg-bg-hover",
           className
         )}
         {...props}
@@ -84,7 +84,7 @@ export const MetricCard = forwardRef<HTMLDivElement, MetricCardProps>(
           )}
         </div>
         <div className="flex items-baseline gap-1.5">
-          <span className={cn("num text-3xl font-semibold leading-none", toneText[tone])}>
+          <span className={cn("num text-3xl leading-none", toneText[tone])}>
             {value}
           </span>
           {unit && (
