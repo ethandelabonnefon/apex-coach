@@ -44,7 +44,7 @@ export function InstallBanner() {
           </svg>
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="font-bold text-sm">Installe APEX</h3>
+          <h3 className="font-bold text-sm">Installe APEX Coach</h3>
           <p className="text-xs text-text-secondary mt-0.5">
             {isIOS
               ? "Appuie sur Partager puis \"Sur l'écran d'accueil\""

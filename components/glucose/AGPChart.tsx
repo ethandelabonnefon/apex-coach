@@ -86,15 +86,13 @@ export default function AGPChart({ points, days = 14 }: AGPChartProps) {
   }, [slots]);
 
   return (
-    <section className="panel mb-4">
-      <div className="panel-hd">
+    <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2">
-            <LineIcon className="w-4 h-4 text-diabete" />
-            <h2>
+          <LineIcon className="w-4 h-4 text-diabete" />
+          <h2 className="text-base font-semibold text-text-primary">
             Profil glucose ambulatoire (AGP · {days}j)
           </h2>
-          </div>
         </div>
         <span className="num text-[10px] text-text-tertiary uppercase tracking-wide">
           modal day

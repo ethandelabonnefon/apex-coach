@@ -1,308 +1,536 @@
 "use client";
 
-/**
- * Overview — tableau de bord (brand v5 « Instrument », sept. 2026).
- *
- * Mise en page calquée sur le prototype validé
- * (Test/apex-global-prototype.html, écran « Overview ») :
- *   1. en-tête eyebrow + titre
- *   2. panneau Glycémie live (valeur mono, courbe 8h, moyenne / TIR)
- *   3. grille Récup Whoop | Insuline active
- *   4. panneau Action du jour
- *   5. panneau Nutrition
- *   6. liste des modules avec leur chiffre-clé
- *
- * Aucun calcul nouveau : IOB via `activeIOB` (même moteur que /diabete),
- * calories depuis `meals`, séances depuis `completedWorkouts`.
- */
-
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { useGlucose } from "@/hooks/useGlucose";
-import { useWhoop } from "@/hooks/useWhoop";
-import { activeIOB } from "@/lib/glucose-prediction";
-import { DIABETES_CONFIG } from "@/lib/constants";
-import { glucoseToneColor } from "@/lib/libre-link/utils";
+import { Ring } from "@/components/ui/Ring";
 import { Sparkline } from "@/components/ui/Sparkline";
-import { CalendarDays, Footprints, Droplet, Apple, Stethoscope, ChevronRight } from "lucide-react";
+import { glucoseToneColor, glucoseToneLabel } from "@/lib/libre-link/utils";
+import WhoopCard from "@/components/whoop/WhoopCard";
+import RecoveryFigure from "@/components/whoop/RecoveryFigure";
+import {
+  ArrowUpRight,
+  Dumbbell,
+  Footprints,
+  Apple,
+  Droplet,
+  ChevronRight,
+  Flame,
+  Activity,
+} from "lucide-react";
 
-function glucoseTone(value: number): "green" | "amber" | "red" {
-  if (value < 70 || value > 250) return "red";
-  if (value < 80 || value > 180) return "amber";
-  return "green";
+const DAYS_FR = [
+  "Dimanche",
+  "Lundi",
+  "Mardi",
+  "Mercredi",
+  "Jeudi",
+  "Vendredi",
+  "Samedi",
+];
+
+function glucoseToneText(value: number): "success" | "warning" | "error" {
+  if (value < 70 || value > 250) return "error";
+  if (value > 180 || value < 80) return "warning";
+  return "success";
 }
 
 function glucoseStatus(value: number): string {
   if (value < 70) return "Hypoglycémie";
   if (value > 250) return "Très élevée";
   if (value > 180) return "Élevée";
-  if (value < 80) return "Basse";
   return "En plage";
 }
 
-function fmtMin(min: number | null): string {
-  if (min === null) return "—";
-  const h = Math.floor(min / 60);
-  const m = Math.round(min % 60);
-  return `${h}h${String(m).padStart(2, "0")}`;
-}
-
 export default function Dashboard() {
-  const { profile, glucoseReadings, meals, completedWorkouts, insulinLogs } = useStore();
+  const {
+    profile,
+    diabetesConfig,
+    glucoseReadings,
+    meals,
+    completedWorkouts,
+    activeProgram,
+    muscuProgram,
+  } = useStore();
 
-  const { current: liveGlucose, history: liveHistory } = useGlucose({ mode: "history" });
-  const whoop = useWhoop();
+  // ─── Glucose live + 8h history pour le sparkline ─────
+  const {
+    current: liveGlucose,
+    history: liveHistory,
+    notConfigured: glucoseNotConfigured,
+  } = useGlucose({ mode: "history" });
 
-  // Tick 60 s pour l'IOB (évite un Date.now() impur au rendu).
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 60_000);
-    return () => clearInterval(id);
-  }, []);
-  const now = new Date(nowMs);
-
+  // ─── Context temporel ─────────────────────────────
+  const now = new Date();
   const hours = now.getHours();
   const greeting =
-    hours < 5 ? "Bonne nuit" : hours < 12 ? "Bonjour" : hours < 18 ? "Bel après-midi" : "Bonsoir";
+    hours < 5
+      ? "Bonne nuit"
+      : hours < 12
+      ? "Bonjour"
+      : hours < 18
+      ? "Bel après-midi"
+      : "Bonsoir";
+  const todayName = DAYS_FR[now.getDay()];
 
-  // ─── Glycémie : live + repli manuel ──────────────────
-  const lastManual = glucoseReadings[0];
-  const displayGlucose = liveGlucose?.value ?? lastManual?.value;
+  // ─── Action du jour : séance muscu si programmée ──
+  const sessions = activeProgram?.sessions || muscuProgram.sessions;
+  const todaySession = sessions.find((s) => s.day === todayName);
+
+  // ─── Glycémie : live + fallback manuel ─────────────
+  const lastManualGlucose = glucoseReadings[0];
+  const displayGlucose = liveGlucose?.value ?? lastManualGlucose?.value;
+  const isLive = liveGlucose !== null;
+
+  // Sparkline data (live history) ou fallback derniers manuels
   const sparkData = useMemo(() => {
-    if (liveHistory.length >= 2) return liveHistory.map((p) => p.value);
-    if (glucoseReadings.length >= 2) return [...glucoseReadings].reverse().slice(-32).map((g) => g.value);
+    if (liveHistory.length >= 2) {
+      return liveHistory.map((p) => p.value);
+    }
+    if (glucoseReadings.length >= 2) {
+      return [...glucoseReadings].reverse().slice(-32).map((g) => g.value);
+    }
     return [];
   }, [liveHistory, glucoseReadings]);
+
+  // Stats sur la fenêtre du sparkline
   const glucoseStats = useMemo(() => {
     if (sparkData.length === 0) return null;
-    const avg = Math.round(sparkData.reduce((s, v) => s + v, 0) / sparkData.length);
-    const tir = Math.round((sparkData.filter((v) => v >= 70 && v <= 180).length / sparkData.length) * 100);
+    const avg = Math.round(
+      sparkData.reduce((s, v) => s + v, 0) / sparkData.length,
+    );
+    const inRange = sparkData.filter((v) => v >= 70 && v <= 180).length;
+    const tir = Math.round((inRange / sparkData.length) * 100);
     return { avg, tir };
   }, [sparkData]);
-  const fallbackTone = displayGlucose !== undefined ? glucoseTone(displayGlucose) : null;
-  const glucoseColor = liveGlucose
-    ? glucoseToneColor(liveGlucose.tone)
-    : fallbackTone === "green"
-      ? "var(--success)"
-      : fallbackTone === "amber"
-        ? "var(--warning)"
-        : fallbackTone === "red"
-          ? "var(--error)"
-          : "var(--text-tertiary)";
-  const glucoseLed = fallbackTone ?? "steel";
 
-  // ─── Insuline active (même modèle bi-exponentiel que /diabete) ──
-  const iob = useMemo(() => {
-    const recent = insulinLogs
-      .map((log) => ({ units: log.units, minutesAgo: (nowMs - new Date(log.injectedAt).getTime()) / 60000 }))
-      .filter((inj) => inj.minutesAgo >= 0 && inj.minutesAgo < DIABETES_CONFIG.insulinActiveDuration);
-    return { total: Math.round(activeIOB(recent) * 10) / 10, count: recent.length };
-  }, [insulinLogs, nowMs]);
-
-  // ─── Nutrition du jour ───────────────────────────────
-  const todayMeals = meals.filter((m) => new Date(m.eatenAt).toDateString() === now.toDateString());
-  const todayCalories = Math.round(todayMeals.reduce((s, m) => s + m.calories, 0));
-  const todayProtein = Math.round(todayMeals.reduce((s, m) => s + (m.protein ?? 0), 0));
-  const todayCarbs = Math.round(todayMeals.reduce((s, m) => s + (m.carbs ?? 0), 0));
-  const todayFat = Math.round(todayMeals.reduce((s, m) => s + (m.fat ?? 0), 0));
+  // ─── Calories du jour ─────────────────────────────
+  const todayMeals = meals.filter((m) => {
+    const d = new Date(m.eatenAt);
+    return d.toDateString() === now.toDateString();
+  });
+  const todayCalories = Math.round(
+    todayMeals.reduce((s, m) => s + m.calories, 0),
+  );
   const calorieTarget = profile.targetCalories || 3000;
   const caloriePct = Math.min(100, Math.round((todayCalories / calorieTarget) * 100));
 
-  // ─── Séances de la semaine ───────────────────────────
-  const completedThisWeek = completedWorkouts.filter(
-    (w) => (nowMs - new Date(w.date).getTime()) / 86400000 < 7,
-  ).length;
+  // ─── Séances complétées cette semaine ─────────────
+  const nowMs = now.getTime();
+  const completedThisWeek = completedWorkouts.filter((w) => {
+    const diff = (nowMs - new Date(w.date).getTime()) / 86400000;
+    return diff < 7;
+  }).length;
+  const sessionsPlanned = sessions.length || 4;
+  const sessionsPct = Math.min(
+    100,
+    Math.round((completedThisWeek / sessionsPlanned) * 100),
+  );
 
-  // ─── Récup Whoop ─────────────────────────────────────
-  const recovery = whoop.connected ? whoop.snapshot?.recoveryScore ?? null : null;
-  const recoveryLed = recovery === null ? "steel" : recovery >= 67 ? "green" : recovery >= 34 ? "amber" : "red";
+  // ─── Couleur du gros chiffre glucose selon tone ────
+  const glucoseColorVal = liveGlucose
+    ? glucoseToneColor(liveGlucose.tone)
+    : displayGlucose !== undefined
+    ? (() => {
+        const tone = glucoseToneText(displayGlucose);
+        return tone === "success"
+          ? "var(--success)"
+          : tone === "warning"
+          ? "var(--warning)"
+          : "var(--error)";
+      })()
+    : "var(--text-tertiary)";
 
   return (
-    <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 lg:py-8 space-y-3">
-      {/* ── En-tête ── */}
-      <header className="mb-1">
-        <p className="eyebrow">
-          {now.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}
+    <div className="max-w-[960px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
+      {/* ============ HERO : Salut Ethan + 1 action ============ */}
+      <section className="mb-8 animate-in">
+        <p className="label mb-2">
+          {now.toLocaleDateString("fr-FR", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+          })}
         </p>
-        <h1 className="h-title">
-          {greeting} {profile.name}
+        <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight mb-6">
+          {greeting},{" "}
+          <span style={{ color: "var(--accent)" }}>{profile.name}</span>.
         </h1>
-      </header>
 
-      {/* ── Glycémie ── */}
-      <Link href="/diabete" className="panel block hover:bg-bg-hover transition-colors">
-        <div className="panel-hd">
-          <div className="flex items-center gap-2">
-            <span className={`led ${glucoseLed}`} />
-            <b>Glycémie</b>
-          </div>
-          <span className={`pill ${liveGlucose ? "green" : ""}`}>
-            {liveGlucose ? "Libre · live" : lastManual ? "manuel" : "non connecté"}
-          </span>
-        </div>
-        <div className="flex items-start gap-3">
-          <span className="num-hero text-[52px] leading-none" style={{ color: glucoseColor }}>
-            {displayGlucose ?? "—"}
-          </span>
-          {liveGlucose && (
-            <span className="text-2xl mt-1 font-semibold" style={{ color: glucoseColor }}>
-              {liveGlucose.arrow}
-            </span>
-          )}
-          <div className="ml-auto text-right">
-            <p className="text-[11px] text-text-tertiary">Moy. 8h</p>
-            <p className="num text-base">{glucoseStats?.avg ?? "—"}</p>
-            <p className="text-[11px] text-text-tertiary mt-1.5">TIR 8h</p>
-            <p className="num text-base" style={{ color: "var(--success)" }}>
-              {glucoseStats ? `${glucoseStats.tir} %` : "—"}
+        {/* ACTION DU JOUR — une seule, gros CTA */}
+        {todaySession ? (
+          <Link
+            href={`/muscu/seance/${todaySession.id}`}
+            className="group block surface-1 p-6 lg:p-7 relative overflow-hidden tap-scale hover:bg-bg-tertiary transition-colors"
+          >
+            <div
+              aria-hidden
+              className="absolute -top-20 -right-20 h-48 w-48 rounded-full opacity-[0.15] blur-3xl"
+              style={{ background: "var(--muscu)" }}
+            />
+            <div className="relative flex items-center gap-5">
+              <div className="h-14 w-14 rounded-xl bg-muscu/15 flex items-center justify-center flex-shrink-0">
+                <Dumbbell size={24} className="text-muscu" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="label">Séance du jour</span>
+                <p className="text-lg sm:text-xl font-semibold tracking-tight mt-1 truncate">
+                  {todaySession.name}
+                </p>
+                <p className="text-xs text-text-tertiary mt-0.5">
+                  <span className="num">{todaySession.exercises.length}</span>{" "}
+                  exos ·{" "}
+                  <span className="num">{todaySession.duration}</span>min ·{" "}
+                  {todaySession.focus}
+                </p>
+              </div>
+              <ArrowUpRight
+                size={22}
+                strokeWidth={2.5}
+                className="text-text-tertiary group-hover:text-muscu transition-colors flex-shrink-0"
+              />
+            </div>
+          </Link>
+        ) : displayGlucose !== undefined &&
+          glucoseToneText(displayGlucose) !== "success" ? (
+          <Link
+            href="/diabete"
+            className="group block surface-1 p-6 lg:p-7 relative overflow-hidden tap-scale hover:bg-bg-tertiary transition-colors"
+          >
+            <div
+              aria-hidden
+              className="absolute -top-20 -right-20 h-48 w-48 rounded-full opacity-[0.15] blur-3xl"
+              style={{ background: "var(--diabete)" }}
+            />
+            <div className="relative flex items-center gap-5">
+              <div className="h-14 w-14 rounded-xl bg-diabete/15 flex items-center justify-center flex-shrink-0">
+                <Droplet size={24} className="text-diabete" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="label">Priorité du moment</span>
+                <p className="text-lg sm:text-xl font-semibold tracking-tight mt-1">
+                  {glucoseStatus(displayGlucose)} — ouvre le calculateur
+                </p>
+                <p className="text-xs text-text-tertiary mt-0.5">
+                  <span className="num">{displayGlucose}</span> mg/dL · cible{" "}
+                  <span className="num">{diabetesConfig.targetGlucose}</span>
+                </p>
+              </div>
+              <ArrowUpRight
+                size={22}
+                strokeWidth={2.5}
+                className="text-text-tertiary group-hover:text-diabete transition-colors flex-shrink-0"
+              />
+            </div>
+          </Link>
+        ) : (
+          <div className="surface-1 p-6 lg:p-7">
+            <span className="label">Aujourd&apos;hui</span>
+            <p className="text-lg sm:text-xl font-semibold tracking-tight mt-1 mb-1">
+              Jour de repos.
+            </p>
+            <p className="text-xs text-text-tertiary">
+              Récupération active · mobilité, marche, étirements.
             </p>
           </div>
-        </div>
-        {displayGlucose !== undefined && (
-          <p className="text-xs text-text-secondary mt-1">
-            {liveGlucose?.statusLabel ?? glucoseStatus(displayGlucose)}
-            {liveGlucose?.trendLabel ? ` · ${liveGlucose.trendLabel}` : ""}
-          </p>
         )}
-        {sparkData.length >= 2 && (
-          <div className="mt-3 w-full">
-            <Sparkline data={sparkData} color="var(--success)" height={72} width={640} className="w-full" />
-          </div>
-        )}
-      </Link>
+      </section>
 
-      {/* ── Récup | IOB ── */}
-      <div className="mgrid">
-        <Link href="/whoop" className="cell hover:bg-bg-hover transition-colors">
-          <div className="flex items-center gap-2">
-            <span className={`led ${recoveryLed}`} />
-            <span className="eyebrow">Récup Whoop</span>
-          </div>
-          <div className="v mt-2">
-            {recovery ?? "—"}
-            <small>%</small>
-          </div>
-          <div className="l">
-            {whoop.connected && whoop.snapshot
-              ? `HRV ${whoop.snapshot.hrvMs ?? "—"} · ${fmtMin(whoop.snapshot.sleepDurationMin)}${
-                  whoop.snapshot.cycleStrain !== null ? ` · strain ${whoop.snapshot.cycleStrain.toFixed(1)}` : ""
-                }`
-              : "non connecté"}
-          </div>
-        </Link>
-        <Link href="/diabete" className="cell hover:bg-bg-hover transition-colors">
-          <div className="flex items-center gap-2">
-            <span className={`led ${iob.total > 0.5 ? "amber" : "steel"}`} />
-            <span className="eyebrow">Insuline active</span>
-          </div>
-          <div className="v mt-2">
-            {iob.total.toFixed(1).replace(".", ",")}
-            <small>U</small>
-          </div>
-          <div className="l">
-            {iob.count === 0 ? "rien d'actif" : `${iob.count} injection${iob.count > 1 ? "s" : ""} en cours`}
-          </div>
-        </Link>
-      </div>
+      {/* ============ FIGURE 3D RÉCUPÉRATION (couleur = Recovery Whoop) ============ */}
+      <RecoveryFigure />
 
-      {/* ── Action du jour ── */}
-      <section className="panel">
-        <div className="panel-hd">
-          <b>Action du jour</b>
-          <span className="pill">
-            {completedThisWeek} séance{completedThisWeek > 1 ? "s" : ""} · 7 j
-          </span>
-        </div>
-        <div className="row-item">
-          <span className="sq ink" />
-          <div>
-            <div className="t">Séances — module en reconstruction</div>
-            <div className="s">calendrier Phase 0 importé de Notion à venir</div>
-          </div>
-          <Link href="/muscu" className="ml-auto text-text-tertiary" aria-label="Séances">
-            <ChevronRight size={16} />
-          </Link>
-        </div>
-        <div className="row-item">
-          <span className="sq cobalt" />
-          <div>
-            <div className="t">Running</div>
-            <div className="s">GPS Apex ou Watch → Whoop</div>
-          </div>
-          <Link href="/running" className="ml-auto text-text-tertiary" aria-label="Running">
-            <ChevronRight size={16} />
-          </Link>
-        </div>
+      {/* ============ WHOOP QUICK-VIEW (si connecté) ============ */}
+      <WhoopCard variant="compact" />
+
+      {/* ============ GLUCOSE TREND HERO (live + sparkline 8h) ============ */}
+      <section className="mb-6 animate-in">
         <Link
           href="/diabete"
-          className="mt-3 flex h-11 items-center justify-center rounded-lg bg-text-primary text-bg-secondary text-sm font-semibold"
+          className="group block surface-1 relative overflow-hidden p-5 sm:p-6 tap-scale hover:bg-bg-tertiary transition-colors"
         >
-          Briefing pré-sport
+          {/* Glow lavender en fond */}
+          <div
+            aria-hidden
+            className="absolute -bottom-24 -left-16 h-56 w-56 rounded-full opacity-[0.10] blur-3xl"
+            style={{ background: "var(--diabete)" }}
+          />
+
+          <div className="relative">
+            <div className="flex items-center gap-1.5 mb-3">
+              <Droplet size={12} className="text-diabete" />
+              <span className="label">Glycémie</span>
+              {isLive && (
+                <span
+                  className="ml-2 dot-pulse h-1.5 w-1.5 rounded-full bg-success"
+                  aria-label="Live"
+                />
+              )}
+              <span className="ml-auto text-[10px] text-text-tertiary">
+                {liveHistory.length > 0
+                  ? `${liveHistory.length} pts · 8h`
+                  : glucoseNotConfigured
+                  ? "manuel"
+                  : "—"}
+              </span>
+            </div>
+
+            <div className="flex items-end justify-between gap-4">
+              {/* Valeur actuelle + label */}
+              <div className="flex-1 min-w-0">
+                {displayGlucose !== undefined ? (
+                  <>
+                    <div className="flex items-baseline gap-2">
+                      <span
+                        className="num-hero text-5xl sm:text-6xl font-semibold leading-none tabular-nums"
+                        style={{ color: glucoseColorVal }}
+                      >
+                        {displayGlucose}
+                      </span>
+                      <span className="text-sm text-text-tertiary">mg/dL</span>
+                      {liveGlucose && (
+                        <span
+                          className="text-lg ml-1"
+                          style={{ color: glucoseColorVal }}
+                        >
+                          {liveGlucose.arrow}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-text-secondary mt-2">
+                      {liveGlucose
+                        ? `${liveGlucose.statusLabel} · ${liveGlucose.trendLabel}`
+                        : `Cible ${diabetesConfig.targetGlucose} mg/dL`}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="num-hero text-5xl sm:text-6xl font-semibold text-text-tertiary leading-none">
+                      —
+                    </p>
+                    <p className="text-xs text-text-tertiary mt-2">
+                      {glucoseNotConfigured
+                        ? "Capteur non configuré"
+                        : "Aucune lecture"}
+                    </p>
+                  </>
+                )}
+              </div>
+
+              {/* Sparkline 8h */}
+              {sparkData.length >= 2 && (
+                <div className="flex-shrink-0">
+                  <Sparkline
+                    data={sparkData}
+                    color={glucoseColorVal}
+                    fill
+                    height={48}
+                    width={140}
+                    strokeWidth={2}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Stats récap si data dispo */}
+            {glucoseStats && (
+              <div className="mt-4 pt-4 border-t border-border-subtle flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="label">Moy</span>
+                  <span
+                    className="num font-semibold"
+                    style={{
+                      color:
+                        glucoseStats.avg >= 70 && glucoseStats.avg <= 180
+                          ? "var(--success)"
+                          : "var(--warning)",
+                    }}
+                  >
+                    {glucoseStats.avg}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="label">TIR</span>
+                  <span
+                    className="num font-semibold"
+                    style={{
+                      color:
+                        glucoseStats.tir >= 70
+                          ? "var(--success)"
+                          : "var(--warning)",
+                    }}
+                  >
+                    {glucoseStats.tir}
+                    <span className="text-text-tertiary text-[10px]">%</span>
+                  </span>
+                </div>
+                {liveGlucose && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="label">Statut</span>
+                    <span
+                      className="font-semibold"
+                      style={{ color: glucoseColorVal }}
+                    >
+                      {glucoseToneLabel(liveGlucose.tone)}
+                    </span>
+                  </div>
+                )}
+                <ChevronRight
+                  size={14}
+                  className="text-text-tertiary group-hover:text-text-primary transition-colors ml-auto"
+                />
+              </div>
+            )}
+          </div>
         </Link>
       </section>
 
-      {/* ── Nutrition ── */}
-      <Link href="/nutrition" className="panel block hover:bg-bg-hover transition-colors">
-        <div className="panel-hd">
-          <b>Nutrition</b>
-          <span className="num text-xs text-text-tertiary">
-            {todayCalories.toLocaleString("fr-FR")} / {calorieTarget.toLocaleString("fr-FR")} kcal
-          </span>
-        </div>
-        <div className="h-1.5 rounded-sm bg-bg-tertiary overflow-hidden">
-          <div className="h-full bg-text-primary" style={{ width: `${caloriePct}%` }} />
-        </div>
-        <div className="mgrid c3 flat mt-3">
-          <div className="cell">
-            <div className="v">
-              {todayProtein}
-              <small>/{profile.targetProtein || 170}</small>
+      {/* ============ 2 STATS RINGS : Calories + Séances ============ */}
+      {/* Layout vertical : ring centré avec valeur DEDANS, label+sub en dessous.
+          Plus propre sur mobile, et fidèle aux refs (PulseUp, Antony Thomas). */}
+      <section className="mb-6 grid grid-cols-2 gap-3 stagger">
+        {/* Calories ring */}
+        <Link
+          href="/nutrition"
+          className="group surface-1 p-5 tap-scale hover:bg-bg-tertiary transition-colors flex flex-col items-center text-center"
+        >
+          <Ring
+            value={todayCalories}
+            max={calorieTarget}
+            size={120}
+            strokeWidth={8}
+            color="var(--nutrition)"
+          >
+            <div className="flex flex-col items-center justify-center leading-tight">
+              <Flame size={12} className="text-nutrition/80 mb-0.5" />
+              <span
+                className="num font-semibold text-2xl tabular-nums"
+                style={{ color: "var(--nutrition)" }}
+              >
+                {todayCalories}
+              </span>
+              <span className="text-[9px] text-text-tertiary mt-0.5">
+                kcal
+              </span>
             </div>
-            <div className="l">Protéines g</div>
-          </div>
-          <div className="cell">
-            <div className="v">
-              {todayCarbs}
-              <small>/{profile.targetCarbs || 375}</small>
-            </div>
-            <div className="l">Glucides g</div>
-          </div>
-          <div className="cell">
-            <div className="v">
-              {todayFat}
-              <small>/{profile.targetFat || 90}</small>
-            </div>
-            <div className="l">Lipides g</div>
-          </div>
-        </div>
-      </Link>
+          </Ring>
+          <p className="label mt-3">Calories</p>
+          <p className="text-[10px] text-text-tertiary mt-0.5 num">
+            {caloriePct}% · cible {calorieTarget}
+          </p>
+        </Link>
 
-      {/* ── Modules ── */}
-      <section className="panel py-1">
-        {[
-          { href: "/muscu", label: "Séances", Icon: CalendarDays, sq: "ink", meta: `${completedThisWeek} cette semaine` },
-          { href: "/running", label: "Running", Icon: Footprints, sq: "cobalt", meta: "plan semi" },
-          { href: "/diabete", label: "Diabète", Icon: Droplet, sq: "green", meta: glucoseStats ? `TIR ${glucoseStats.tir} %` : "—" },
-          { href: "/nutrition", label: "Nutrition", Icon: Apple, sq: "steel", meta: `${caloriePct} %` },
-          { href: "/diabete/docteur", label: "Le Docteur", Icon: Stethoscope, sq: "steel", meta: "bilan" },
-        ].map(({ href, label, Icon, sq, meta }) => (
-          <Link key={href} href={href} className="row-item hover:bg-bg-hover -mx-4 px-4 transition-colors">
-            <span className={`sq ${sq}`} />
-            <Icon size={16} className="text-text-secondary" />
-            <span className="t">{label}</span>
-            <span className="d">{meta}</span>
-            <ChevronRight size={16} className="text-text-tertiary flex-none" />
-          </Link>
-        ))}
+        {/* Séances ring */}
+        <Link
+          href="/muscu"
+          className="group surface-1 p-5 tap-scale hover:bg-bg-tertiary transition-colors flex flex-col items-center text-center"
+        >
+          <Ring
+            value={completedThisWeek}
+            max={sessionsPlanned}
+            size={120}
+            strokeWidth={8}
+            color="var(--muscu)"
+          >
+            <div className="flex flex-col items-center justify-center leading-tight">
+              <Activity size={12} className="text-muscu/80 mb-0.5" />
+              <span
+                className="num font-semibold text-2xl tabular-nums"
+                style={{ color: "var(--muscu)" }}
+              >
+                {completedThisWeek}
+                <span className="text-sm text-text-tertiary font-normal">
+                  /{sessionsPlanned}
+                </span>
+              </span>
+              <span className="text-[9px] text-text-tertiary mt-0.5">
+                séances
+              </span>
+            </div>
+          </Ring>
+          <p className="label mt-3">Cette semaine</p>
+          <p className="text-[10px] text-text-tertiary mt-0.5 num">
+            {sessionsPct}% complétées
+          </p>
+        </Link>
       </section>
 
-      <footer className="pt-4 text-center text-[11px] text-text-tertiary font-mono">
-        APEX · v5 ·{" "}
-        <Link href="/credits" className="hover:text-text-secondary">
+      {/* ============ ACCÈS RAPIDE AUX SECTIONS ============ */}
+      <section className="mb-6">
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-sm font-semibold tracking-tight">Accès rapide</h2>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <QuickLink
+            href="/muscu"
+            icon={<Dumbbell size={18} />}
+            label="Musculation"
+            color="muscu"
+          />
+          <QuickLink
+            href="/running"
+            icon={<Footprints size={18} />}
+            label="Running"
+            color="running"
+          />
+          <QuickLink
+            href="/nutrition"
+            icon={<Apple size={18} />}
+            label="Nutrition"
+            color="nutrition"
+          />
+          <QuickLink
+            href="/diabete"
+            icon={<Droplet size={18} />}
+            label="Diabète"
+            color="diabete"
+          />
+        </div>
+      </section>
+
+      <footer className="mt-10 text-center text-[10px] text-text-tertiary">
+        APEX · <span className="num">v3</span> · Precision Coach ·{" "}
+        <Link href="/credits" className="hover:text-text-secondary transition-colors">
           Crédits
         </Link>
       </footer>
     </div>
+  );
+}
+
+function QuickLink({
+  href,
+  icon,
+  label,
+  color,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  color: "muscu" | "running" | "nutrition" | "diabete";
+}) {
+  const colorClass = {
+    muscu: "bg-muscu/10 text-muscu",
+    running: "bg-running/10 text-running",
+    nutrition: "bg-nutrition/10 text-nutrition",
+    diabete: "bg-diabete/10 text-diabete",
+  }[color];
+
+  return (
+    <Link
+      href={href}
+      className="group flex items-center gap-3 surface-1 p-4 hover:bg-bg-tertiary transition-colors tap-scale"
+    >
+      <div
+        className={`h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0 ${colorClass}`}
+      >
+        {icon}
+      </div>
+      <span className="flex-1 text-sm font-medium">{label}</span>
+      <ChevronRight
+        size={16}
+        className="text-text-tertiary group-hover:text-text-primary transition-colors flex-shrink-0"
+      />
+    </Link>
   );
 }

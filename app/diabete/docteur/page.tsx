@@ -464,7 +464,7 @@ export default function DocteurPage() {
     lastAnalysisIndex >= 0 ? conversation[lastAnalysisIndex] : undefined;
 
   return (
-    <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 lg:py-8">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
       <PageHeader
         title="Le Docteur"
         subtitle="Ton médecin personnel du diabète — il observe, explique et propose. La décision reste la tienne."

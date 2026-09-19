@@ -17,7 +17,7 @@ export function Card({
 }) {
   const glowClass = glow ? `glow-${glow}` : "";
   return (
-    <div className={`panel ${glowClass} ${className}`}>
+    <div className={`card p-5 ${glowClass} ${className}`}>
       {children}
     </div>
   );
@@ -39,11 +39,11 @@ export function StatCard({
   icon?: string;
 }) {
   return (
-    <Card className="!p-4">
+    <Card className="!p-3 sm:!p-5">
       <div className="flex items-start justify-between">
         <div>
-          <p className="label mb-1">{label}</p>
-          <p className={`num text-xl sm:text-2xl leading-none ${color}`}>
+          <p className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider mb-1">{label}</p>
+          <p className={`text-xl sm:text-2xl font-bold ${color}`}>
             {value}
             {unit && <span className="text-[10px] sm:text-sm font-normal text-text-tertiary ml-1">{unit}</span>}
           </p>
@@ -116,10 +116,10 @@ export function PageHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
+    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6 sm:mb-8">
       <div>
-        <h1 className="h-title" style={{ marginTop: 0 }}>{title}</h1>
-        {subtitle && <p className="mt-1.5 text-[13px] text-text-secondary leading-snug">{subtitle}</p>}
+        <h1 className="text-xl sm:text-2xl font-bold">{title}</h1>
+        {subtitle && <p className="text-text-tertiary text-xs sm:text-sm mt-1">{subtitle}</p>}
       </div>
       {action}
     </div>
@@ -140,8 +140,8 @@ export function GlucoseIndicator({ value }: { value: number }) {
     label = value > 250 ? "Très élevé" : "Élevé";
   }
   return (
-    <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-md ${bg}`}>
-      <div className={`w-2 h-2 rounded-full ${color.replace("text-", "bg-")} `} />
+    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full ${bg}`}>
+      <div className={`w-2 h-2 rounded-full ${color.replace("text-", "bg-")} animate-pulse-glow`} />
       <span className={`text-sm font-medium ${color}`}>{value} mg/dL</span>
       <span className={`text-xs ${color} opacity-70`}>{label}</span>
     </div>
@@ -176,15 +176,15 @@ export function Button({
   type?: "button" | "submit";
 }) {
   const variants: Record<string, string> = {
-    primary: "bg-text-primary text-bg-secondary hover:opacity-90 font-semibold",
-    secondary: "bg-bg-secondary text-text-primary hover:bg-bg-hover border border-border-default",
+    primary: "bg-accent text-white hover:bg-accent-hover font-semibold",
+    secondary: "bg-bg-hover text-text-primary hover:bg-bg-hover border border-border-subtle",
     ghost: "text-text-secondary hover:text-text-primary hover:bg-bg-hover",
-    danger: "bg-bg-secondary text-[var(--error)] border border-[var(--error)]/30 hover:bg-[var(--error)]/10",
+    danger: "bg-[var(--error)]/15 text-[var(--error)] hover:bg-[var(--error)]/25",
   };
   const sizes: Record<string, string> = {
-    sm: "px-3 py-1.5 text-xs rounded-md font-medium",
-    md: "px-4 py-2 text-sm rounded-lg font-medium",
-    lg: "px-6 py-3 text-base rounded-lg font-medium",
+    sm: "px-3 py-1.5 text-xs rounded-lg",
+    md: "px-4 py-2 text-sm rounded-xl",
+    lg: "px-6 py-3 text-base rounded-xl",
   };
   return (
     <button
@@ -202,11 +202,7 @@ export function Button({
 }
 
 export function SectionTitle({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`panel-hd ${className}`}>
-      <h2>{children}</h2>
-    </div>
-  );
+  return <h2 className={`text-lg font-semibold mb-4 ${className}`}>{children}</h2>;
 }
 
 export function InfoBox({
@@ -223,7 +219,7 @@ export function InfoBox({
     danger: "bg-[var(--error)]/10 border-[var(--error)]/20 text-[var(--error)]",
   };
   return (
-    <div className={`p-3.5 rounded-lg border text-sm ${styles[variant]}`}>
+    <div className={`p-4 rounded-xl border text-sm ${styles[variant]}`}>
       {children}
     </div>
   );

@@ -508,7 +508,7 @@ export default function NutritionDiagnosticForm({ onComplete }: Props) {
                 <button
                   type="button"
                   onClick={() => updateT1D({ countCarbs: !data.t1dConsiderations?.countCarbs })}
-                  className={`w-10 h-6 rounded-md transition-colors ${
+                  className={`w-10 h-6 rounded-full transition-colors ${
                     data.t1dConsiderations?.countCarbs ? "bg-[var(--success)]" : "bg-bg-hover"
                   }`}
                 >

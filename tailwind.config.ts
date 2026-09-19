@@ -8,18 +8,9 @@ const config: Config = {
   ],
   theme: {
     extend: {
-      // Rayons modérés (brand v5 "Instrument") : plus de capsules ni de
-      // grands arrondis. `rounded-full` reste réservé aux points/LED/rings.
       borderRadius: {
-        lg: "12px",
-        xl: "12px",
-        "2xl": "16px",
-        "3xl": "16px",
-      },
-      fontFamily: {
-        sans: ["var(--font-instrument-sans)", "system-ui", "sans-serif"],
-        display: ["var(--font-bricolage)", "var(--font-instrument-sans)", "sans-serif"],
-        mono: ["var(--font-plex-mono)", "ui-monospace", "monospace"],
+        "2xl": "1rem",
+        "3xl": "1.5rem",
       },
     },
   },

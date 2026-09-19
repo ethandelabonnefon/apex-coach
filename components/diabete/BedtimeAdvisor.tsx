@@ -129,16 +129,14 @@ export default function BedtimeAdvisor({
   })();
 
   return (
-    <section className="panel mb-4">
+    <section className="surface-1 rounded-3xl p-5 mb-4">
       {/* Header */}
-      <div className="panel-hd">
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2">
-            <Moon className="w-4 h-4 text-accent-2" />
-            <h2>
+          <Moon className="w-4 h-4 text-accent-2" />
+          <h2 className="text-base font-semibold text-text-primary">
             Briefing nuit
           </h2>
-          </div>
         </div>
         <button
           type="button"
@@ -184,7 +182,7 @@ export default function BedtimeAdvisor({
                       ? !onLogCorrection
                       : !onLogSnack
                   }
-                  className={`mt-2 text-[10px] font-semibold ${recoStyle.text} bg-bg-secondary border border-border-default hover:bg-bg-hover transition-colors px-3 py-1.5 rounded-md tap-scale disabled:opacity-50 inline-flex items-center gap-1`}
+                  className={`mt-2 text-[10px] font-semibold ${recoStyle.text} bg-bg-tertiary border border-border-default hover:bg-bg-hover transition-colors px-3 py-1.5 rounded-md tap-scale disabled:opacity-50 inline-flex items-center gap-1`}
                 >
                   {advice.recommendation.action.unit === "U" ? (
                     <Syringe className="w-3 h-3" />
@@ -223,7 +221,7 @@ export default function BedtimeAdvisor({
                     <button
                       type="button"
                       onClick={() => onAdjustSplit(sa.suggestedUnits)}
-                      className="mt-2 text-[10px] font-semibold bg-bg-secondary border border-border-default hover:bg-bg-hover transition-colors px-3 py-1.5 rounded-md tap-scale inline-flex items-center gap-1"
+                      className="mt-2 text-[10px] font-semibold bg-bg-tertiary border border-border-default hover:bg-bg-hover transition-colors px-3 py-1.5 rounded-md tap-scale inline-flex items-center gap-1"
                     >
                       <Icon className="w-3 h-3" />
                       {sa.type === "skip" ? "Annuler le split" : `Réduire à ${sa.suggestedUnits}U`}
@@ -344,7 +342,7 @@ function BreakdownRow({
   tone: "info" | "warning";
 }) {
   return (
-    <div className="bg-bg-secondary border border-border-default rounded-md px-2 py-1.5 flex items-center justify-between">
+    <div className="bg-bg-tertiary rounded-md px-2 py-1.5 flex items-center justify-between">
       <span className="text-text-tertiary uppercase tracking-wide text-[9px] font-semibold">
         {label}
       </span>

@@ -13,12 +13,11 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 const variants: Record<CardVariant, string> = {
-  // Toutes les cartes sont bordées : la hiérarchie vient du trait, pas de
-  // l'ombre ni du dégradé (brand v5 "Instrument").
-  default: "bg-bg-secondary border border-border-default shadow-[var(--card-shadow)]",
-  elevated: "bg-bg-elevated border border-border-default shadow-[var(--shadow-elevated)]",
-  bordered: "bg-bg-secondary border border-border-default",
-  gradient: "bg-bg-secondary border border-accent/30",
+  default: "bg-bg-secondary",
+  elevated: "bg-bg-secondary shadow-xl shadow-black/30",
+  bordered: "bg-bg-secondary border border-border-subtle",
+  gradient:
+    "bg-gradient-to-br from-accent/5 to-transparent border border-accent/10",
 };
 
 const paddings: Record<CardPadding, string> = {
@@ -44,7 +43,7 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
       <div
         ref={ref}
         className={cn(
-          "rounded-xl transition-colors duration-150",
+          "rounded-2xl transition-all duration-200",
           variants[variant],
           paddings[padding],
           interactive && "hover:bg-bg-hover cursor-pointer tap-scale",
@@ -76,7 +75,7 @@ export const CardTitle = forwardRef<
   <h3
     ref={ref}
     className={cn(
-      "font-display text-base font-semibold tracking-tight text-text-primary",
+      "text-lg font-semibold tracking-tight text-text-primary",
       className
     )}
     {...props}

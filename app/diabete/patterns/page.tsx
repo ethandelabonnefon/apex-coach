@@ -144,7 +144,7 @@ export default function PatternsPage() {
   const { diabetesConfig } = useStore();
 
   return (
-    <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 lg:py-8">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
       <PageHeader
         title="Patterns glycemiques"
         subtitle="Analyse detaillee des patterns connus et strategies d'adaptation"

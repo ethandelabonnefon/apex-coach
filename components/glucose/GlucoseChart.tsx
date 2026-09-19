@@ -88,14 +88,12 @@ export default function GlucoseChart() {
 
   if (loading && !data.length) {
     return (
-      <div className="panel">
-        <div className="panel-hd">
-          <div className="flex items-center gap-2">
-            <Activity className="w-4 h-4 text-diabete" />
-            <h2>
+      <div className="surface-1 rounded-3xl p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Activity className="w-4 h-4 text-diabete" />
+          <h2 className="text-base font-semibold text-text-primary">
             Courbe 8h
           </h2>
-          </div>
         </div>
         <div className="h-48 rounded-2xl skeleton" />
       </div>
@@ -136,15 +134,13 @@ export default function GlucoseChart() {
   const currentTone = current ? glucoseTone(current.value) : "target";
 
   return (
-    <section className="panel">
-      <div className="panel-hd">
+    <section className="surface-1 rounded-3xl p-6">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2">
-            <Activity className="w-4 h-4 text-diabete" />
-            <h2>
+          <Activity className="w-4 h-4 text-diabete" />
+          <h2 className="text-base font-semibold text-text-primary">
             Courbe 8h
           </h2>
-          </div>
         </div>
         <div className="flex items-center gap-3">
           <Stat label="Moyenne" value={`${avgValue}`} unit="mg/dL" />
@@ -353,12 +349,10 @@ function EmptyState({
   description: string;
 }) {
   return (
-    <section className="panel">
-      <div className="panel-hd">
-        <div className="flex items-center gap-2">
-          <Activity className="w-4 h-4 text-diabete" />
-          <h2>Courbe 8h</h2>
-        </div>
+    <section className="surface-1 rounded-3xl p-6">
+      <div className="flex items-center gap-2 mb-2">
+        <Activity className="w-4 h-4 text-diabete" />
+        <h2 className="text-base font-semibold text-text-primary">Courbe 8h</h2>
       </div>
       <div className="rounded-2xl surface-2 p-8 flex flex-col items-center justify-center gap-2 text-center">
         {icon}

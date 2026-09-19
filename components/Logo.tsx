@@ -41,7 +41,7 @@ export default function Logo({
       {withWordmark && (
         <span className="flex flex-col leading-none">
           <span
-            className="font-display text-sm font-semibold tracking-tight"
+            className="text-sm font-semibold tracking-tight"
             style={{ color: "var(--text-primary)" }}
           >
             APEX

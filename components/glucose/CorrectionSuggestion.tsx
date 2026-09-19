@@ -87,7 +87,7 @@ export default function CorrectionSuggestion() {
   const unitsPer50 = 50 / isf; // = 0.5 avec ISF 100
 
   return (
-    <section className="panel border border-warning/30">
+    <section className="surface-1 rounded-3xl p-5 border border-warning/30">
       <div className="flex items-start justify-between gap-4 mb-4">
         <div className="flex items-start gap-3">
           <div
@@ -178,7 +178,7 @@ export default function CorrectionSuggestion() {
           {isHyper && (
             <div className="rounded-xl bg-error/10 border border-error/25 p-3 mb-3">
               <p className="text-xs text-error font-medium mb-1">
-                Vérifie les cétones
+                ⚠️ Vérifie les cétones
               </p>
               <p className="text-[11px] text-text-secondary leading-relaxed">
                 Au-dessus de 250 mg/dL, teste la cétonémie (bandelette ou

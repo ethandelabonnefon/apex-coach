@@ -2,28 +2,31 @@
 
 import { Badge } from "@/components/ui";
 
-export type DiagnosticTab = "morphologie" | "running";
+export type DiagnosticTab = "morphologie" | "musculation" | "running";
 
 interface DiagnosticTabsProps {
   active: DiagnosticTab;
   onChange: (tab: DiagnosticTab) => void;
   morphoCompleted: boolean;
+  muscuCompleted: boolean;
   runningCompleted: boolean;
 }
 
-const TABS: { id: DiagnosticTab; label: string }[] = [
-  { id: "morphologie", label: "Morphologie" },
-  { id: "running", label: "Running" },
+const TABS: { id: DiagnosticTab; label: string; icon: string }[] = [
+  { id: "morphologie", label: "Morphologie", icon: "🧍" },
+  { id: "musculation", label: "Musculation", icon: "💪" },
+  { id: "running", label: "Running", icon: "🏃" },
 ];
 
 function StatusIcon({ completed }: { completed: boolean }) {
-  if (completed) return <span className="text-[10px] font-mono text-success">✓</span>;
-  return <span className="text-[10px] font-mono text-text-tertiary">—</span>;
+  if (completed) return <span className="text-[10px]">✅</span>;
+  return <span className="text-[10px]">❌</span>;
 }
 
-export default function DiagnosticTabs({ active, onChange, morphoCompleted, runningCompleted }: DiagnosticTabsProps) {
+export default function DiagnosticTabs({ active, onChange, morphoCompleted, muscuCompleted, runningCompleted }: DiagnosticTabsProps) {
   const statuses: Record<DiagnosticTab, boolean> = {
     morphologie: morphoCompleted,
+    musculation: muscuCompleted,
     running: runningCompleted,
   };
 
@@ -41,6 +44,7 @@ export default function DiagnosticTabs({ active, onChange, morphoCompleted, runn
                 : "bg-bg-hover border-border-subtle text-text-secondary hover:bg-bg-hover hover:text-text-secondary"
             }`}
           >
+            <span>{tab.icon}</span>
             <span className="hidden sm:inline">{tab.label}</span>
             <StatusIcon completed={statuses[tab.id]} />
           </button>

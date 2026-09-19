@@ -24,7 +24,7 @@ export function SplashScreen({ children }: { children: React.ReactNode }) {
         >
           APEX
         </p>
-        <p className="label mt-1">Tableau de bord</p>
+        <p className="label mt-1">Precision Coach</p>
         <div className="mt-8">
           <div
             className="w-6 h-6 border-2 rounded-full animate-spin"

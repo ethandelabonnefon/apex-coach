@@ -61,13 +61,13 @@ export function Progress({
         aria-valuemin={0}
         aria-valuemax={safeMax}
         className={cn(
-          "w-full overflow-hidden rounded-sm bg-bg-tertiary",
+          "w-full overflow-hidden rounded-full bg-bg-tertiary",
           sizes[size]
         )}
       >
         <div
           className={cn(
-            "h-full rounded-sm transition-all duration-500 ease-out",
+            "h-full rounded-full transition-all duration-500 ease-out",
             colors[color]
           )}
           style={{ width: `${percentage}%` }}

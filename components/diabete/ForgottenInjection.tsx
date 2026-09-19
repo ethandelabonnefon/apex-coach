@@ -108,7 +108,7 @@ export default function ForgottenInjection() {
           setTime(formatTimeValue(new Date()));
           setOpen(true);
         }}
-        className="mt-3 w-full min-h-11 flex items-center justify-center gap-2 text-xs font-semibold text-text-secondary bg-bg-secondary hover:bg-bg-hover border border-border-subtle rounded-xl py-2.5 transition-colors tap-scale"
+        className="mt-3 w-full min-h-11 flex items-center justify-center gap-2 text-xs font-semibold text-text-secondary bg-bg-tertiary hover:bg-bg-hover border border-border-subtle rounded-xl py-2.5 transition-colors tap-scale"
       >
         <Plus className="w-3.5 h-3.5 shrink-0" />
         J&apos;ai oublié une injection
@@ -117,7 +117,7 @@ export default function ForgottenInjection() {
   }
 
   return (
-    <div className="mt-3 rounded-xl bg-bg-secondary border border-border-subtle p-3 space-y-3 animate-slide-up">
+    <div className="mt-3 rounded-xl bg-bg-tertiary border border-border-subtle p-3 space-y-3 animate-slide-up">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Clock className="w-4 h-4 text-diabete" />

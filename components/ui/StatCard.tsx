@@ -49,12 +49,12 @@ export function StatCard({
   return (
     <div
       className={cn(
-        "rounded-xl bg-bg-secondary border border-border-default p-4 transition-colors duration-200",
+        "rounded-xl bg-bg-secondary p-4 transition-colors duration-200",
         className
       )}
     >
       <div className="mb-2 flex items-center justify-between">
-        <span className="label">
+        <span className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
           {label}
         </span>
         {icon && <span className="text-lg leading-none">{icon}</span>}
@@ -63,7 +63,7 @@ export function StatCard({
       <div className="flex items-baseline gap-1">
         <span
           className={cn(
-            "num text-2xl leading-none",
+            "font-mono text-2xl font-bold tabular-nums",
             colorMap[color]
           )}
         >

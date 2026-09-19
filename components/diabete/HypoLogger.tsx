@@ -133,7 +133,7 @@ export default function HypoLogger({
   // Si récemment loggé → message de confirmation au lieu du formulaire
   if (recentHypo || logged) {
     return (
-      <section className="panel mb-4 border border-warning/40 bg-warning/5">
+      <section className="surface-1 rounded-3xl p-5 mb-4 border border-warning/40 bg-warning/5">
         <div className="flex items-start gap-3">
           <div className="shrink-0 w-10 h-10 rounded-xl bg-warning/15 flex items-center justify-center">
             <Apple className="w-5 h-5 text-warning" />
@@ -160,7 +160,7 @@ export default function HypoLogger({
   }
 
   return (
-    <section className="panel mb-4 border border-error/40 bg-error/5">
+    <section className="surface-1 rounded-3xl p-5 mb-4 border border-error/40 bg-error/5">
       {/* Header alerte */}
       <div className="flex items-start gap-3 mb-4">
         <div className="shrink-0 w-12 h-12 rounded-xl bg-error/15 flex items-center justify-center animate-pulse">
@@ -183,7 +183,7 @@ export default function HypoLogger({
       </div>
 
       {/* Suggestion GRG */}
-      <div className="rounded-xl bg-bg-secondary border border-border-subtle p-3 mb-3 flex items-start gap-2">
+      <div className="rounded-xl bg-bg-tertiary border border-border-subtle p-3 mb-3 flex items-start gap-2">
         <Sparkle className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-text-primary leading-snug">
@@ -262,7 +262,7 @@ export default function HypoLogger({
         <button
           type="button"
           onClick={() => setSelectedCarbs((v) => Math.max(0, v - 1))}
-          className="w-9 h-9 rounded-lg bg-bg-secondary border border-border-default flex items-center justify-center text-text-primary hover:bg-bg-hover transition-colors tap-scale"
+          className="w-9 h-9 rounded-full bg-bg-tertiary border border-border-default flex items-center justify-center text-text-primary hover:bg-bg-hover transition-colors tap-scale"
           aria-label="Moins 1g"
         >
           <Minus className="w-4 h-4" />
@@ -276,7 +276,7 @@ export default function HypoLogger({
         <button
           type="button"
           onClick={() => setSelectedCarbs((v) => v + 1)}
-          className="w-9 h-9 rounded-lg bg-bg-secondary border border-border-default flex items-center justify-center text-text-primary hover:bg-bg-hover transition-colors tap-scale"
+          className="w-9 h-9 rounded-full bg-bg-tertiary border border-border-default flex items-center justify-center text-text-primary hover:bg-bg-hover transition-colors tap-scale"
           aria-label="Plus 1g"
         >
           <Plus className="w-4 h-4" />

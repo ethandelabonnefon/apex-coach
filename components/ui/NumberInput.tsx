@@ -54,7 +54,7 @@ export function NumberInput({
         aria-label={ariaLabel}
         inputMode="decimal"
         className={cn(
-          "rounded-lg border border-border-default bg-bg-secondary text-center font-mono font-medium text-text-primary tabular-nums",
+          "rounded-2xl border border-border-subtle bg-bg-tertiary text-center font-mono font-bold text-text-primary tabular-nums",
           "transition-all duration-200",
           "focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20",
           "disabled:cursor-not-allowed disabled:opacity-50",

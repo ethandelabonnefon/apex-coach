@@ -10,10 +10,11 @@ interface DiagnosticSummaryProps {
   onViewPhotoHistory?: () => void;
 }
 
-function SectionHeader({ title, onEdit }: { title: string; onEdit: () => void }) {
+function SectionHeader({ title, icon, onEdit }: { title: string; icon: string; onEdit: () => void }) {
   return (
     <div className="flex items-center justify-between mb-3">
       <div className="flex items-center gap-2">
+        <span className="text-base">{icon}</span>
         <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
       </div>
       <button
@@ -77,7 +78,7 @@ export default function DiagnosticSummary({ entry, onEditAll, onEditSection, onV
 
       {/* Mensurations */}
       <Card>
-        <SectionHeader title="Mensurations" onEdit={() => onEditSection("mensurations")} />
+        <SectionHeader title="Mensurations" icon="📏" onEdit={() => onEditSection("mensurations")} />
         <MeasurementGrid
           items={[
             { label: "Poitrine", value: m.chest, unit: "cm" },
@@ -114,7 +115,7 @@ export default function DiagnosticSummary({ entry, onEditAll, onEditSection, onV
       {/* Ratios */}
       {ratios.length > 0 && (
         <Card>
-          <SectionHeader title="Ratios calculés" onEdit={() => onEditSection("mensurations")} />
+          <SectionHeader title="Ratios calculés" icon="📐" onEdit={() => onEditSection("mensurations")} />
           <div className="space-y-2">
             {ratios.map((r, i) => (
               <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-bg-hover">
@@ -136,7 +137,7 @@ export default function DiagnosticSummary({ entry, onEditAll, onEditSection, onV
 
       {/* Force */}
       <Card>
-        <SectionHeader title="Tests de force" onEdit={() => onEditSection("historique")} />
+        <SectionHeader title="Tests de force" icon="🏋️" onEdit={() => onEditSection("historique")} />
         <MeasurementGrid
           items={[
             { label: "DC 1RM", value: h.benchPress1RM, unit: "kg" },
@@ -157,7 +158,7 @@ export default function DiagnosticSummary({ entry, onEditAll, onEditSection, onV
 
       {/* Mobilité */}
       <Card>
-        <SectionHeader title="Mobilité" onEdit={() => onEditSection("mobilite")} />
+        <SectionHeader title="Mobilité" icon="🤸" onEdit={() => onEditSection("mobilite")} />
         <div className="space-y-2">
           {[
             { label: "Épaules (mains derrière le dos)", value: mob.shoulderMobility },
@@ -175,7 +176,7 @@ export default function DiagnosticSummary({ entry, onEditAll, onEditSection, onV
       {/* Points faibles */}
       {entry.weakPoints.length > 0 && (
         <Card>
-          <SectionHeader title="Points faibles identifiés" onEdit={() => onEditSection("weakPoints")} />
+          <SectionHeader title="Points faibles identifiés" icon="🎯" onEdit={() => onEditSection("weakPoints")} />
           <div className="flex flex-wrap gap-2">
             {entry.weakPoints.map((wp) => (
               <Badge key={wp} color="orange">{wp}</Badge>
@@ -187,7 +188,7 @@ export default function DiagnosticSummary({ entry, onEditAll, onEditSection, onV
       {/* Photos */}
       {entry.photos && entry.photos.length > 0 && (
         <Card>
-          <SectionHeader title={`Photos (${date})`} onEdit={() => onEditSection("photos")} />
+          <SectionHeader title={`Photos (${date})`} icon="📸" onEdit={() => onEditSection("photos")} />
           <div className="flex gap-3">
             {entry.photos.map((photo, i) => (
               <img
@@ -212,7 +213,7 @@ export default function DiagnosticSummary({ entry, onEditAll, onEditSection, onV
       {/* Analyse IA */}
       {entry.photoAnalysis && (
         <Card>
-          <SectionHeader title="Analyse visuelle IA" onEdit={() => onEditSection("photos")} />
+          <SectionHeader title="Analyse visuelle IA" icon="🤖" onEdit={() => onEditSection("photos")} />
           <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-line max-h-64 overflow-y-auto">
             {entry.photoAnalysis}
           </div>

@@ -1,11 +1,11 @@
 {
-  "name": "APEX",
+  "name": "APEX Coach",
   "short_name": "APEX",
   "description": "Fitness, Nutrition & Diabète T1 - Ton coach personnel",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#EEF1F4",
-  "theme_color": "#EEF1F4",
+  "background_color": "#F2F2F7",
+  "theme_color": "#F2F2F7",
   "orientation": "portrait",
   "icons": [
     {
