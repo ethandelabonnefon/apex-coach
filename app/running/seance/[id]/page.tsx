@@ -137,7 +137,7 @@ export default function RunningSeanceDetailPage({
   if (!session) {
     return (
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6">
-        <div className="surface-1 rounded-2xl p-8 text-center">
+        <div className="panel text-center">
           <Footprints className="w-8 h-8 text-text-tertiary mx-auto mb-3" />
           <p className="text-base font-semibold text-text-primary mb-2">Séance introuvable</p>
           <p className="text-xs text-text-tertiary mb-4">Cette séance a peut-être été supprimée.</p>
@@ -181,7 +181,7 @@ export default function RunningSeanceDetailPage({
           type="button"
           onClick={handleDelete}
           aria-label="Supprimer la séance"
-          className="w-9 h-9 rounded-lg bg-bg-tertiary border border-border-subtle flex items-center justify-center text-text-secondary hover:text-error hover:border-error/40 transition-colors tap-scale"
+          className="w-9 h-9 rounded-lg bg-bg-secondary border border-border-subtle flex items-center justify-center text-text-secondary hover:text-error hover:border-error/40 transition-colors tap-scale"
         >
           <Trash2 className="w-4 h-4" />
         </button>
@@ -219,7 +219,7 @@ export default function RunningSeanceDetailPage({
 
       {/* Carte + replay scrubber */}
       {hasGps && (
-        <section className="surface-1 rounded-2xl overflow-hidden mb-4">
+        <section className="panel overflow-hidden mb-4">
           <div className="relative" style={{ height: 320 }}>
             <RunningMap
               points={gpsPoints}
@@ -227,7 +227,7 @@ export default function RunningSeanceDetailPage({
               glucoseCheckpoints={cps}
               scrubIndex={scrubIdx}
             />
-            <div className="absolute top-3 left-3 z-[500] flex items-center gap-1.5 bg-bg-tertiary/80 backdrop-blur-md rounded-md px-2.5 py-1 border border-border-subtle">
+            <div className="absolute top-3 left-3 z-[500] flex items-center gap-1.5 bg-bg-secondary/80 backdrop-blur-md rounded-md px-2.5 py-1 border border-border-subtle">
               <MapPin className="w-3 h-3 text-running" />
               <span className="text-[10px] uppercase tracking-wide text-text-secondary font-semibold">
                 Trace GPS · {gpsPoints.length} pts
@@ -286,7 +286,7 @@ export default function RunningSeanceDetailPage({
       {(hasElev || hasGlucose) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
           {hasElev && (
-            <section className="surface-1 rounded-2xl p-4">
+            <section className="panel">
               <div className="flex items-center gap-1.5 mb-3">
                 <Mountain className="w-3.5 h-3.5 text-running" />
                 <p className="label">Profil d&apos;altitude</p>
@@ -340,7 +340,7 @@ export default function RunningSeanceDetailPage({
             </section>
           )}
           {hasGlucose && (
-            <section className="surface-1 rounded-2xl p-4">
+            <section className="panel">
               <div className="flex items-center gap-1.5 mb-3">
                 <Droplet className="w-3.5 h-3.5 text-diabete" />
                 <p className="label">Glycémie pendant la séance</p>
@@ -400,13 +400,13 @@ export default function RunningSeanceDetailPage({
 
       {/* Splits détaillés */}
       {splits.length > 0 && (
-        <section className="surface-1 rounded-2xl p-5 mb-4">
+        <section className="panel mb-4">
           <p className="label mb-3">Splits par km</p>
           <div className="space-y-1.5">
             {splits.map((s) => (
               <div
                 key={s.km}
-                className="flex items-center justify-between bg-bg-tertiary rounded-lg px-3 py-2 text-sm"
+                className="flex items-center justify-between bg-bg-secondary border border-border-default rounded-lg px-3 py-2 text-sm"
               >
                 <span className="num text-text-secondary">Km {s.km}</span>
                 <span className="num text-running font-semibold">
@@ -421,7 +421,7 @@ export default function RunningSeanceDetailPage({
 
       {/* Notes */}
       {session.notes && (
-        <section className="surface-1 rounded-2xl p-5 mb-4">
+        <section className="panel mb-4">
           <p className="label mb-2">Notes</p>
           <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
             {session.notes}
@@ -434,7 +434,7 @@ export default function RunningSeanceDetailPage({
 
 function DetailStat({ label, value, unit }: { label: string; value: string; unit?: string }) {
   return (
-    <div className="surface-1 rounded-xl p-3">
+    <div className="panel">
       <p className="label mb-1.5">{label}</p>
       <p className="num text-lg sm:text-xl font-semibold text-running tabular-nums">
         {value}

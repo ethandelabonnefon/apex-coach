@@ -422,7 +422,7 @@ export default function DiagnosticPage() {
   // ─── RUNNING TAB ──────────────────────────────────────────────
   if (activeTab === "running") {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
+      <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 lg:py-8">
         <PageHeader
           title="Mon Diagnostic"
           subtitle="Morphologie et running"
@@ -441,7 +441,7 @@ export default function DiagnosticPage() {
   // ─── SUMMARY VIEW (read mode) ─────────────────────────────────
   if (diagnosticCompleted && lastEntry && viewMode === "summary") {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
+      <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 lg:py-8">
         <PageHeader
           title="Mon Diagnostic"
           subtitle="Morphologie et running"
@@ -567,7 +567,7 @@ export default function DiagnosticPage() {
   // ─── RESULTS VIEW ──────────────────────────────────────────────
   if (viewMode === "results" && analysis) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
+      <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 lg:py-8">
         <PageHeader
           title="Résultats du diagnostic"
           subtitle="Analyse morphologique et recommandations personnalisées"
@@ -691,7 +691,7 @@ export default function DiagnosticPage() {
 
   // ─── FORM VIEW (create/edit) ───────────────────────────────────
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
+    <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 lg:py-8">
       <PageHeader
         title="Mon Diagnostic"
         subtitle="Morphologie et running"

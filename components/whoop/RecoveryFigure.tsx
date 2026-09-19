@@ -47,7 +47,7 @@ export default function RecoveryFigure() {
 
   return (
     <section className="mb-6 animate-in">
-      <div className="surface-1 relative overflow-hidden p-5">
+      <div className="panel relative overflow-hidden">
         {/* halo teinté en fond, discret */}
 
         <div className="relative flex items-center gap-1.5 mb-1">

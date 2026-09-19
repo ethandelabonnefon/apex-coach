@@ -90,13 +90,15 @@ export default function GlucoseCalendar({ points, days = 30 }: GlucoseCalendarPr
   const hasData = scores.some((s) => s.score !== null);
 
   return (
-    <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">
-      <div className="flex items-center justify-between mb-3">
+    <section className="panel mb-4">
+      <div className="panel-hd">
         <div className="flex items-center gap-2">
-          <CalendarDays className="w-4 h-4 text-diabete" />
-          <h2 className="text-base font-semibold text-text-primary">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="w-4 h-4 text-diabete" />
+            <h2>
             Calendrier {days}j
           </h2>
+          </div>
         </div>
         <span className="num text-[10px] text-text-tertiary uppercase tracking-wide">
           score quotidien
@@ -221,7 +223,7 @@ export default function GlucoseCalendar({ points, days = 30 }: GlucoseCalendarPr
 
 function Mini({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-bg-tertiary rounded-lg px-2.5 py-2">
+    <div className="bg-bg-secondary border border-border-default rounded-lg px-2.5 py-2">
       <p className="text-[9px] text-text-tertiary uppercase tracking-wide">{label}</p>
       <p className="num text-sm font-semibold text-text-primary mt-0.5">{value}</p>
     </div>

@@ -11,7 +11,6 @@
  */
 
 import { useEffect, useState } from "react";
-import { Pulse } from "@/components/ui/Pulse";
 import { useGlucose } from "@/hooks/useGlucose";
 import { glucoseToneColor, formatReadingAge } from "@/lib/libre-link/utils";
 
@@ -61,72 +60,65 @@ export default function GlucoseWidget({ fallbackValue, fallbackRecordedAt }: Pro
   const color = hasLive ? glucoseToneColor(current!.tone) : undefined;
   const pulseTone = hasLive ? toneToPulse(current!.tone) : "warning";
 
-  return (
-    <div className="surface-2 rounded-2xl p-5 flex items-center gap-5">
-      <div className="shrink-0">
-        <Pulse tone={pulseTone} size="lg" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 mb-1">
-          <p className="label">Glycémie</p>
-          {hasLive && (
-            <span
-              className="dot-pulse h-1.5 w-1.5 rounded-full bg-success"
-              aria-label="Live"
-              title="Live FreeStyle Libre"
-            />
-          )}
-        </div>
+  const led = hasLive
+    ? pulseTone === "success" ? "green" : pulseTone === "warning" ? "amber" : "red"
+    : "steel";
 
-        {displayValue !== undefined ? (
-          <>
-            <div className="flex items-baseline gap-1.5">
-              <span
-                className="num-hero text-4xl sm:text-5xl font-semibold leading-none"
-                style={color ? { color } : undefined}
-              >
-                {displayValue}
-              </span>
-              {hasLive && (
-                <span className="text-lg text-text-secondary font-semibold">
-                  {current!.arrow}
-                </span>
-              )}
-              <span className="text-xs text-text-tertiary">mg/dL</span>
-            </div>
-            <p className="mt-1 text-xs text-text-secondary">
+  return (
+    <div className="panel">
+      <div className="panel-hd">
+        <div className="flex items-center gap-2">
+          <span className={`led ${led}`} />
+          <b>Glycémie live</b>
+        </div>
+        <span className={`pill ${hasLive ? "green" : ""}`}>
+          {hasLive
+            ? `FreeStyle · ${displayDate ? formatReadingAge(displayDate, nowMs) : "live"}`
+            : notConfigured
+              ? "non connecté"
+              : displayDate
+                ? `manuel · ${formatReadingAge(displayDate, nowMs)}`
+                : "—"}
+        </span>
+      </div>
+
+      {displayValue !== undefined ? (
+        <div className="flex items-start gap-3">
+          <span className="num-hero text-[52px] leading-none" style={color ? { color } : undefined}>
+            {displayValue}
+          </span>
+          {hasLive && (
+            <span className="text-2xl mt-1 font-semibold" style={color ? { color } : undefined}>
+              {current!.arrow}
+            </span>
+          )}
+          <div className="ml-auto text-right">
+            <p className="text-[11px] text-text-tertiary">Statut</p>
+            <p className="text-sm font-semibold text-text-primary">
               {hasLive ? current!.statusLabel : glucoseStatusText(displayValue)}
-              {displayDate && (
-                <>
-                  {" · "}
-                  <span className="num text-text-tertiary">
-                    {formatReadingAge(displayDate, nowMs)}
-                  </span>
-                </>
-              )}
-              {hasLive && (
-                <>
-                  {" · "}
-                  <span className="text-text-tertiary">{current!.trendLabel}</span>
-                </>
-              )}
             </p>
-          </>
-        ) : (
-          <>
-            <p className="num-hero text-4xl sm:text-5xl font-semibold text-text-tertiary leading-none">
-              {loading ? "…" : "—"}
-            </p>
-            <p className="mt-1 text-xs text-text-tertiary">
-              {notConfigured
-                ? "LibreLink non connecté"
-                : loading
+            {hasLive && (
+              <>
+                <p className="text-[11px] text-text-tertiary mt-1.5">Tendance</p>
+                <p className="num text-sm">{current!.trendLabel}</p>
+              </>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-start gap-3">
+          <span className="num-hero text-[52px] leading-none text-text-tertiary">
+            {loading ? "…" : "—"}
+          </span>
+          <p className="ml-auto text-xs text-text-tertiary text-right mt-2">
+            {notConfigured
+              ? "LibreLink non connecté"
+              : loading
                 ? "Récupération…"
                 : "Aucune lecture disponible"}
-            </p>
-          </>
-        )}
-      </div>
+          </p>
+        </div>
+      )}
     </div>
   );
 }

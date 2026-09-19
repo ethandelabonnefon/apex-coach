@@ -130,14 +130,14 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
               type="button"
               onClick={handleDiscard}
               aria-label="Fermer sans enregistrer"
-              className="w-10 h-10 rounded-lg bg-bg-tertiary border border-border-subtle flex items-center justify-center text-text-secondary hover:text-error hover:border-error/40 transition-colors tap-scale"
+              className="w-10 h-10 rounded-lg bg-bg-secondary border border-border-subtle flex items-center justify-center text-text-secondary hover:text-error hover:border-error/40 transition-colors tap-scale"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
           {tooShort && (
-            <div className="surface-1 rounded-2xl p-4 mb-4 bg-warning/10 border border-warning/30 flex items-start gap-2">
+            <div className="panel mb-4 bg-warning/10 border border-warning/30 flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
               <p className="text-xs text-text-secondary leading-relaxed">
                 Distance très faible ({formatDistance(summary.distanceMeters)}) — vérifie que tu avais bien le GPS activé.
@@ -148,8 +148,8 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
 
           {/* Carte avec trace complète (Phase B) */}
           {summary.points.length >= 2 && (
-            <section className="surface-1 rounded-2xl overflow-hidden mb-4 relative">
-              <div className="absolute top-3 left-3 z-[500] flex items-center gap-1.5 bg-bg-tertiary/80 backdrop-blur-md rounded-md px-2.5 py-1 border border-border-subtle">
+            <section className="panel overflow-hidden mb-4 relative">
+              <div className="absolute top-3 left-3 z-[500] flex items-center gap-1.5 bg-bg-secondary/80 backdrop-blur-md rounded-md px-2.5 py-1 border border-border-subtle">
                 <MapPin className="w-3 h-3 text-running" />
                 <span className="text-[10px] uppercase tracking-wide text-text-secondary font-semibold">
                   Trace GPS
@@ -163,11 +163,11 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
                 />
               </div>
               <div className="absolute bottom-3 right-3 z-[500] flex flex-col items-end gap-1 text-[9px] text-text-tertiary">
-                <div className="flex items-center gap-1 bg-bg-tertiary/80 backdrop-blur-md rounded-md px-2 py-0.5 border border-border-subtle">
+                <div className="flex items-center gap-1 bg-bg-secondary/80 backdrop-blur-md rounded-md px-2 py-0.5 border border-border-subtle">
                   <span className="w-1.5 h-1.5 rounded-full bg-success" />
                   <span>Départ</span>
                 </div>
-                <div className="flex items-center gap-1 bg-bg-tertiary/80 backdrop-blur-md rounded-md px-2 py-0.5 border border-border-subtle">
+                <div className="flex items-center gap-1 bg-bg-secondary/80 backdrop-blur-md rounded-md px-2 py-0.5 border border-border-subtle">
                   <span className="w-1.5 h-1.5 rounded-full bg-error" />
                   <span>Arrivée</span>
                 </div>
@@ -200,7 +200,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
             return (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                 {hasElev && (
-                  <section className="surface-1 rounded-2xl p-4">
+                  <section className="panel">
                     <div className="flex items-center gap-1.5 mb-3">
                       <Mountain className="w-3.5 h-3.5 text-running" />
                       <p className="label">Profil d&apos;altitude</p>
@@ -255,7 +255,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
                   </section>
                 )}
                 {hasGlucose && (
-                  <section className="surface-1 rounded-2xl p-4">
+                  <section className="panel">
                     <div className="flex items-center gap-1.5 mb-3">
                       <Droplet className="w-3.5 h-3.5 text-diabete" />
                       <p className="label">Glycémie pendant la séance</p>
@@ -322,13 +322,13 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
 
           {/* Splits détaillés */}
           {summary.splits.length > 0 && (
-            <section className="surface-1 rounded-2xl p-5 mb-4">
+            <section className="panel mb-4">
               <p className="label mb-3">Splits par km</p>
               <div className="space-y-1.5">
                 {summary.splits.map((s) => (
                   <div
                     key={s.km}
-                    className="flex items-center justify-between bg-bg-tertiary rounded-lg px-3 py-2 text-sm"
+                    className="flex items-center justify-between bg-bg-secondary border border-border-default rounded-lg px-3 py-2 text-sm"
                   >
                     <span className="num text-text-secondary">Km {s.km}</span>
                     <span className="num text-running font-semibold">
@@ -342,7 +342,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
           )}
 
           {/* Ressenti */}
-          <section className="surface-1 rounded-2xl p-5 mb-4">
+          <section className="panel mb-4">
             <p className="label mb-3">Ressenti</p>
             <div className="grid grid-cols-5 gap-2">
               {FEELINGS.map((f) => (
@@ -353,7 +353,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
                   className={`flex flex-col items-center gap-1 py-2.5 rounded-lg border transition-all tap-scale ${
                     feeling === f.id
                       ? 'bg-running/15 border-running/40 text-running'
-                      : 'bg-bg-tertiary border-border-subtle text-text-secondary'
+                      : 'bg-bg-secondary border-border-subtle text-text-secondary'
                   }`}
                 >
                   <span className="text-lg" aria-hidden>{f.emoji}</span>
@@ -364,7 +364,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
           </section>
 
           {/* Notes */}
-          <section className="surface-1 rounded-2xl p-5 mb-4">
+          <section className="panel mb-4">
             <label className="block">
               <p className="label mb-2">Notes (optionnel)</p>
               <textarea
@@ -372,7 +372,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
                 onChange={(e) => setNotes(e.target.value)}
                 rows={3}
                 placeholder="Météo, ressenti, douleurs, glycémie observée..."
-                className="w-full bg-bg-tertiary border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-running/50 transition-colors resize-none"
+                className="w-full bg-bg-secondary border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-running/50 transition-colors resize-none"
               />
             </label>
           </section>
@@ -382,7 +382,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
             <button
               type="button"
               onClick={handleDiscard}
-              className="flex-1 bg-bg-tertiary text-text-secondary font-medium py-3 rounded-xl hover:bg-bg-hover transition-colors tap-scale border border-border-subtle"
+              className="flex-1 bg-bg-secondary text-text-secondary font-medium py-3 rounded-xl hover:bg-bg-hover transition-colors tap-scale border border-border-subtle"
             >
               Abandonner
             </button>
@@ -439,7 +439,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
             type="button"
             onClick={handleDiscard}
             aria-label="Quitter le tracker"
-            className="w-9 h-9 rounded-lg bg-bg-tertiary/80 border border-border-subtle flex items-center justify-center text-text-secondary hover:text-error transition-colors tap-scale"
+            className="w-9 h-9 rounded-lg bg-bg-secondary/80 border border-border-subtle flex items-center justify-center text-text-secondary hover:text-error transition-colors tap-scale"
           >
             <X className="w-4 h-4" />
           </button>
@@ -453,7 +453,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
           </div>
         )}
         {isStarting && !tracker.gpsError && (
-          <div className="mx-3 mb-3 rounded-xl bg-bg-tertiary/80 border border-border-subtle px-3 py-2 flex items-center gap-2 backdrop-blur-md">
+          <div className="mx-3 mb-3 rounded-xl bg-bg-secondary/80 border border-border-subtle px-3 py-2 flex items-center gap-2 backdrop-blur-md">
             <Loader2 className="w-3.5 h-3.5 animate-spin text-running" />
             <p className="text-xs text-text-secondary">Acquisition GPS en cours…</p>
           </div>
@@ -494,7 +494,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
               type="button"
               onClick={tracker.pause}
               disabled={isStarting}
-              className="w-14 h-14 rounded-lg bg-bg-tertiary/90 border border-border-default flex items-center justify-center text-text-primary hover:bg-bg-hover transition-colors tap-scale disabled:opacity-40 backdrop-blur-md"
+              className="w-14 h-14 rounded-lg bg-bg-secondary/90 border border-border-default flex items-center justify-center text-text-primary hover:bg-bg-hover transition-colors tap-scale disabled:opacity-40 backdrop-blur-md"
               aria-label="Pause"
             >
               <Pause className="w-5 h-5" />
@@ -599,7 +599,7 @@ function HeroStat({ label, value, unit }: { label: string; value: string; unit?:
 
 function SummaryStat({ label, value, unit }: { label: string; value: string; unit?: string }) {
   return (
-    <div className="surface-1 rounded-xl p-4">
+    <div className="panel">
       <p className="label mb-1.5">{label}</p>
       <p className="num text-xl font-semibold text-running tabular-nums">
         {value}

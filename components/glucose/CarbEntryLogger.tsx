@@ -83,11 +83,13 @@ export default function CarbEntryLogger() {
   );
 
   return (
-    <section className="surface-1 rounded-3xl p-5 mb-4">
-      <div className="flex items-center justify-between gap-2">
+    <section className="panel mb-4">
+      <div className="panel-hd">
         <div className="flex items-center gap-2">
-          <Apple className="w-4 h-4 text-diabete" />
-          <h2 className="text-base font-semibold text-text-primary">Ajouter des glucides</h2>
+          <div className="flex items-center gap-2">
+            <Apple className="w-4 h-4 text-diabete" />
+            <h2>Ajouter des glucides</h2>
+          </div>
         </div>
         {!showForm && (
           <button

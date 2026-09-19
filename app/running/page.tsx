@@ -537,7 +537,7 @@ export default function RunningPage() {
           </span>
         </div>
 
-        <div className="surface-1 p-5 sm:p-6 lg:p-8 relative overflow-hidden">
+        <div className="panel relative overflow-hidden">
           {/* Glow phase color — bumped opacity pour matcher refs fitness */}
 
           {/* Mobile-first : top bar avec week number + chevrons */}
@@ -935,7 +935,7 @@ export default function RunningPage() {
 
       {/* ============ Stats trio ============ */}
       <section className="mb-8 grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <div className="surface-1 p-4">
+        <div className="panel">
           <div className="flex items-center gap-1.5 mb-1">
             <Zap size={11} className="text-running" />
             <span className="label">VMA</span>
@@ -949,7 +949,7 @@ export default function RunningPage() {
           </p>
         </div>
 
-        <div className="surface-1 p-4">
+        <div className="panel">
           <div className="flex items-center gap-1.5 mb-1">
             <Timer size={11} className="text-running" />
             <span className="label">Prédit semi</span>
@@ -967,7 +967,7 @@ export default function RunningPage() {
           </p>
         </div>
 
-        <div className="surface-1 p-4 col-span-2 lg:col-span-1">
+        <div className="panel col-span-2 lg:col-span-1">
           <div className="flex items-center gap-1.5 mb-1">
             <TrendingUp size={11} className="text-running" />
             <span className="label">Volume plan</span>
@@ -1004,7 +1004,7 @@ export default function RunningPage() {
         </div>
 
         {/* Segmented phase bar */}
-        <div className="surface-1 p-4 mb-3">
+        <div className="panel mb-3">
           <div className="relative h-9 rounded-md overflow-hidden flex">
             {weeks.map((w) => {
               const isCurrent = w.weekNum === currentRunningWeek;
@@ -1057,7 +1057,7 @@ export default function RunningPage() {
         </div>
 
         {/* Week pills (compact horizontal scroll) */}
-        <div className="surface-1 p-2">
+        <div className="panel">
           <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
             {weeks.map((w) => {
               const isCurrent = w.weekNum === currentRunningWeek;
@@ -1071,7 +1071,7 @@ export default function RunningPage() {
                   className={`flex-shrink-0 flex flex-col items-center gap-1 px-2.5 py-2 rounded-lg transition-all tap-scale min-w-[52px] ${
                     isCurrent
                       ? "bg-running/15 ring-1 ring-running/40"
-                      : "hover:bg-bg-tertiary"
+                      : "hover:bg-bg-hover"
                   }`}
                 >
                   <span
@@ -1116,7 +1116,7 @@ export default function RunningPage() {
         <Link
           href="/running/zones"
           style={{ touchAction: "manipulation" }}
-          className="surface-1 p-4 flex items-center gap-3 tap-scale hover-lift transition-all"
+          className="panel flex items-center gap-3 tap-scale hover-lift transition-all"
         >
           <div className="h-9 w-9 rounded-md bg-running/15 flex items-center justify-center flex-shrink-0">
             <Activity size={16} className="text-running" />
@@ -1173,7 +1173,7 @@ export default function RunningPage() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="surface-1 w-full sm:max-w-2xl max-h-[85vh] overflow-y-auto sm:rounded-2xl rounded-t-2xl animate-slide-up"
+            className="panel w-full sm:max-w-2xl max-h-[85vh] overflow-y-auto sm:rounded-2xl rounded-t-2xl animate-slide-up"
           >
             <div className="glass sticky top-0 px-5 py-4 flex items-center justify-between border-b border-border-subtle z-10">
               <div className="flex items-center gap-2">

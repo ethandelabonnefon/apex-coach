@@ -52,13 +52,17 @@ export function Sparkline({
   const gradId = `spark-grad-${color.replace(/[^a-z0-9]/gi, "")}`;
 
   return (
-    <div className={cn("inline-flex flex-col gap-1", className)}>
+    <div className={cn("inline-flex flex-col gap-1 max-w-full", className)}>
       {label && <span className="label">{label}</span>}
+      {/* `width` fixe le repère de dessin ; le SVG se contracte à la largeur
+          disponible (max-w-full) sans déformer la courbe. */}
       <svg
         width={width}
         height={height}
         viewBox={`0 0 ${width} ${height}`}
-        className="overflow-visible"
+        preserveAspectRatio="none"
+        className="overflow-visible max-w-full"
+        style={{ height }}
         aria-hidden
       >
         <defs>

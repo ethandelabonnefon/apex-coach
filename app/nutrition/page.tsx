@@ -174,11 +174,11 @@ export default function NutritionPage() {
   // ─── DIAGNOSTIC ──────────────────────────────────
   if (view === "diagnostic") {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
+      <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 lg:py-8">
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <p className="label">Diagnostic nutrition</p>
-            <h1 className="mt-1 text-2xl font-semibold text-text-primary">Besoins caloriques</h1>
+            <p className="eyebrow">Diagnostic nutrition</p>
+            <h1 className="h-title">Besoins caloriques</h1>
           </div>
           {nutritionDiagnosticCompleted && (
             <button
@@ -198,10 +198,10 @@ export default function NutritionPage() {
   // ─── RESULTS ─────────────────────────────────────
   if (view === "results" && calculation && diagnosticSnapshot && mealPlan) {
     return (
-      <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
+      <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 lg:py-8">
         <div className="mb-6">
-          <p className="label">Objectifs calculés</p>
-          <h1 className="mt-1 text-2xl font-semibold text-text-primary">Tes macros sur mesure</h1>
+          <p className="eyebrow">Objectifs calculés</p>
+          <h1 className="h-title">Tes macros sur mesure</h1>
         </div>
         <NutritionResults
           calculation={calculation}
@@ -219,15 +219,15 @@ export default function NutritionPage() {
   const remainingCals = Math.max(0, targets.calories - totals.calories);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto stagger">
+    <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 lg:py-8 stagger">
       {/* ── HERO : Macros du jour — Ring central géant + glow nutrition ── */}
-      <section className="surface-1 rounded-3xl p-6 sm:p-8 mb-4 relative overflow-hidden">
+      <section className="panel mb-4 relative overflow-hidden">
         {/* Glow orange en fond pour signature visuelle */}
 
         <div className="relative flex items-start justify-between gap-4 mb-6">
           <div>
-            <p className="label">Aujourd&apos;hui</p>
-            <h1 className="mt-1 text-xl sm:text-2xl font-semibold text-text-primary">
+            <p className="eyebrow">Aujourd&apos;hui</p>
+            <h1 className="h-title">
               Macros du jour
             </h1>
           </div>
@@ -295,9 +295,9 @@ export default function NutritionPage() {
 
       <div className="grid lg:grid-cols-2 gap-4">
         {/* ── LOGGER ── */}
-        <section className="surface-1 rounded-3xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-text-primary flex items-center gap-2">
+        <section className="panel">
+          <div className="panel-hd">
+            <h2>
               <Plus className="w-4 h-4 text-nutrition" />
               Ajouter un repas
             </h2>
@@ -326,7 +326,7 @@ export default function NutritionPage() {
                 key={food.name}
                 type="button"
                 onClick={() => addQuickFood(food)}
-                className="flex flex-col items-start gap-0.5 px-3 py-2 rounded-xl bg-bg-tertiary hover:bg-bg-hover border border-border-subtle hover:border-nutrition/30 transition-all text-left tap-scale"
+                className="flex flex-col items-start gap-0.5 px-3 py-2 rounded-xl bg-bg-secondary hover:bg-bg-hover border border-border-subtle hover:border-nutrition/30 transition-all text-left tap-scale"
               >
                 <span className="text-xs font-medium text-text-primary">{food.name}</span>
                 <span className="num text-[10px] text-text-tertiary">{food.calories} kcal</span>
@@ -344,7 +344,7 @@ export default function NutritionPage() {
               + Ajouter manuellement
             </button>
           ) : (
-            <div className="rounded-xl bg-bg-tertiary border border-border-subtle p-3 space-y-2">
+            <div className="rounded-xl bg-bg-secondary border border-border-subtle p-3 space-y-2">
               <input
                 type="text"
                 value={currentFood.name}
@@ -402,7 +402,7 @@ export default function NutritionPage() {
                 {foods.map((food, i) => (
                   <div
                     key={`${food.name}-${i}`}
-                    className="flex items-center justify-between bg-bg-tertiary rounded-lg px-3 py-2"
+                    className="flex items-center justify-between bg-bg-secondary border border-border-default rounded-lg px-3 py-2"
                   >
                     <span className="text-sm text-text-primary truncate">{food.name}</span>
                     <div className="flex items-center gap-3">
@@ -437,9 +437,9 @@ export default function NutritionPage() {
         </section>
 
         {/* ── REPAS DU JOUR ── */}
-        <section className="surface-1 rounded-3xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-text-primary flex items-center gap-2">
+        <section className="panel">
+          <div className="panel-hd">
+            <h2>
               <Apple className="w-4 h-4 text-nutrition" />
               Repas du jour
             </h2>
@@ -465,7 +465,7 @@ export default function NutritionPage() {
                 return (
                   <div
                     key={meal.id}
-                    className="rounded-xl border border-border-subtle bg-bg-tertiary p-3 hover-lift"
+                    className="rounded-xl border border-border-subtle bg-bg-secondary p-3 hover-lift"
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">

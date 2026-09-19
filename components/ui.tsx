@@ -17,7 +17,7 @@ export function Card({
 }) {
   const glowClass = glow ? `glow-${glow}` : "";
   return (
-    <div className={`card p-5 ${glowClass} ${className}`}>
+    <div className={`panel ${glowClass} ${className}`}>
       {children}
     </div>
   );
@@ -39,7 +39,7 @@ export function StatCard({
   icon?: string;
 }) {
   return (
-    <Card className="!p-3 sm:!p-5">
+    <Card className="!p-4">
       <div className="flex items-start justify-between">
         <div>
           <p className="label mb-1">{label}</p>
@@ -116,10 +116,10 @@ export function PageHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6 sm:mb-8">
+    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold">{title}</h1>
-        {subtitle && <p className="text-text-tertiary text-xs sm:text-sm mt-1">{subtitle}</p>}
+        <h1 className="h-title" style={{ marginTop: 0 }}>{title}</h1>
+        {subtitle && <p className="mt-1.5 text-[13px] text-text-secondary leading-snug">{subtitle}</p>}
       </div>
       {action}
     </div>
@@ -202,7 +202,11 @@ export function Button({
 }
 
 export function SectionTitle({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <h2 className={`text-lg font-semibold mb-4 ${className}`}>{children}</h2>;
+  return (
+    <div className={`panel-hd ${className}`}>
+      <h2>{children}</h2>
+    </div>
+  );
 }
 
 export function InfoBox({

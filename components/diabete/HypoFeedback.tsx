@@ -34,13 +34,15 @@ export default function HypoFeedback() {
   if (recentEvents.length === 0) return null;
 
   return (
-    <section className="surface-1 rounded-3xl p-5 mb-4">
-      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+    <section className="panel mb-4">
+      <div className="panel-hd">
         <div className="flex items-center gap-2">
-          <Award className="w-4 h-4 text-warning" />
-          <h2 className="text-base font-semibold text-text-primary">
+          <div className="flex items-center gap-2">
+            <Award className="w-4 h-4 text-warning" />
+            <h2>
             Hypos récentes
           </h2>
+          </div>
         </div>
         {!grg.isDefault && (
           <div className="text-[10px] text-text-tertiary flex items-center gap-1">

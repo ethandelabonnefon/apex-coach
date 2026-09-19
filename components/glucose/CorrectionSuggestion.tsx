@@ -87,7 +87,7 @@ export default function CorrectionSuggestion() {
   const unitsPer50 = 50 / isf; // = 0.5 avec ISF 100
 
   return (
-    <section className="surface-1 rounded-3xl p-5 border border-warning/30">
+    <section className="panel border border-warning/30">
       <div className="flex items-start justify-between gap-4 mb-4">
         <div className="flex items-start gap-3">
           <div

@@ -1892,70 +1892,56 @@ export default function DiabetePage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto stagger">
-      {/* ── HERO : Glycémie + IOB ── */}
-      <section className="surface-1 rounded-3xl p-6 sm:p-8 mb-4 relative overflow-hidden">
-
-        <div className="relative flex items-start justify-between gap-4 mb-6">
-          <div>
-            <p className="label">Diabète T1</p>
-            <h1 className="mt-1 text-xl sm:text-2xl font-semibold text-text-primary">
-              {profile.insulinRapid} · {profile.cgmType}
-            </h1>
-          </div>
-          <div className="flex gap-1.5">
+    <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 lg:py-8">
+      {/* ── EN-TÊTE ── */}
+      <header className="mb-3">
+        <p className="eyebrow">Diabète T1 · {profile.insulinRapid} · {profile.cgmType}</p>
+        <div className="flex items-end justify-between gap-3">
+          <h1 className="h-title">Suivi</h1>
+          <div className="flex gap-1.5 pb-1">
             <NavIconLink href="/diabete/docteur" label="Docteur">
-              <Stethoscope className="w-4 h-4" />
+              <Stethoscope className="w-3.5 h-3.5" />
             </NavIconLink>
             <NavIconLink href="/diabete/historique" label="Historique">
-              <History className="w-4 h-4" />
+              <History className="w-3.5 h-3.5" />
             </NavIconLink>
             <NavIconLink href="/diabete/patterns" label="Patterns">
-              <Sparkles className="w-4 h-4" />
+              <Sparkles className="w-3.5 h-3.5" />
             </NavIconLink>
             <NavIconLink href="/diabete/parametres" label="Paramètres">
-              <Settings className="w-4 h-4" />
+              <Settings className="w-3.5 h-3.5" />
             </NavIconLink>
           </div>
         </div>
+      </header>
 
-        <div className="relative space-y-4">
-          <GlucoseWidget
-            fallbackValue={lastValue}
-            fallbackRecordedAt={lastGlucose?.recordedAt}
-          />
+      {/* ── GLYCÉMIE LIVE ── */}
+      <div className="mb-3">
+        <GlucoseWidget
+          fallbackValue={lastValue}
+          fallbackRecordedAt={lastGlucose?.recordedAt}
+        />
+      </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            {/* Jumelle visuelle de CarbsOnBoardTile : même fix mobile (icône
-                empilée au-dessus du texte sous `sm`) — cf. son commentaire
-                pour le calcul de largeur à 375px. */}
-            <div className="surface-2 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5">
-              <div className="shrink-0 w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-info/10 flex items-center justify-center">
-                <Syringe className={`w-4 h-4 sm:w-5 sm:h-5 ${iobTone === "warning" ? "text-warning" : "text-info"}`} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="label mb-1">Insuline active</p>
-                <div className="flex items-baseline gap-1.5">
-                  <span
-                    className={`num-hero text-4xl sm:text-5xl font-semibold leading-none ${
-                      iobTone === "warning" ? "text-warning" : "text-info"
-                    }`}
-                  >
-                    {iob.totalIOB.toFixed(1)}
-                  </span>
-                  <span className="text-xs text-text-tertiary">U</span>
-                </div>
-                <p className="mt-1 text-xs text-text-secondary">
-                  {iob.details.length === 0
-                    ? "Rien d'actif"
-                    : `${iob.details.length} injection${iob.details.length > 1 ? "s" : ""} en cours`}
-                </p>
-              </div>
-            </div>
-            <CarbsOnBoardTile cob={cob} />
+      {/* ── INSULINE ACTIVE | GLUCIDES ACTIFS ── */}
+      <div className="mgrid mb-3">
+        <div className="cell">
+          <div className="flex items-center gap-2">
+            <span className={`led ${iobTone === "warning" ? "amber" : iob.totalIOB > 0 ? "cobalt" : "steel"}`} />
+            <span className="eyebrow">Insuline active</span>
+          </div>
+          <div className={`v mt-2 ${iobTone === "warning" ? "text-warning" : ""}`}>
+            {iob.totalIOB.toFixed(1).replace(".", ",")}
+            <small>U</small>
+          </div>
+          <div className="l">
+            {iob.details.length === 0
+              ? "Rien d'actif"
+              : `${iob.details.length} injection${iob.details.length > 1 ? "s" : ""} en cours`}
           </div>
         </div>
-      </section>
+        <CarbsOnBoardTile cob={cob} />
+      </div>
 
       {/* ── AJOUTER DES GLUCIDES (geste d'urgence : re-sucrage, collation) ──
           Volontairement juste sous les 3 tuiles du haut, avant la courbe 8h :
@@ -2025,12 +2011,14 @@ export default function DiabetePage() {
 
       {/* ── RAPPELS DE DOSE en attente (split lipides + appoint post-séance) ── */}
       {pendingReminders.length > 0 && (
-        <section className="surface-1 rounded-3xl p-5 mb-4 border border-accent-2/30">
-          <div className="flex items-center gap-2 mb-3">
-            <Clock className="w-4 h-4 text-diabete" />
-            <h2 className="text-base font-semibold text-text-primary">
+        <section className="panel mb-4 border border-accent-2/30">
+          <div className="panel-hd">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-diabete" />
+              <h2>
               Rappel{pendingReminders.length > 1 ? "s" : ""} de dose
             </h2>
+            </div>
           </div>
           <div className="space-y-2">
             {pendingReminders.map((r) => {
@@ -2053,7 +2041,7 @@ export default function DiabetePage() {
                 <div
                   key={r.id}
                   className={`rounded-xl p-3 flex items-center justify-between gap-3 ${
-                    isDue ? 'bg-diabete/15 border border-diabete/40' : 'bg-bg-tertiary border border-border-subtle'
+                    isDue ? 'bg-diabete/15 border border-diabete/40' : 'bg-bg-secondary border border-border-subtle'
                   }`}
                 >
                   <div className="min-w-0">
@@ -2137,13 +2125,15 @@ export default function DiabetePage() {
       )}
 
       {/* ── BRIEFING PRÉ-SPORT (advisor indépendant) ── */}
-      <section className="surface-1 rounded-3xl p-5 mb-4">
-        <div className="flex items-center justify-between mb-3 gap-2">
+      <section className="panel mb-4">
+        <div className="panel-hd">
           <div className="flex items-center gap-2">
-            <Activity className="w-4 h-4 text-diabete" />
-            <h2 className="text-base font-semibold text-text-primary">
+            <div className="flex items-center gap-2">
+              <Activity className="w-4 h-4 text-diabete" />
+              <h2>
               Briefing pré-sport
             </h2>
+            </div>
           </div>
           <button
             type="button"
@@ -2172,7 +2162,7 @@ export default function DiabetePage() {
               return (
                 <div
                   key={session.id}
-                  className="flex items-start gap-2 rounded-xl bg-bg-tertiary border border-border-subtle p-2.5"
+                  className="flex items-start gap-2 rounded-xl bg-bg-secondary border border-border-subtle p-2.5"
                 >
                   <Info className="w-3.5 h-3.5 text-text-tertiary shrink-0 mt-0.5" />
                   <div className="min-w-0 flex-1">
@@ -2263,7 +2253,7 @@ export default function DiabetePage() {
                   }}
                   min={0}
                   max={300}
-                  className="num w-full min-h-11 bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-2.5 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
+                  className="num w-full min-h-11 bg-bg-secondary border border-border-subtle rounded-xl px-3 py-2.5 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-text-tertiary uppercase tracking-wide pointer-events-none">
                   min
@@ -2280,7 +2270,7 @@ export default function DiabetePage() {
             {briefingSport && (
             <>
             {/* Données utilisées — transparence sur les inputs */}
-            <div className="rounded-xl bg-bg-tertiary border border-border-subtle p-3">
+            <div className="rounded-xl bg-bg-secondary border border-border-subtle p-3">
               <div className="flex items-center justify-between mb-2">
                 <p className="label">Données utilisées</p>
                 <button
@@ -2537,10 +2527,12 @@ export default function DiabetePage() {
       </section>
 
       {/* ── CALCULATEUR BOLUS (action primaire) ── */}
-      <section className="surface-1 rounded-3xl p-6 sm:p-8 mb-4 glow-accent">
-        <div className="flex items-center gap-2 mb-5">
-          <Calculator className="w-5 h-5 text-diabete" />
-          <h2 className="text-lg font-semibold text-text-primary">Calculateur de bolus</h2>
+      <section className="panel mb-4">
+        <div className="panel-hd">
+          <div className="flex items-center gap-2">
+            <Calculator className="w-5 h-5 text-diabete" />
+            <h2>Calculateur de bolus</h2>
+          </div>
         </div>
 
         {/* Phase F — Encadré ajustement post-exercice (insulin sensitivity ↑) */}
@@ -2919,7 +2911,7 @@ export default function DiabetePage() {
                     }}
                     min={0}
                     max={300}
-                    className="num w-full min-h-11 bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-2.5 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
+                    className="num w-full min-h-11 bg-bg-secondary border border-border-subtle rounded-xl px-3 py-2.5 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-text-tertiary uppercase tracking-wide pointer-events-none">
                     min
@@ -3087,10 +3079,10 @@ export default function DiabetePage() {
         )}
 
         {/* Résultat hero — éditable */}
-        <div className="rounded-2xl bg-diabete/10 border border-diabete/30 p-5">
+        <div className="rounded-lg border border-text-primary p-4">
           <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-            <p className="label" style={{ color: "var(--diabete)" }}>
-              {bolusResult.splitDose ? "Maintenant" : "Dose à injecter"}
+            <p className="font-display text-[15px] font-semibold text-text-primary">
+              {bolusResult.splitDose ? "Maintenant" : "Dose recommandée"}
             </p>
             <div className="flex items-center gap-1.5 flex-wrap">
               {/* Badge de confiance macros (Phase 11) */}
@@ -3133,21 +3125,21 @@ export default function DiabetePage() {
             <button
               type="button"
               onClick={() => setUnitsOverride(Math.max(0, finalUnits - 1))}
-              className="shrink-0 w-11 h-11 rounded-lg bg-bg-tertiary border border-border-default text-diabete text-xl font-semibold hover:bg-bg-hover transition-colors tap-scale"
+              className="shrink-0 w-11 h-11 rounded-lg bg-bg-secondary border border-border-default text-text-secondary text-xl hover:bg-bg-hover transition-colors tap-scale"
               aria-label="Diminuer d'1U"
             >
               −
             </button>
             <div className="flex items-baseline gap-2 min-w-[140px] justify-center">
-              <span className="num-hero text-6xl sm:text-7xl font-semibold text-diabete leading-none tabular-nums">
+              <span className="num-hero text-[56px] text-text-primary leading-none tabular-nums">
                 {finalUnits}
               </span>
-              <span className="text-xl text-diabete/70 font-medium">U</span>
+              <span className="text-xl text-text-tertiary font-mono">U</span>
             </div>
             <button
               type="button"
               onClick={() => setUnitsOverride(finalUnits + 1)}
-              className="shrink-0 w-11 h-11 rounded-lg bg-bg-tertiary border border-border-default text-diabete text-xl font-semibold hover:bg-bg-hover transition-colors tap-scale"
+              className="shrink-0 w-11 h-11 rounded-lg bg-bg-secondary border border-border-default text-text-secondary text-xl hover:bg-bg-hover transition-colors tap-scale"
               aria-label="Augmenter d'1U"
             >
               +
@@ -3280,13 +3272,13 @@ export default function DiabetePage() {
 
           {/* Breakdown */}
           <div className="grid grid-cols-2 gap-2 mb-4">
-            <div className="bg-bg-tertiary rounded-lg px-3 py-2">
+            <div className="bg-bg-secondary border border-border-default rounded-lg px-3 py-2">
               <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Glucides</p>
               <p className="num text-base font-semibold text-info">
                 {bolusResult.carbBolus.toFixed(1)}<span className="text-xs text-text-tertiary">U</span>
               </p>
             </div>
-            <div className="bg-bg-tertiary rounded-lg px-3 py-2">
+            <div className="bg-bg-secondary border border-border-default rounded-lg px-3 py-2">
               <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Correction</p>
               <p className="num text-base font-semibold text-warning">
                 {bolusResult.correctionBolus.toFixed(1)}<span className="text-xs text-text-tertiary">U</span>
@@ -3299,7 +3291,7 @@ export default function DiabetePage() {
                 injection est un mensonge à l'écran — on montre désormais la
                 vraie 2e injection. */}
             {bolusResult.splitDose && bolusResult.splitDose.later > 0 && (
-              <div className="bg-bg-tertiary rounded-lg px-3 py-2">
+              <div className="bg-bg-secondary border border-border-default rounded-lg px-3 py-2">
                 <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Lipides</p>
                 <p className="num text-base font-semibold text-accent-2">
                   {bolusResult.splitDose.later}<span className="text-xs text-text-tertiary">U</span>
@@ -3307,7 +3299,7 @@ export default function DiabetePage() {
               </div>
             )}
             {bolusResult.trendBolus !== 0 && (
-              <div className="bg-bg-tertiary rounded-lg px-3 py-2">
+              <div className="bg-bg-secondary border border-border-default rounded-lg px-3 py-2">
                 <p className="text-[10px] text-text-tertiary uppercase tracking-wide">
                   Tendance {trendNumberToArrow(trendArrow)}
                 </p>
@@ -3390,7 +3382,7 @@ export default function DiabetePage() {
             type="button"
             onClick={handleLogInjection}
             disabled={finalUnits <= 0}
-            className="w-full bg-diabete text-ink font-semibold py-3 rounded-xl hover:bg-diabete/90 transition-colors tap-scale disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full bg-success text-white font-semibold h-12 rounded-lg hover:opacity-90 transition-opacity tap-scale disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Enregistrer l&apos;injection ({finalUnits}U)
           </button>
@@ -3450,11 +3442,13 @@ export default function DiabetePage() {
 
       {/* ── Historique des injections ── */}
       <div className="mb-4">
-        <section className="surface-1 rounded-3xl p-6">
-          <div className="flex items-center justify-between mb-4">
+        <section className="panel">
+          <div className="panel-hd">
             <div className="flex items-center gap-2">
-              <Syringe className="w-4 h-4 text-diabete" />
-              <h2 className="text-base font-semibold text-text-primary">Injections</h2>
+              <div className="flex items-center gap-2">
+                <Syringe className="w-4 h-4 text-diabete" />
+                <h2>Injections</h2>
+              </div>
             </div>
             <span className="num text-xs text-text-tertiary">
               {insulinLogs.length} total
@@ -3485,7 +3479,7 @@ export default function DiabetePage() {
                 .map((log) => (
                 <div
                   key={log.id}
-                  className="group bg-bg-tertiary rounded-xl p-3 border border-border-subtle"
+                  className="group bg-bg-secondary rounded-xl p-3 border border-border-subtle"
                 >
                   <div className="flex items-center justify-between mb-1 gap-2">
                     <div className="flex items-center gap-2 min-w-0">
@@ -3603,7 +3597,7 @@ export default function DiabetePage() {
       </div>
 
       {/* ── Footer ratios ── */}
-      <section className="surface-1 rounded-3xl p-5">
+      <section className="panel">
         <div className="flex items-center justify-between mb-3">
           <p className="label">Mon programme</p>
           <Link
@@ -3672,7 +3666,7 @@ function CarbsStepper({
         type="button"
         onClick={() => onChange(clamp(value - 5))}
         aria-label="Moins 5 g"
-        className="w-11 h-11 rounded-lg border border-border-default bg-bg-tertiary text-text-primary text-lg font-semibold tap-scale flex items-center justify-center"
+        className="w-11 h-11 rounded-lg border border-border-default bg-bg-secondary text-text-primary text-lg font-semibold tap-scale flex items-center justify-center"
       >
         −
       </button>
@@ -3687,7 +3681,7 @@ function CarbsStepper({
           }}
           min={0}
           max={120}
-          className="num w-full min-h-11 bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-2.5 text-center text-base font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
+          className="num w-full min-h-11 bg-bg-secondary border border-border-subtle rounded-xl px-3 py-2.5 text-center text-base font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
         />
         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-text-tertiary uppercase tracking-wide pointer-events-none">
           g
@@ -3697,7 +3691,7 @@ function CarbsStepper({
         type="button"
         onClick={() => onChange(clamp(value + 5))}
         aria-label="Plus 5 g"
-        className="w-11 h-11 rounded-lg border border-border-default bg-bg-tertiary text-text-primary text-lg font-semibold tap-scale flex items-center justify-center"
+        className="w-11 h-11 rounded-lg border border-border-default bg-bg-secondary text-text-primary text-lg font-semibold tap-scale flex items-center justify-center"
       >
         +
       </button>
@@ -3866,10 +3860,10 @@ function BolusInput({
           onChange={(e) => onChange(Number(e.target.value))}
           min={min}
           max={max}
-          className="num w-full bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-3 text-xl font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
+          className="num w-full bg-bg-secondary border border-border-default rounded-lg px-3 h-11 text-base text-text-primary focus:outline-none focus:border-accent transition-colors"
         />
         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-text-tertiary uppercase tracking-wide pointer-events-none">
-          {suffix ? <span className="num text-sm text-diabete mr-1">{suffix}</span> : null}
+          {suffix ? <span className="num text-sm text-success mr-1">{suffix}</span> : null}
           {unit}
         </span>
       </div>
@@ -3887,7 +3881,7 @@ function RatioChip({
   unit?: string;
 }) {
   return (
-    <div className="bg-bg-tertiary rounded-xl px-3 py-2.5 text-center">
+    <div className="cell text-center border border-border-subtle rounded-md">
       <p className="text-[10px] text-text-tertiary uppercase tracking-wide">{label}</p>
       <p className="num text-base font-semibold text-text-primary mt-0.5">{value}</p>
       {unit && <p className="text-[9px] text-text-tertiary">{unit}</p>}
@@ -3909,7 +3903,7 @@ function NavIconLink({
       href={href}
       aria-label={label}
       title={label}
-      className="flex items-center justify-center w-9 h-9 rounded-lg border border-border-subtle text-text-secondary hover:text-diabete hover:border-diabete/40 hover:bg-diabete/5 transition-colors tap-scale"
+      className="pill h-8 w-8 justify-center px-0 hover:bg-bg-hover transition-colors"
     >
       {children}
     </Link>

@@ -441,7 +441,7 @@ export default function ProfilPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto pb-32">
+    <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 lg:py-8 pb-32">
       <PageHeader
         title="Mon Profil"
         subtitle="Configure tes informations personnelles, diabete et entrainement"

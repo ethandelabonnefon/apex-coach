@@ -68,14 +68,14 @@ export default function NutritionResults({
   return (
     <div className="space-y-4 max-w-2xl mx-auto stagger">
       {/* ── Header objectif ── */}
-      <section className="surface-1 rounded-3xl p-5">
+      <section className="panel">
         <div className="flex items-start gap-3">
           <div className="shrink-0 w-11 h-11 rounded-xl bg-nutrition/15 flex items-center justify-center">
             <GoalIcon className="w-5 h-5 text-nutrition" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="label">Objectif retenu</p>
-            <h2 className="text-lg font-semibold text-text-primary">
+            <h2 className="text-[15px] font-semibold">
               {GOAL_LABELS[diagnostic.primaryGoal]}
             </h2>
             <p className="text-xs text-text-tertiary mt-0.5">
@@ -102,7 +102,7 @@ export default function NutritionResults({
       )}
 
       {/* ── Hero calories ── */}
-      <section className="surface-1 rounded-3xl p-6 sm:p-8 glow-accent">
+      <section className="panel">
         <div className="text-center">
           <p className="label">Ton objectif quotidien</p>
           <p className="num-hero text-6xl sm:text-7xl font-semibold text-accent mt-2 leading-none">
@@ -151,7 +151,7 @@ export default function NutritionResults({
       </section>
 
       {/* ── Macros ── */}
-      <section className="surface-1 rounded-3xl p-5">
+      <section className="panel">
         <p className="label mb-4">Répartition des macros</p>
 
         <div className="space-y-4">
@@ -180,7 +180,7 @@ export default function NutritionResults({
       </section>
 
       {/* ── Breakdown ── */}
-      <section className="surface-1 rounded-2xl overflow-hidden">
+      <section className="panel overflow-hidden">
         <button
           type="button"
           onClick={() => setShowBreakdown((v) => !v)}
@@ -249,7 +249,7 @@ export default function NutritionResults({
       </section>
 
       {/* ── Meal plan ── */}
-      <section className="surface-1 rounded-2xl overflow-hidden">
+      <section className="panel overflow-hidden">
         <button
           type="button"
           onClick={() => setShowMealPlan((v) => !v)}
@@ -271,7 +271,7 @@ export default function NutritionResults({
             {mealPlan.meals.map((meal, i) => (
               <div
                 key={i}
-                className="rounded-xl bg-bg-tertiary border border-border-subtle p-3"
+                className="rounded-xl bg-bg-secondary border border-border-subtle p-3"
               >
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
@@ -330,7 +330,7 @@ export default function NutritionResults({
       </section>
 
       {/* ── Source hints (pourquoi ces ratios) ── */}
-      <section className="rounded-xl bg-bg-tertiary border border-border-subtle px-4 py-3">
+      <section className="rounded-xl bg-bg-secondary border border-border-subtle px-4 py-3">
         <p className="text-xs font-medium text-text-primary mb-1.5">Sources & méthode</p>
         <ul className="text-[11px] text-text-tertiary space-y-0.5 leading-relaxed">
           <li className="flex gap-1.5">
@@ -368,7 +368,7 @@ export default function NutritionResults({
         <button
           type="button"
           onClick={onReset}
-          className="bg-bg-tertiary hover:bg-bg-hover border border-border-subtle text-text-secondary font-medium px-4 py-3.5 rounded-xl transition-colors tap-scale flex items-center gap-1.5"
+          className="bg-bg-secondary hover:bg-bg-hover border border-border-subtle text-text-secondary font-medium px-4 py-3.5 rounded-xl transition-colors tap-scale flex items-center gap-1.5"
         >
           <Undo2 className="w-4 h-4" />
           <span className="hidden sm:inline">Refaire</span>

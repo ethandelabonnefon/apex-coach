@@ -567,12 +567,12 @@ export default function DiabeteHistoriquePage() {
   }, [points, days]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto pb-32 stagger">
+    <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 lg:py-8 pb-32 stagger">
       {/* Header */}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <p className="label">Diabète · Historique</p>
-          <h1 className="mt-1 text-2xl font-semibold text-text-primary">
+          <p className="eyebrow">Diabète · Historique</p>
+          <h1 className="h-title">
             Historique glycémie
           </h1>
           <p className="text-xs text-text-tertiary mt-1">
@@ -614,12 +614,12 @@ export default function DiabeteHistoriquePage() {
       )}
 
       {/* ─── Bilan IA (Phase 10c) ────────────────────────────────────── */}
-      <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">
+      <section className="panel mb-4">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex items-center gap-2 min-w-0">
             <Sparkles className="w-4 h-4 text-accent-2 flex-shrink-0" />
             <div className="min-w-0">
-              <h2 className="text-base font-semibold text-text-primary">
+              <h2 className="text-[15px] font-semibold">
                 Bilan IA · {days}j
               </h2>
               <p className="text-[10px] text-text-tertiary mt-0.5">
@@ -653,7 +653,7 @@ export default function DiabeteHistoriquePage() {
         </div>
 
         {!insight && !insightLoading && !insightError && (
-          <div className="rounded-xl bg-bg-tertiary border border-border-subtle p-4 text-center">
+          <div className="rounded-xl bg-bg-secondary border border-border-subtle p-4 text-center">
             <Lightbulb className="w-5 h-5 text-text-tertiary mx-auto mb-1.5" />
             <p className="text-xs text-text-secondary">
               Clique sur <span className="text-accent-2 font-medium">Générer</span> pour
@@ -666,7 +666,7 @@ export default function DiabeteHistoriquePage() {
         )}
 
         {insightLoading && (
-          <div className="rounded-xl bg-bg-tertiary border border-border-subtle p-6 text-center">
+          <div className="rounded-xl bg-bg-secondary border border-border-subtle p-6 text-center">
             <Loader2 className="w-5 h-5 text-accent-2 animate-spin mx-auto mb-2" />
             <p className="text-xs text-text-secondary">
               Claude lit tes patterns…
@@ -736,7 +736,7 @@ export default function DiabeteHistoriquePage() {
                   {insight.suggestions.map((s, i) => (
                     <div
                       key={i}
-                      className="rounded-xl bg-bg-tertiary border border-border-subtle p-3"
+                      className="rounded-xl bg-bg-secondary border border-border-subtle p-3"
                     >
                       <div className="flex items-start justify-between gap-2 mb-1.5">
                         <span className="label text-[9px] text-accent-2">
@@ -789,9 +789,9 @@ export default function DiabeteHistoriquePage() {
           fetch dédié : cette section ne dépend NI du sélecteur de période,
           NI du fetch qui l'alimente, donc elle reste rendue même si celui-ci
           échoue. */}
-      <section className="surface-1 rounded-2xl p-5 mb-4">
+      <section className="panel mb-4">
         <div className="mb-1">
-          <h2 className="text-base font-semibold text-text-primary">
+          <h2 className="text-[15px] font-semibold">
             Validation des doses
           </h2>
           <p className="text-xs text-text-tertiary mt-0.5">
@@ -813,15 +813,15 @@ export default function DiabeteHistoriquePage() {
 
       {/* Stats récap */}
       {loading ? (
-        <div className="surface-1 rounded-3xl p-6 mb-4 animate-pulse">
-          <div className="h-16 bg-bg-tertiary rounded-xl" />
+        <div className="panel mb-4 animate-pulse">
+          <div className="h-16 bg-bg-secondary border border-border-default rounded-xl" />
         </div>
       ) : error ? (
-        <div className="surface-1 rounded-3xl p-6 mb-4 text-center">
+        <div className="panel mb-4 text-center">
           <p className="text-sm text-error">Erreur chargement : {error}</p>
         </div>
       ) : overallStats.count === 0 ? (
-        <div className="surface-1 rounded-3xl p-6 mb-4 text-center">
+        <div className="panel mb-4 text-center">
           <Droplet className="w-8 h-8 text-text-tertiary mx-auto mb-2" />
           <p className="text-sm text-text-secondary font-medium">Pas encore de données</p>
           <p className="text-xs text-text-tertiary mt-1">
@@ -831,7 +831,7 @@ export default function DiabeteHistoriquePage() {
       ) : (
         <>
           {/* Stats en grille */}
-          <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">
+          <section className="panel mb-4">
             <p className="label mb-3">Vue d&apos;ensemble · {days}j</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
               <StatTile
@@ -901,7 +901,7 @@ export default function DiabeteHistoriquePage() {
             {/* Barre répartition zones */}
             <div className="mt-5">
               <p className="label mb-2">Répartition temps par zone</p>
-              <div className="flex rounded-lg overflow-hidden h-6 bg-bg-tertiary">
+              <div className="flex rounded-lg overflow-hidden h-6 bg-bg-secondary border border-border-default">
                 {overallStats.hypoPct > 0 && (
                   <div
                     style={{ width: `${overallStats.hypoPct}%`, background: "var(--running)" }}
@@ -969,10 +969,12 @@ export default function DiabeteHistoriquePage() {
           />
 
           {/* Pattern par heure (bar chart 24h) */}
-          <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Activity className="w-4 h-4 text-diabete" />
-              <h2 className="text-base font-semibold text-text-primary">Pattern par heure du jour</h2>
+          <section className="panel mb-4">
+            <div className="panel-hd">
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-diabete" />
+                <h2>Pattern par heure du jour</h2>
+              </div>
             </div>
             <p className="text-xs text-text-tertiary mb-4">
               Moyenne glycémique à chaque heure — identifie tes heures à risque.
@@ -1066,11 +1068,13 @@ export default function DiabeteHistoriquePage() {
           ) : (
           <>
           {/* Line chart de la période */}
-          <section className="surface-1 rounded-3xl p-5 sm:p-6 mb-4">
-            <div className="flex items-center justify-between mb-3">
+          <section className="panel mb-4">
+            <div className="panel-hd">
               <div className="flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-diabete" />
-                <h2 className="text-base font-semibold text-text-primary">Courbe {days}j</h2>
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-diabete" />
+                  <h2>Courbe {days}j</h2>
+                </div>
               </div>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">

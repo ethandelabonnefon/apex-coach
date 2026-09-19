@@ -44,12 +44,14 @@ export function MealConfirmCard({
   });
 
   return (
-    <section className="surface-1 rounded-2xl p-5 border border-accent-2/25 mb-4">
-      <div className="flex items-center gap-2 mb-2">
-        <UtensilsCrossed className="w-4 h-4 text-accent-2" />
-        <h2 className="text-base font-semibold text-text-primary">
+    <section className="panel border border-accent-2/25 mb-4">
+      <div className="panel-hd">
+        <div className="flex items-center gap-2">
+          <UtensilsCrossed className="w-4 h-4 text-accent-2" />
+          <h2>
           Tu as mangé combien finalement ?
         </h2>
+        </div>
       </div>
       <p className="text-sm text-text-secondary mb-4">
         Injection de {log.units} U à {injectedLabel} pour ~{log.carbsGrams} g
