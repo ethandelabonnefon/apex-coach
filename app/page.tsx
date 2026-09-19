@@ -8,6 +8,7 @@ import { Ring } from "@/components/ui/Ring";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { glucoseToneColor, glucoseToneLabel } from "@/lib/libre-link/utils";
 import WhoopCard from "@/components/whoop/WhoopCard";
+import { StoreRestoreBanner } from "@/components/diabete/StoreRestoreBanner";
 import RecoveryFigure from "@/components/whoop/RecoveryFigure";
 import {
   ArrowUpRight,
@@ -144,6 +145,8 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-[960px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
+      <StoreRestoreBanner />
+
       {/* ============ HERO : Salut Ethan + 1 action ============ */}
       <section className="mb-8 animate-in">
         <p className="label mb-2">

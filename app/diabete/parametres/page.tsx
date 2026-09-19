@@ -12,6 +12,7 @@ import {
 } from "@/lib/fat-coverage";
 import { DIABETES_CONFIG } from "@/lib/constants";
 import type { InsulinRatio } from "@/types";
+import { StoreBackupPanel } from "@/components/diabete/StoreBackupPanel";
 import { Badge } from "@/components/ui/Badge";
 import WhoopConnection from "@/components/whoop/WhoopConnection";
 import {
@@ -936,7 +937,11 @@ export default function DiabeteParametresPage() {
           Action sûre : carte dédiée, volontairement séparée de la zone
           dangereuse ci-dessous pour ne jamais se mêler visuellement à une
           suppression. Sert aussi d'entrée au backtest du modèle. */}
-      <section className="surface-1 rounded-3xl p-5 sm:p-6 mt-4">
+      <div className="mt-4">
+        <StoreBackupPanel />
+      </div>
+
+      <section className="surface-1 rounded-3xl p-5 sm:p-6">
         <div className="flex items-center gap-2 mb-2">
           <Download className="w-4 h-4 text-diabete" />
           <h2 className="text-base font-semibold text-text-primary">Exporter mes données</h2>

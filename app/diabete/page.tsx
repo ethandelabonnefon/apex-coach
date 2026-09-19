@@ -25,6 +25,7 @@ import {
 import { DIABETES_CONFIG } from "@/lib/constants";
 import type { InsulinLog, MealTime, SplitDoseReminder, DeclaredSportSession } from "@/types";
 import type { GlucoseTrend } from "@/lib/libre-link/utils";
+import { StoreRestoreBanner } from "@/components/diabete/StoreRestoreBanner";
 import { Badge } from "@/components/ui/Badge";
 import { useGlucose } from "@/hooks/useGlucose";
 import GlucoseWidget from "@/components/glucose/GlucoseWidget";
@@ -1893,6 +1894,8 @@ export default function DiabetePage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto stagger">
+      <StoreRestoreBanner />
+
       {/* ── HERO : Glycémie + IOB ── */}
       <section className="surface-1 rounded-3xl p-6 sm:p-8 mb-4 relative overflow-hidden">
         <div

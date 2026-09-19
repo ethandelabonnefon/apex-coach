@@ -5,6 +5,7 @@ import CoachProvider from "@/components/coach/CoachProvider";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { InstallBanner } from "@/components/InstallBanner";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
+import { StoreBackupSync } from "@/components/StoreBackupSync";
 
 export const metadata: Metadata = {
   title: "APEX Coach — Fitness, Nutrition & T1D",
@@ -62,6 +63,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <CoachProvider />
         <InstallBanner />
         <ServiceWorkerRegistrar />
+        <StoreBackupSync />
       </body>
     </html>
   );

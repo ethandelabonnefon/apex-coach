@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { STORE_KEY, wouldWipeInsulinLogs } from '@/lib/store-backup/payload';
 import { USER_PROFILE, DIABETES_CONFIG, DIABETES_PROFILES_DEFAULT, MUSCU_PROGRAM } from './constants';
 import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile, SplitDoseReminder, HypoEvent, CarbEntry, DeclaredSportSession } from '@/types';
 import type { NightPredictionRecord } from '@/lib/night-calibration';
@@ -176,6 +177,41 @@ interface AppState {
   setNutritionDiagnosticData: (data: Record<string, unknown> | null) => void;
   nutritionTargets: { calories: number; protein: number; carbs: number; fat: number } | null;
   setNutritionTargets: (targets: { calories: number; protein: number; carbs: number; fat: number } | null) => void;
+}
+
+/** Nom de l'événement DOM émis quand le verrou bloque une écriture. */
+export const WIPE_BLOCKED_EVENT = 'apex:wipe-blocked';
+
+/**
+ * localStorage avec verrou (sept. 2026) : refuse d'écrire un état SANS
+ * injections par-dessus un état qui en contenait plusieurs — le scénario
+ * qui a vidé le téléphone d'Ethan le 19/09 (état par défaut figé par une
+ * sauvegarde de profil). En cas de blocage, l'état en mémoire diverge du
+ * stockage ; on le signale par un événement pour qu'une bannière propose
+ * de recharger (ou de restaurer depuis le serveur). La règle elle-même
+ * (`wouldWipeInsulinLogs`) est pure et testée.
+ *
+ * Lève hors navigateur : `createJSONStorage` attrape l'erreur et désactive
+ * simplement la persistance côté serveur (comportement zustand standard).
+ */
+function guardedLocalStorage(): Storage {
+  if (typeof window === 'undefined') throw new Error('localStorage indisponible côté serveur');
+  const ls = window.localStorage;
+  return {
+    get length() { return ls.length; },
+    clear: () => ls.clear(),
+    key: (i) => ls.key(i),
+    getItem: (k) => ls.getItem(k),
+    removeItem: (k) => ls.removeItem(k),
+    setItem: (k, v) => {
+      if (k === STORE_KEY && wouldWipeInsulinLogs(ls.getItem(k), v)) {
+        console.error('[store] écriture bloquée : elle effacerait les injections enregistrées');
+        window.dispatchEvent(new CustomEvent(WIPE_BLOCKED_EVENT));
+        return;
+      }
+      ls.setItem(k, v);
+    },
+  };
 }
 
 export const useStore = create<AppState>()(
@@ -543,8 +579,9 @@ export const useStore = create<AppState>()(
       setNutritionTargets: (targets) => set({ nutritionTargets: targets }),
     }),
     {
-      name: 'apex-coach-storage',
+      name: STORE_KEY,
       version: 3,
+      storage: createJSONStorage(() => guardedLocalStorage()),
       // Migration v1 → v2 : force-update des ratios insuline Ethan.
       // Migration v2 → v3 : introduction multi-profils ratios (Phase 10a).
       // Les valeurs actuelles deviennent le profil "Par défaut" et on ajoute
