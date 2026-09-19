@@ -7,7 +7,6 @@ import {
   calculateBolus,
   getDigestiveComplexity,
   getInjectionTimingAdvice,
-  computePreSportBriefing,
   MAX_PLANNED_DURATION_MIN,
   inferMealTimeFromClock,
 } from "@/lib/insulin-calculator";
@@ -67,11 +66,8 @@ import {
   type SportDefinition,
 } from "@/lib/sports";
 import { computeBolusSportPlan } from "@/lib/bolus-sport-plan";
-import {
-  carbSensitivity,
-  upcomingExerciseImpactMgDl,
-  type UpcomingExercise,
-} from "@/lib/glucose-prediction";
+import { computePreSportBriefingOnCurve } from "@/lib/pre-sport-briefing";
+import { upcomingExerciseImpactMgDl, type UpcomingExercise } from "@/lib/glucose-prediction";
 import {
   computePostSessionAppoint,
   isAppointBlockedByGlucose,
@@ -98,12 +94,6 @@ import HypoFeedback from "@/components/diabete/HypoFeedback";
 import { useHypoTracker } from "@/hooks/useHypoTracker";
 import { usePatternDetection } from "@/hooks/usePatternDetection";
 import type { DetectedPattern, PatternSeverity } from "@/lib/glucose-archive/pattern-engine";
-import {
-  enrichSession,
-  computeAvgSportImpact,
-  type SportSession,
-  type EnrichedSportSession,
-} from "@/lib/sport-glucose-analytics";
 import type { ArchivedPoint } from "@/lib/glucose-archive/store";
 import {
   Droplet,
@@ -707,23 +697,23 @@ export default function DiabetePage() {
   // « dont la trajectoire tient » sans avoir vu la course.
   const upcomingExercise = useMemo<UpcomingExercise | undefined>(() => {
     if (!isPreWorkout || !workoutType) return undefined;
-    const csf = carbSensitivity(
-      diabetesConfig.insulinSensitivityFactor,
-      ratioForMeal(diabetesConfig.ratios, mealTime),
-    );
+    // Insuline au départ : ce qui est déjà actif + la dose qui va être
+    // injectée (elle sera à son pic pendant l'effort). Approximation par
+    // excès pour un délai long — acceptable : elle va dans le sens de
+    // PLUS de prudence (prélèvement plus fort → dose plus rabotée).
+    const iobAtStart = iob.totalIOB + bolusResult.totalBolus;
     return {
       startMinute: minutesUntilWorkout,
       durationMin: safePreWorkoutDurationMin,
-      impactMgDl: upcomingExerciseImpactMgDl(workoutType, safePreWorkoutDurationMin, csf),
+      impactMgDl: upcomingExerciseImpactMgDl(workoutType, safePreWorkoutDurationMin, iobAtStart),
     };
   }, [
     isPreWorkout,
     workoutType,
     minutesUntilWorkout,
     safePreWorkoutDurationMin,
-    diabetesConfig.insulinSensitivityFactor,
-    diabetesConfig.ratios,
-    mealTime,
+    iob.totalIOB,
+    bolusResult.totalBolus,
   ]);
 
   // Le calculateur produit une dose candidate ; le prédicteur la valide.
@@ -1267,28 +1257,6 @@ export default function DiabetePage() {
     setTopUpDismissedDeficit(topUp.deficitU);
   }
 
-  // ─── Sessions sport enrichies (Bloc 6.3) ──────────────────────────
-  // On les enrichit ici une fois pour réutiliser dans l'advisor sans
-  // recalcul à chaque tick.
-  const enrichedSportSessions: EnrichedSportSession[] = useMemo(() => {
-    const sessions: SportSession[] = [
-      ...completedWorkouts.map((w) => ({
-        date: w.date,
-        type: "muscu" as const,
-        durationMin: Math.round(w.duration ?? 60),
-      })),
-      ...completedRunningSessions.map((r) => ({
-        date: r.date,
-        type: "running" as const,
-        durationMin: Math.round(r.actualDuration ?? 45),
-        // Phase C — checkpoints réels prioritaires sur archive
-        glucoseCheckpoints: r.glucoseCheckpoints,
-      })),
-    ];
-    // archivePoints du Bloc 2 (meal-analytics) sont compatibles avec ArchivedPoint
-    return sessions.map((s) => enrichSession(s, archivePoints as ArchivedPoint[]));
-  }, [completedWorkouts, completedRunningSessions, archivePoints]);
-
   // Sport choisi dans le sélecteur du briefing — résolu une fois pour toute
   // dérivation en aval (family, label, icône). null tant que rien n'est
   // choisi (cf. auto-revue : pas de sport par défaut trompeur).
@@ -1300,9 +1268,6 @@ export default function DiabetePage() {
   // qu'un sport est choisi (la famille pilote tout le calcul).
   const preSportBriefing = useMemo(() => {
     if (!briefingActive || !briefingSport) return null;
-    // Glycémie de référence : live si dispo, sinon manuel
-    const refGlucose = liveGlucose?.value ?? currentGlucose;
-    const refTrend = liveGlucose ? trendStringToNumber(liveGlucose.trend) : trendArrow;
 
     // Split dose en attente le plus proche
     const now = nowTick;
@@ -1312,27 +1277,26 @@ export default function DiabetePage() {
       .filter((r) => r.minutesUntil >= 0)
       .sort((a, b) => a.minutesUntil - b.minutesUntil)[0];
 
-    // computeAvgSportImpact (Bloc 6) ne connaît que muscu/running — les 2
-    // familles ajoutées en sept. 2026 (cardio-other/intermittent) retombent
-    // proprement sur le fallback académique déjà géré par
-    // computePreSportBriefing (personalSportImpact null/undefined).
-    const personalImpact =
-      briefingSport.family === "muscu" || briefingSport.family === "running"
-        ? computeAvgSportImpact(enrichedSportSessions, briefingSport.family, 3)
-        : null;
-
-    return computePreSportBriefing({
-      currentGlucose: refGlucose,
-      trendArrow: refTrend,
-      iobUnits: iob.totalIOB,
-      isfMgPerU: diabetesConfig.insulinSensitivityFactor,
-      insulinActiveMinutes: diabetesConfig.insulinActiveDuration,
-      workoutType: briefingSport.family,
+    // Même moteur que le calculateur (19 sept. 2026) : la courbe prédite
+    // avec l'effort comme prélèvement de glucose modulé par l'insuline AU
+    // DÉPART. Glycémie : lecture capteur UNIQUEMENT — plus jamais
+    // `?? currentGlucose`, le champ du calculateur initialisé à 120 (même
+    // classe de bug que celle corrigée sur la tuile COB et le plafond).
+    return computePreSportBriefingOnCurve({
+      currentGlucose: liveGlucose?.value ?? null,
+      glucoseAgeMin: liveGlucoseAgeMin,
+      trendArrow: liveGlucose ? trendStringToNumber(liveGlucose.trend) : undefined,
+      insulinLogs,
+      carbEntries,
+      isf: diabetesConfig.insulinSensitivityFactor,
+      ratios: diabetesConfig.ratios,
+      dia: diabetesConfig.insulinActiveDuration,
+      family: briefingSport.family,
       minutesUntilWorkout: briefingMinutes,
-      workoutDurationMinutes: safeBriefingDurationMin,
-      pendingSplitUnits: upcomingSplit?.units,
-      pendingSplitMinutesUntil: upcomingSplit?.minutesUntil,
-      personalSportImpact: personalImpact,
+      durationMin: safeBriefingDurationMin,
+      pendingSplit: upcomingSplit ? { units: upcomingSplit.units, minutesUntil: upcomingSplit.minutesUntil } : undefined,
+      sport: recentExercise ?? undefined,
+      nowMs: now,
     });
   }, [
     briefingActive,
@@ -1340,13 +1304,13 @@ export default function DiabetePage() {
     briefingMinutes,
     safeBriefingDurationMin,
     liveGlucose,
-    currentGlucose,
-    trendArrow,
-    iob.totalIOB,
+    liveGlucoseAgeMin,
+    insulinLogs,
+    carbEntries,
     diabetesConfig,
     splitDoseReminders,
     nowTick,
-    enrichedSportSessions,
+    recentExercise,
   ]);
 
   // Séance à montrer dans le briefing + droit d'en déclarer une nouvelle.
@@ -2418,37 +2382,41 @@ export default function DiabetePage() {
                     : "bg-success/10 border-success/30"
                 }`}
               >
-                <div className="flex items-center justify-between mb-2 text-[10px]">
-                  <span className="label" style={{ color: "var(--diabete)" }}>
-                    Glycémie estimée
-                  </span>
-                  <span className="num text-text-secondary">
-                    <span className="font-semibold text-text-primary">
-                      {preSportBriefing.estimatedAtWorkoutStart}
-                    </span>{" "}
-                    au début · ~
-                    <span className="font-semibold text-text-primary">
-                      {preSportBriefing.estimatedDuringWorkout}
-                    </span>{" "}
-                    pendant
-                  </span>
-                </div>
-
-                {/* Décomposition du calcul (transparence) */}
-                {(() => {
-                  const b = preSportBriefing.breakdown;
-                  const pieces: string[] = [];
-                  pieces.push(`${b.glucoseInput} (actuel)`);
-                  if (b.dropFromIob > 0) pieces.push(`-${b.dropFromIob} (IOB)`);
-                  if (b.dropFromSplit > 0) pieces.push(`-${b.dropFromSplit} (split)`);
-                  if (b.dropFromTrend > 0) pieces.push(`-${b.dropFromTrend} (trend)`);
-                  else if (b.dropFromTrend < 0) pieces.push(`+${-b.dropFromTrend} (trend)`);
-                  return (
+                {preSportBriefing.status === "ok" ? (
+                  <>
+                    <div className="flex items-center justify-between mb-2 text-[10px]">
+                      <span className="label" style={{ color: "var(--diabete)" }}>
+                        Glycémie prédite
+                      </span>
+                      <span className="num text-text-secondary">
+                        <span className="font-semibold text-text-primary">
+                          {preSportBriefing.predictedAtStart}
+                        </span>{" "}
+                        au départ · min{" "}
+                        <span className="font-semibold text-text-primary">
+                          {preSportBriefing.predictedDuringMin}
+                        </span>{" "}
+                        pendant · ~
+                        <span className="font-semibold text-text-primary">
+                          {preSportBriefing.predictedAtEnd}
+                        </span>{" "}
+                        à la fin
+                      </span>
+                    </div>
+                    {/* Ce que le modèle a utilisé — pour qu'Ethan voie le calcul */}
                     <p className="num text-[10px] text-text-tertiary mb-2 leading-snug">
-                      {pieces.join(" ")}
+                      insuline au départ{" "}
+                      {preSportBriefing.iobAtStartU.toFixed(1).replace(".", ",")} U · effort{" "}
+                      {preSportBriefing.exerciseImpactMgDl > 0 ? "+" : ""}
+                      {Math.round(preSportBriefing.exerciseImpactMgDl)} mg/dL (
+                      {Math.round(preSportBriefing.iobFactor * 100)} % de l&apos;effet plein)
                     </p>
-                  );
-                })()}
+                  </>
+                ) : (
+                  <p className="text-[10px] text-text-tertiary mb-2 leading-snug">
+                    Aucun chiffre tant que la lecture n&apos;est pas fraîche ou que le départ est trop loin.
+                  </p>
+                )}
 
                 <div className="space-y-2">
                   {preSportBriefing.recommendations.map((reco, i) => {

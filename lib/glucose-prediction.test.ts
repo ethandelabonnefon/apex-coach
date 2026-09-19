@@ -557,3 +557,17 @@ test("effort à venir : la courbe du plafond voit la course", () => {
   assert.ok(at(avec, 90) < at(sans, 90), "après la course : plus bas");
   assert.ok(avec.min.value < sans.min.value, "le minimum prédit baisse — le plafond le verra");
 });
+
+import { exerciseIobFactor, upcomingExerciseImpactMgDl as impactOf } from "./glucose-prediction";
+
+test("effort à venir : le prélèvement est modulé par l'insuline active au départ", () => {
+  assert.equal(exerciseIobFactor(0), 0.3, "sans insuline, le foie compense : 30 %");
+  assert.equal(exerciseIobFactor(0.75), 0.5);
+  assert.equal(exerciseIobFactor(1.5), 1, "à 1,5 U, plein effet");
+  assert.equal(exerciseIobFactor(4), 1, "au-delà, plafonné");
+  assert.equal(exerciseIobFactor(NaN), 0.3);
+  // 30 min de course, 5 mg/dL par g : −100 à plein effet, −30 sans insuline.
+  assert.equal(impactOf("running", 30, 4), -100);
+  assert.equal(impactOf("running", 30, 0), -30);
+  assert.equal(impactOf("muscu", 60, 0), 40, "la muscu monte, insuline ou pas");
+});

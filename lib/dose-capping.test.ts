@@ -591,7 +591,7 @@ test("l'effort à venir est enfin vu par le plafond : une dose pleine avant une 
     upcomingExercise: {
       startMinute: 40,
       durationMin: 45,
-      impactMgDl: upcomingExerciseImpactMgDl("running", 45, ISF / RATIOS.lunch),
+      impactMgDl: upcomingExerciseImpactMgDl("running", 45, 7),
     },
   }));
   assert.equal(sans.capped, false, "sans effort, 7 U tiennent");

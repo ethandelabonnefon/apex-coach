@@ -512,19 +512,69 @@ export const EXERCISE_GLUCOSE_UPTAKE_G_PER_H: Record<ExerciseSource, number> = {
 export const MUSCU_IMPACT_MG_DL = 40;
 
 /**
+ * Insuline active (U) à partir de laquelle le prélèvement musculaire pèse
+ * à plein sur la glycémie. Même seuil que la table de glucides du briefing
+ * (`HIGH_IOB_THRESHOLD_U`, lib/insulin-calculator.ts) — pas une seconde
+ * définition.
+ */
+export const EXERCISE_FULL_EFFECT_IOB_U = 1.5;
+/**
+ * Part du prélèvement qui atteint la glycémie quand il n'y a PAS
+ * d'insuline active (0-1).
+ *
+ * Physiologie (Riddell et al. 2017) : quand l'insuline est basse, la
+ * production hépatique de glucose compense le prélèvement musculaire et
+ * la glycémie tient — une course à jeun sans insuline ne finit pas à 40.
+ * Quand l'insuline est haute, cette production est bloquée et la glycémie
+ * chute. C'est la logique de la table de glucides du consensus (selon
+ * l'insuline à bord), portée dans le modèle.
+ *
+ * Mesuré avant ce facteur : 30 min de course à 130 mg/dL sans insuline
+ * → prélèvement plein (−200) → courbe au plancher → 23 g conseillés, là
+ * où le consensus dit « pars, vois à 30 min ». 0,3 est un point de départ
+ * — à recaler sur les séances trackées d'Ethan.
+ */
+export const EXERCISE_IOB_FACTOR_MIN = 0.3;
+
+/** Facteur k (0,3 … 1) appliqué au prélèvement selon l'insuline active au départ. */
+export function exerciseIobFactor(iobAtStartU: number): number {
+  const iob = Number.isFinite(iobAtStartU) ? Math.max(0, iobAtStartU) : 0;
+  return Math.min(1, Math.max(EXERCISE_IOB_FACTOR_MIN, iob / EXERCISE_FULL_EFFECT_IOB_U));
+}
+
+/**
+ * Conversion du glucose prélevé par le muscle en glycémie (mg/dL par g).
+ *
+ * PAS la sensibilité `ISF / ratio` (≈ 10 chez Ethan) : celle-ci forme une
+ * paire calibrée avec l'ISF pour reproduire l'excursion NETTE d'un repas
+ * couvert, et surestime d'un facteur ~2 le flux d'un glucose sans insuline
+ * en face. La réponse mesurée d'Ethan à des glucides rapides seuls (GRG
+ * appris sur ses hypos) est ≈ 4,5 mg/dL par g — c'est cet ordre de
+ * grandeur qui décrit un flux de glucose hors insuline, donc aussi le
+ * prélèvement. Mesuré avec 10 : 30 min de course à 130 sans insuline →
+ * 70 mg/dL prédits, là où un run tranquille à jeun finit autour de 100.
+ */
+export const EXERCISE_MG_PER_GRAM = 5;
+
+/**
  * Effet total d'un effort à venir sur la glycémie (mg/dL), à passer dans
- * `UpcomingExercise.impactMgDl`. `csf` = sensibilité aux glucides
- * (mg/dL par g), typiquement `ISF / ratio`.
+ * `UpcomingExercise.impactMgDl`. `iobAtStartU` = insuline active AU DÉPART
+ * de l'effort — pas celle de maintenant (cf. `exerciseIobFactor`).
+ * `mgPerGram` (défaut `EXERCISE_MG_PER_GRAM`) est la seule autre
+ * constante de calibrage.
  */
 export function upcomingExerciseImpactMgDl(
   family: ExerciseSource,
   durationMin: number,
-  csf: number,
+  iobAtStartU: number,
+  mgPerGram: number = EXERCISE_MG_PER_GRAM,
 ): number {
   if (family === "muscu") return MUSCU_IMPACT_MG_DL;
   const hours = Number.isFinite(durationMin) && durationMin > 0 ? durationMin / 60 : 0;
-  const sens = Number.isFinite(csf) && csf > 0 ? csf : 10;
-  return -(EXERCISE_GLUCOSE_UPTAKE_G_PER_H[family] * hours * sens);
+  const sens = Number.isFinite(mgPerGram) && mgPerGram > 0 ? mgPerGram : EXERCISE_MG_PER_GRAM;
+  return -(
+    EXERCISE_GLUCOSE_UPTAKE_G_PER_H[family] * hours * sens * exerciseIobFactor(iobAtStartU)
+  );
 }
 
 export interface PredictionPoint {

@@ -28,8 +28,17 @@ import type { ExerciseSource } from "./exercise-insulin-adjustment";
 import { exerciseCarbsForDuration, MAX_PRE_SPORT_CARBS_G } from "./insulin-calculator";
 import type { PredictionPoint } from "./glucose-prediction";
 
-/** Cible de glycémie au départ (mg/dL) — mêmes valeurs que le briefing. */
-export const START_TARGET_AEROBIC = 150;
+/**
+ * Cible de glycémie au départ (mg/dL) pour l'écart AVANT l'effort.
+ *
+ * Riddell et al. 2017 : 90–124 au départ → 10–20 g avant un effort
+ * aérobie ; 126–180 → on part, on voit à 30 min. La cible aérobie était à
+ * 150 (héritage du briefing de mai) : avec le plancher de 15 g, tout
+ * départ sous 150 réclamait des glucides — mesuré chez Ethan, 130 mg/dL
+ * stable sans insuline → 23 g pour 30 min de course. Le creux PENDANT
+ * l'effort, lu sur la courbe, reste protégé par `DURING_FLOOR`.
+ */
+export const START_TARGET_AEROBIC = 126;
 export const START_TARGET_OTHER = 130;
 /**
  * Plancher PENDANT l'effort (mg/dL) — même seuil que `duringRisk` dans le
