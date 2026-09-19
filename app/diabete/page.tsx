@@ -96,7 +96,6 @@ import { usePatternDetection } from "@/hooks/usePatternDetection";
 import type { DetectedPattern, PatternSeverity } from "@/lib/glucose-archive/pattern-engine";
 import type { ArchivedPoint } from "@/lib/glucose-archive/store";
 import {
-  Droplet,
   Syringe,
   Calculator,
   Settings,
