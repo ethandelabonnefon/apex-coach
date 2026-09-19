@@ -187,6 +187,13 @@ const MEAL_OPTIONS: { value: MealTime; label: string }[] = [
   { value: "other", label: "Autre" },
 ];
 
+/** Libellé court d'un type d'injection (tuile Insuline active). */
+const MEAL_TYPE_LABEL: Record<string, string> = {
+  ...Object.fromEntries(MEAL_OPTIONS.map((o) => [o.value, o.label])),
+  correction: "Correction",
+  split: "2e dose",
+};
+
 // Conversion ratio interne (g par U) → format naturel "X,YU"
 function formatUper10g(gPerU: number): string {
   const units = 10 / gPerU;
@@ -269,13 +276,13 @@ const BRIEFING_SPORT_GROUPS: {
 // interpolées) pour que le scanner JIT les détecte à la compilation.
 function sportChipClasses(token: "running" | "diabete" | "muscu", active: boolean): string {
   if (!active) {
-    return "bg-bg-tertiary border-border-subtle text-text-secondary hover:border-border-default";
+    return "bg-bg-secondary border-border-default text-text-secondary hover:border-border-strong";
   }
   switch (token) {
     case "running":
       return "bg-running/15 border-running/40 text-running";
     case "diabete":
-      return "bg-diabete/15 border-diabete/40 text-diabete";
+      return "bg-text-primary border-text-primary text-bg-secondary";
     case "muscu":
       return "bg-muscu/15 border-muscu/40 text-muscu";
   }
@@ -1937,7 +1944,13 @@ export default function DiabetePage() {
           <div className="l">
             {iob.details.length === 0
               ? "Rien d'actif"
-              : `${iob.details.length} injection${iob.details.length > 1 ? "s" : ""} en cours`}
+              : (() => {
+                  const last = [...iob.details].sort((a, b) => a.minutesAgo - b.minutesAgo)[0];
+                  const hhmm = last.injectedAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+                  return `${MEAL_TYPE_LABEL[last.mealType] ?? last.mealType} ${hhmm} · ${last.units}U${
+                    iob.details.length > 1 ? ` · ${iob.details.length} actives` : ""
+                  }`;
+                })()}
           </div>
         </div>
         <CarbsOnBoardTile cob={cob} />
@@ -2139,7 +2152,7 @@ export default function DiabetePage() {
             type="button"
             onClick={() => setBriefingActive((v) => !v)}
             className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
-              briefingActive ? "bg-diabete" : "bg-border-strong"
+              briefingActive ? "bg-success" : "bg-border-strong"
             }`}
             aria-label="Toggle briefing pré-sport"
           >
@@ -2210,9 +2223,9 @@ export default function DiabetePage() {
             {/* Quand fais-tu ton sport ? — boutons discrets (le slider était
                 trompeur : les repères ne correspondaient pas à l'échelle). */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="label">Dans combien de temps ?</p>
-                <span className="num text-xs text-diabete font-semibold">
+              <div className="panel-hd">
+                <h3>Dans combien de temps ?</h3>
+                <span className="num text-xs text-text-tertiary">
                   {formatBriefingDelay(briefingMinutes)} · à{" "}
                   {new Date(nowTick + briefingMinutes * 60000).toLocaleTimeString("fr-FR", {
                     hour: "2-digit",
@@ -2220,17 +2233,13 @@ export default function DiabetePage() {
                   })}
                 </span>
               </div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {[15, 30, 45, 60, 90, 120].map((m) => (
                   <button
                     key={m}
                     type="button"
                     onClick={() => setBriefingMinutes(m)}
-                    className={`py-2 text-xs font-semibold rounded-lg border transition-all tap-scale num ${
-                      briefingMinutes === m
-                        ? "bg-diabete/15 border-diabete/40 text-diabete"
-                        : "bg-bg-tertiary border-border-subtle text-text-secondary hover:border-border-default"
-                    }`}
+                    className={`chip num ${briefingMinutes === m ? "on" : ""}`}
                   >
                     {formatBriefingDelay(m)}
                   </button>
@@ -2240,7 +2249,7 @@ export default function DiabetePage() {
 
             {/* Durée prévue — pré-remplie depuis le sport choisi, modifiable */}
             <div>
-              <p className="label mb-1.5">Durée prévue</p>
+              <p className="text-[11px] text-text-tertiary mb-1.5">Durée prévue</p>
               <div className="relative">
                 <input
                   type="number"
@@ -2253,9 +2262,9 @@ export default function DiabetePage() {
                   }}
                   min={0}
                   max={300}
-                  className="num w-full min-h-11 bg-bg-secondary border border-border-subtle rounded-xl px-3 py-2.5 text-sm font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
+                  className="num w-full h-11 bg-bg-secondary border border-border-default rounded-lg px-3 text-base text-text-primary focus:outline-none focus:border-accent transition-colors"
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-text-tertiary uppercase tracking-wide pointer-events-none">
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-mono text-text-tertiary pointer-events-none">
                   min
                 </span>
               </div>
@@ -2270,9 +2279,9 @@ export default function DiabetePage() {
             {briefingSport && (
             <>
             {/* Données utilisées — transparence sur les inputs */}
-            <div className="rounded-xl bg-bg-secondary border border-border-subtle p-3">
-              <div className="flex items-center justify-between mb-2">
-                <p className="label">Données utilisées</p>
+            <div>
+              <div className="panel-hd">
+                <h3>Données utilisées</h3>
                 <button
                   type="button"
                   onClick={() => {
@@ -2282,42 +2291,38 @@ export default function DiabetePage() {
                     });
                   }}
                   disabled={briefingRefreshing}
-                  className="flex items-center gap-1 text-[10px] text-text-tertiary hover:text-diabete transition-colors disabled:opacity-50 tap-scale"
+                  className="pill hover:bg-bg-hover transition-colors disabled:opacity-50 tap-scale"
                 >
-                  <Activity className={`w-3 h-3 ${briefingRefreshing ? 'animate-spin' : ''}`} />
                   {briefingRefreshing ? 'Refresh…' : 'Rafraîchir'}
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-[11px]">
-                {/* Glycémie live */}
-                <div className="flex items-start gap-1.5">
-                  <Droplet className="w-3 h-3 text-diabete shrink-0 mt-0.5" />
-                  <div className="min-w-0">
-                    <p className="text-[9px] text-text-tertiary uppercase tracking-wide">Glycémie</p>
-                    {liveGlucose ? (
-                      <p className="num text-text-primary font-semibold">
-                        {liveGlucose.value}
-                        <span className="text-text-secondary ml-1">{liveGlucose.arrow}</span>
-                        <span className="text-[9px] text-text-tertiary ml-1">
-                          ({Math.round((Date.now() - new Date(liveGlucose.date).getTime()) / 60000)}min)
-                        </span>
-                      </p>
-                    ) : (
-                      <p className="num text-text-tertiary">{currentGlucose} (manuel)</p>
-                    )}
+              <div className="mgrid c3 flat">
+                <div className="cell">
+                  <div className="v" style={{ color: liveGlucose ? "var(--success)" : undefined }}>
+                    {liveGlucose ? liveGlucose.value : currentGlucose}
+                  </div>
+                  <div className="l">
+                    {liveGlucose
+                      ? `Glycémie ${liveGlucose.arrow} · ${Math.round((Date.now() - new Date(liveGlucose.date).getTime()) / 60000)} min`
+                      : "Glycémie · manuel"}
                   </div>
                 </div>
-                {/* IOB */}
-                <div className="flex items-start gap-1.5">
-                  <Syringe className="w-3 h-3 text-info shrink-0 mt-0.5" />
-                  <div className="min-w-0">
-                    <p className="text-[9px] text-text-tertiary uppercase tracking-wide">IOB</p>
-                    <p className="num text-text-primary font-semibold">
-                      {iob.totalIOB.toFixed(1)}
-                      <span className="text-text-tertiary ml-0.5">U</span>
-                    </p>
+                <div className="cell">
+                  <div className="v">
+                    {iob.totalIOB.toFixed(1).replace(".", ",")}
+                    <small>U</small>
                   </div>
+                  <div className="l">IOB</div>
                 </div>
+                <div className="cell">
+                  <div className="v">
+                    {Math.round(cob.totalRemainingG)}
+                    <small>g</small>
+                  </div>
+                  <div className="l">COB</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px] mt-2">
                 {/* Split en attente */}
                 {(() => {
                   const upcomingSplit = splitDoseReminders
@@ -2359,37 +2364,51 @@ export default function DiabetePage() {
             {/* Briefing résultats */}
             {preSportBriefing && (
               <div
-                className={`rounded-xl p-3 border ${
-                  preSportBriefing.risk === "risk"
-                    ? "bg-error/10 border-error/30"
-                    : preSportBriefing.risk === "caution"
-                    ? "bg-warning/10 border-warning/30"
-                    : "bg-success/10 border-success/30"
-                }`}
+                className="panel"
+                style={{
+                  borderColor:
+                    preSportBriefing.risk === "risk"
+                      ? "var(--error)"
+                      : preSportBriefing.risk === "caution"
+                        ? "var(--warning)"
+                        : "var(--success)",
+                }}
               >
+                <div className="panel-hd">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`led ${
+                        preSportBriefing.risk === "risk" ? "red" : preSportBriefing.risk === "caution" ? "amber" : "green"
+                      }`}
+                    />
+                    <h3>Prédiction</h3>
+                  </div>
+                  <span
+                    className={`pill ${
+                      preSportBriefing.risk === "risk" ? "amber" : preSportBriefing.risk === "caution" ? "amber" : "green"
+                    }`}
+                  >
+                    {preSportBriefing.risk === "risk" ? "Risque" : preSportBriefing.risk === "caution" ? "Prudence" : "Safe"}
+                  </span>
+                </div>
                 {preSportBriefing.status === "ok" ? (
                   <>
-                    <div className="flex items-center justify-between mb-2 text-[10px]">
-                      <span className="label" style={{ color: "var(--diabete)" }}>
-                        Glycémie prédite
-                      </span>
-                      <span className="num text-text-secondary">
-                        <span className="font-semibold text-text-primary">
-                          {preSportBriefing.predictedAtStart}
-                        </span>{" "}
-                        au départ · min{" "}
-                        <span className="font-semibold text-text-primary">
-                          {preSportBriefing.predictedDuringMin}
-                        </span>{" "}
-                        pendant · ~
-                        <span className="font-semibold text-text-primary">
-                          {preSportBriefing.predictedAtEnd}
-                        </span>{" "}
-                        à la fin
-                      </span>
+                    <div className="mgrid c3 flat mb-2">
+                      <div className="cell">
+                        <div className="v">{preSportBriefing.predictedAtStart}</div>
+                        <div className="l">Au départ</div>
+                      </div>
+                      <div className="cell">
+                        <div className="v">{preSportBriefing.predictedDuringMin}</div>
+                        <div className="l">Min pendant</div>
+                      </div>
+                      <div className="cell">
+                        <div className="v">{preSportBriefing.predictedAtEnd}</div>
+                        <div className="l">À la fin</div>
+                      </div>
                     </div>
                     {/* Ce que le modèle a utilisé — pour qu'Ethan voie le calcul */}
-                    <p className="num text-[10px] text-text-tertiary mb-2 leading-snug">
+                    <p className="text-xs text-text-tertiary mb-2 leading-snug">
                       insuline au départ{" "}
                       {preSportBriefing.iobAtStartU.toFixed(1).replace(".", ",")} U · effort{" "}
                       {preSportBriefing.exerciseImpactMgDl > 0 ? "+" : ""}
@@ -2424,13 +2443,13 @@ export default function DiabetePage() {
                         ? "text-warning"
                         : "text-success";
                     return (
-                      <div key={i} className="flex items-start gap-2">
-                        <RecoIcon className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${tone}`} />
+                      <div key={i} className="row-item items-start">
+                        <RecoIcon className={`w-4 h-4 shrink-0 mt-0.5 ${tone}`} />
                         <div className="min-w-0 flex-1">
-                          <p className={`text-xs font-semibold leading-snug ${tone}`}>
+                          <p className="t">
                             {reco.headline}
                           </p>
-                          <p className="text-[10px] text-text-secondary mt-0.5 leading-snug">
+                          <p className="text-xs text-text-secondary mt-0.5 leading-snug" style={{ fontFamily: "var(--font-sans)" }}>
                             {reco.detail}
                           </p>
                           {/* Actions inline pour reduce-split / delay-split */}
@@ -2498,7 +2517,7 @@ export default function DiabetePage() {
                           type="button"
                           onClick={() => createBriefingSession(briefingSport, carbs > 0 ? carbs : null)}
                           disabled={briefingSessionSubmittedRef.current}
-                          className="w-full min-h-11 flex items-center justify-center gap-2 text-sm font-semibold rounded-xl bg-diabete text-ink py-3 transition-colors hover:bg-diabete/90 tap-scale disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="w-full h-12 flex items-center justify-center gap-2 text-sm font-semibold rounded-lg bg-text-primary text-bg-secondary transition-opacity hover:opacity-90 tap-scale disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           <Apple className="w-4 h-4" />
                           {carbs > 0 ? `Je mange ${carbs}g et je pars` : "Je pars sans manger"}
@@ -2511,7 +2530,7 @@ export default function DiabetePage() {
                       type="button"
                       onClick={() => createBriefingSession(briefingSport, null)}
                       disabled={briefingSessionSubmittedRef.current}
-                      className="mt-3 w-full min-h-11 flex items-center justify-center gap-2 text-sm font-semibold rounded-xl bg-diabete text-ink py-3 transition-colors hover:bg-diabete/90 tap-scale disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="mt-3 w-full h-12 flex items-center justify-center gap-2 text-sm font-semibold rounded-lg bg-text-primary text-bg-secondary transition-opacity hover:opacity-90 tap-scale disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <CheckCircle2 className="w-4 h-4" />
                       Je pars
@@ -2633,8 +2652,8 @@ export default function DiabetePage() {
 
         {/* Quick-tags repas (Phase 11 Bloc 2.1) */}
         <div className="mb-4">
-          <p className="label mb-2">Type de repas</p>
-          <div className="grid grid-cols-3 sm:grid-cols-3 gap-2">
+          <p className="text-[11px] text-text-tertiary mb-2">Type de repas</p>
+          <div className="flex flex-wrap gap-1.5">
             {MEAL_TAGS.map((t) => {
               const Icon = MEAL_TAG_ICONS[t.iconName as keyof typeof MEAL_TAG_ICONS] ?? UtensilsCrossed;
               const active = mealTag === t.id;
@@ -2651,10 +2670,10 @@ export default function DiabetePage() {
                       setMacrosManuallyEdited(false); // re-prefill from tag
                     }
                   }}
-                  className={`flex flex-col items-center gap-1 py-2.5 px-1 text-[11px] font-medium rounded-lg border transition-all tap-scale ${
+                  className={`flex items-center gap-1.5 h-10 px-3 text-xs font-semibold rounded-md border transition-all tap-scale ${
                     active
-                      ? "bg-diabete/15 border-diabete/40 text-diabete"
-                      : "bg-bg-tertiary border-border-subtle text-text-secondary hover:border-border-default"
+                      ? "bg-text-primary border-text-primary text-bg-secondary"
+                      : "bg-bg-secondary border-border-default text-text-secondary hover:border-border-strong"
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -2677,8 +2696,8 @@ export default function DiabetePage() {
                     }}
                     className={`py-2 text-xs font-medium rounded-lg border transition-all tap-scale ${
                       active
-                        ? "bg-diabete/15 border-diabete/40 text-diabete"
-                        : "bg-bg-tertiary border-border-subtle text-text-secondary hover:border-border-default"
+                        ? "bg-text-primary border-text-primary text-bg-secondary"
+                        : "bg-bg-secondary border-border-default text-text-secondary hover:border-border-strong"
                     }`}
                   >
                     {s.label}
@@ -2841,8 +2860,8 @@ export default function DiabetePage() {
                 }}
                 className={`py-2 text-xs font-medium rounded-lg border transition-all tap-scale ${
                   mealTime === m.value
-                    ? "bg-diabete/15 border-diabete/40 text-diabete"
-                    : "bg-bg-tertiary border-border-subtle text-text-secondary hover:border-border-default"
+                    ? "bg-text-primary border-text-primary text-bg-secondary"
+                    : "bg-bg-secondary border-border-default text-text-secondary hover:border-border-strong"
                 }`}
               >
                 {m.label}
@@ -3120,30 +3139,38 @@ export default function DiabetePage() {
             </div>
           </div>
 
-          {/* Stepper +/- */}
-          <div className="flex items-center justify-center gap-4 mb-3">
-            <button
-              type="button"
-              onClick={() => setUnitsOverride(Math.max(0, finalUnits - 1))}
-              className="shrink-0 w-11 h-11 rounded-lg bg-bg-secondary border border-border-default text-text-secondary text-xl hover:bg-bg-hover transition-colors tap-scale"
-              aria-label="Diminuer d'1U"
-            >
-              −
-            </button>
-            <div className="flex items-baseline gap-2 min-w-[140px] justify-center">
+          {/* Dose + stepper (proto : chiffre à gauche, stepper bordé à droite) */}
+          <div className="flex items-center gap-4 mb-3">
+            <div className="flex items-baseline gap-2">
               <span className="num-hero text-[56px] text-text-primary leading-none tabular-nums">
                 {finalUnits}
               </span>
               <span className="text-xl text-text-tertiary font-mono">U</span>
             </div>
-            <button
-              type="button"
-              onClick={() => setUnitsOverride(finalUnits + 1)}
-              className="shrink-0 w-11 h-11 rounded-lg bg-bg-secondary border border-border-default text-text-secondary text-xl hover:bg-bg-hover transition-colors tap-scale"
-              aria-label="Augmenter d'1U"
-            >
-              +
-            </button>
+            <div className="flex-1">
+              <div className="flex items-center border border-border-default rounded-lg overflow-hidden bg-bg-secondary">
+                <button
+                  type="button"
+                  onClick={() => setUnitsOverride(Math.max(0, finalUnits - 1))}
+                  className="w-11 h-10 text-text-secondary text-lg hover:bg-bg-hover transition-colors tap-scale"
+                  aria-label="Diminuer d'1U"
+                >
+                  −
+                </button>
+                <span className="flex-1 h-10 flex items-center justify-center num text-lg border-x border-border-subtle">
+                  {finalUnits}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setUnitsOverride(finalUnits + 1)}
+                  className="w-11 h-10 text-text-secondary text-lg hover:bg-bg-hover transition-colors tap-scale"
+                  aria-label="Augmenter d'1U"
+                >
+                  +
+                </button>
+              </div>
+              <p className="text-[11px] font-mono text-text-tertiary text-center mt-1.5">ajustement ±1 U</p>
+            </div>
           </div>
 
           {/* Plafonnement prédictif (septembre 2026). La séance déclarée au
@@ -3220,26 +3247,22 @@ export default function DiabetePage() {
 
           {/* Split dose later */}
           {bolusResult.splitDose && (
-            <div className="text-center mb-3 rounded-lg bg-accent-2/10 border border-accent-2/30 px-3 py-2">
-              <p className="text-[10px] text-accent-2 uppercase tracking-wide font-semibold">
-                Puis dans{" "}
-                {Math.floor(bolusResult.splitDose.delayMinutes / 60)}h
-                {bolusResult.splitDose.delayMinutes % 60 > 0
-                  ? bolusResult.splitDose.delayMinutes % 60
-                  : ""}
-              </p>
-              <p className="num text-2xl font-semibold text-accent-2 mt-0.5">
-                {bolusResult.splitDose.later}
-                <span className="text-sm text-accent-2/70 ml-1">U</span>
-              </p>
-              <p className="text-[10px] text-text-tertiary mt-0.5">
-                couverture des lipides
-              </p>
+            <div className="info mb-3">
+              <div>
+                <b>Couverture des lipides · 2e injection</b>
+                <p>
+                  {fatGrams} g de lipides → <span className="num">{bolusResult.splitDose.later} U</span> dans{" "}
+                  {Math.floor(bolusResult.splitDose.delayMinutes / 60)}h
+                  {bolusResult.splitDose.delayMinutes % 60 > 0 ? String(bolusResult.splitDose.delayMinutes % 60).padStart(2, "0") : ""}{" "}
+                  ({new Date(nowTick + bolusResult.splitDose.delayMinutes * 60_000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}).
+                  Programmée au clic « Enregistrer ». Les protéines ne dosent rien.
+                </p>
+              </div>
             </div>
           )}
 
           {/* Indicateur suggestion calc + reset si modifié */}
-          <div className="text-center mb-4">
+          <div className="text-center mb-3">
             {unitsOverride !== null && unitsOverride !== cappedDose.units ? (
               <button
                 type="button"
@@ -3248,11 +3271,7 @@ export default function DiabetePage() {
               >
                 Modifié — calc suggérait {cappedDose.units}U (cliquer pour rétablir)
               </button>
-            ) : (
-              <p className="text-[11px] text-text-tertiary">
-                Suggestion automatique — ajustable avec − / +
-              </p>
-            )}
+            ) : null}
           </div>
 
           {/* Rappel plafonnement — le détail ci-dessous porte sur la dose
@@ -3270,50 +3289,51 @@ export default function DiabetePage() {
             </div>
           )}
 
-          {/* Breakdown */}
-          <div className="grid grid-cols-2 gap-2 mb-4">
-            <div className="bg-bg-secondary border border-border-default rounded-lg px-3 py-2">
-              <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Glucides</p>
-              <p className="num text-base font-semibold text-info">
-                {bolusResult.carbBolus.toFixed(1)}<span className="text-xs text-text-tertiary">U</span>
-              </p>
+          {/* Breakdown — ligne par ligne, valeur mono à droite (proto) */}
+          <div className="mb-3 border-t border-border-subtle pt-2 text-[12.5px] leading-[1.9]">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-text-secondary">
+                Glucides {carbsGrams} g{bolusResult.carbBolus > 0 ? ` ÷ ${(carbsGrams / bolusResult.carbBolus).toFixed(1).replace(/\.0$/, "")}` : ""}
+              </span>
+              <span className="num">{bolusResult.carbBolus.toFixed(1).replace(".", ",")} U</span>
             </div>
-            <div className="bg-bg-secondary border border-border-default rounded-lg px-3 py-2">
-              <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Correction</p>
-              <p className="num text-base font-semibold text-warning">
-                {bolusResult.correctionBolus.toFixed(1)}<span className="text-xs text-text-tertiary">U</span>
-              </p>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-text-secondary">
+                Correction {glucoseForBolus} → cible {diabetesConfig.targetGlucose}
+              </span>
+              <span className="num">
+                {bolusResult.correctionBolus > 0 ? "+" : ""}
+                {bolusResult.correctionBolus.toFixed(1).replace(".", ",")} U
+              </span>
             </div>
-            {/* Anciennement « FPU » : affichait un nombre d'unités calculé
-                depuis les calories lipides+protéines, alors qu'il ne dosait
-                plus rien depuis le passage à la couverture par les lipides
-                (sept. 2026). Un chiffre en « U » qui ne correspond à aucune
-                injection est un mensonge à l'écran — on montre désormais la
-                vraie 2e injection. */}
-            {bolusResult.splitDose && bolusResult.splitDose.later > 0 && (
-              <div className="bg-bg-secondary border border-border-default rounded-lg px-3 py-2">
-                <p className="text-[10px] text-text-tertiary uppercase tracking-wide">Lipides</p>
-                <p className="num text-base font-semibold text-accent-2">
-                  {bolusResult.splitDose.later}<span className="text-xs text-text-tertiary">U</span>
-                </p>
-              </div>
-            )}
             {bolusResult.trendBolus !== 0 && (
-              <div className="bg-bg-secondary border border-border-default rounded-lg px-3 py-2">
-                <p className="text-[10px] text-text-tertiary uppercase tracking-wide">
-                  Tendance {trendNumberToArrow(trendArrow)}
-                </p>
-                <p
-                  className={`num text-base font-semibold ${
-                    bolusResult.trendBolus > 0 ? "text-warning" : "text-success"
-                  }`}
-                >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-text-secondary">Tendance {trendNumberToArrow(trendArrow)}</span>
+                <span className={`num ${bolusResult.trendBolus > 0 ? "text-warning" : "text-success"}`}>
                   {bolusResult.trendBolus > 0 ? "+" : ""}
-                  {bolusResult.trendBolus.toFixed(1).replace(".", ",")}
-                  <span className="text-xs text-text-tertiary">U</span>
-                </p>
+                  {bolusResult.trendBolus.toFixed(1).replace(".", ",")} U
+                </span>
               </div>
             )}
+            {iob.totalIOB > 0 && (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-text-secondary">Insuline active (non déduite des glucides)</span>
+                <span className="num text-text-tertiary">{iob.totalIOB.toFixed(1).replace(".", ",")} U</span>
+              </div>
+            )}
+            {/* Anciennement « FPU » : on montre la vraie 2e injection lipides. */}
+            {bolusResult.splitDose && bolusResult.splitDose.later > 0 && (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-text-secondary">Lipides · 2e injection différée</span>
+                <span className="num">{bolusResult.splitDose.later} U</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-text-secondary">Plafond prédictif · validation créneau</span>
+              <span className={`pill ${cappedDose.capped ? "amber" : cappedDose.reason ? "" : "green"}`}>
+                {cappedDose.capped ? `→ ${cappedDose.units} U` : cappedDose.reason ? "Non vérifié" : "OK"}
+              </span>
+            </div>
           </div>
 
           {bolusResult.adjustments.length > 0 && (
@@ -3725,8 +3745,8 @@ function SportPicker({
     <div className="space-y-3">
       {BRIEFING_SPORT_GROUPS.map((group) => (
         <div key={group.title}>
-          <p className="label mb-1.5">{group.title}</p>
-          <div className="grid grid-cols-3 gap-2">
+          <p className="text-[11px] text-text-tertiary mb-1.5">{group.title}</p>
+          <div className="flex flex-wrap gap-1.5">
             {SPORTS.filter((s) => group.families.includes(s.family)).map((sport) => {
               const Icon = SPORT_ICONS[sport.key] ?? Activity;
               const active = value === sport.key;
@@ -3735,7 +3755,7 @@ function SportPicker({
                   key={sport.key}
                   type="button"
                   onClick={() => onSelect(sport.key)}
-                  className={`flex flex-col items-center justify-center gap-1 min-h-11 py-2 px-1 text-[11px] font-medium rounded-lg border transition-all tap-scale ${sportChipClasses(group.token, active)}`}
+                  className={`flex items-center justify-center gap-1.5 min-h-11 py-2 px-2 text-xs font-semibold rounded-md border transition-all tap-scale ${sportChipClasses(group.token, active)}`}
                 >
                   <Icon className="w-3.5 h-3.5" />
                   <span className="leading-tight text-center">{sport.label}</span>
@@ -3851,7 +3871,7 @@ function BolusInput({
 }) {
   return (
     <label className="block">
-      <p className="label mb-1.5">{label}</p>
+      <p className="text-[11px] text-text-tertiary mb-1.5">{label}</p>
       <div className="relative">
         <input
           type="number"

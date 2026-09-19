@@ -82,7 +82,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-full bg-bg-primary text-text-primary">
         <OfflineIndicator />
         <Navigation />
-        <div className="lg:ml-60 min-h-screen pb-24 lg:pb-0">
+        <div className="lg:ml-60 min-h-screen pt-safe pb-24 lg:pb-0">
           <main>{children}</main>
         </div>
         <InstallBanner />

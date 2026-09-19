@@ -569,15 +569,12 @@ export default function DiabeteHistoriquePage() {
   return (
     <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 lg:py-8 pb-32 stagger">
       {/* Header */}
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mb-4 flex items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Diabète · Historique</p>
           <h1 className="h-title">
-            Historique glycémie
+            {days} derniers jours
           </h1>
-          <p className="text-xs text-text-tertiary mt-1">
-            Données archivées toutes les 4h — rétention 90 jours.
-          </p>
         </div>
         <Link
           href="/diabete"
@@ -589,17 +586,9 @@ export default function DiabeteHistoriquePage() {
       </div>
 
       {/* Sélecteur de période */}
-      <div className="mb-4 flex gap-2">
+      <div className="mb-3 seg">
         {PERIODS.map((p) => (
-          <button
-            key={p.days}
-            onClick={() => setDays(p.days)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all tap-scale ${
-              days === p.days
-                ? "bg-diabete/15 border-diabete/40 text-diabete"
-                : "bg-bg-tertiary border-border-subtle text-text-secondary hover:border-diabete/30 hover:text-text-primary"
-            }`}
-          >
+          <button key={p.days} type="button" onClick={() => setDays(p.days)} className={days === p.days ? "on" : ""}>
             {p.label}
           </button>
         ))}
@@ -831,9 +820,8 @@ export default function DiabeteHistoriquePage() {
       ) : (
         <>
           {/* Stats en grille */}
-          <section className="panel mb-4">
-            <p className="label mb-3">Vue d&apos;ensemble · {days}j</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          <section className="mb-3">
+            <div className="mgrid">
               <StatTile
                 label="Moyenne"
                 value={`${overallStats.avg}`}
@@ -865,7 +853,7 @@ export default function DiabeteHistoriquePage() {
             </div>
 
             {/* Phase 11 Bloc 4 — Métriques cliniques (GMI + GRI) */}
-            <div className="grid grid-cols-2 gap-3 sm:gap-4 mt-3">
+            <div className="mgrid mt-3">
               <StatTile
                 label="GMI"
                 value={overallStats.gmi.toFixed(1).replace(".", ",")}
@@ -1230,16 +1218,18 @@ function StatTile({
         ? "text-warning"
         : tone === "error"
           ? "text-error"
-          : "text-diabete";
+          : "text-text-primary";
 
   return (
-    <div className="surface-2 rounded-2xl p-3 sm:p-4">
-      <p className="label text-[9px]">{label}</p>
-      <div className="mt-1 flex items-baseline gap-1">
-        <span className={`num text-2xl sm:text-3xl font-semibold ${toneClass}`}>{value}</span>
-        {unit && <span className="text-[10px] text-text-tertiary">{unit}</span>}
+    <div className="cell">
+      <div className={`v ${toneClass}`}>
+        {value}
+        {unit && <small>{unit}</small>}
       </div>
-      {hint && <p className="text-[10px] text-text-tertiary mt-0.5">{hint}</p>}
+      <div className="l">
+        {label}
+        {hint ? ` · ${hint}` : ""}
+      </div>
     </div>
   );
 }

@@ -18,7 +18,7 @@
  */
 
 import { useState } from "react";
-import { Apple, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useStore } from "@/lib/store";
 
 /** "HH:MM" de l'instant courant. */
@@ -55,6 +55,12 @@ export default function CarbEntryLogger() {
     setShowForm(true);
   };
 
+  const quick = (grams: number, preset?: string) => {
+    setCarbG(String(grams));
+    if (preset) setLabel(preset);
+    open();
+  };
+
   const submit = () => {
     const carbs = parseFloat(carbG.replace(",", "."));
     if (!Number.isFinite(carbs) || carbs <= 0) return;
@@ -83,29 +89,34 @@ export default function CarbEntryLogger() {
   );
 
   return (
-    <section className="panel mb-4">
+    <section className="panel mb-3">
       <div className="panel-hd">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2">
-            <Apple className="w-4 h-4 text-diabete" />
-            <h2>Ajouter des glucides</h2>
-          </div>
-        </div>
-        {!showForm && (
-          <button
-            type="button"
-            onClick={open}
-            className="flex items-center gap-1 text-xs text-accent-ink bg-accent rounded-md px-2.5 py-1 tap-scale"
-          >
-            <Plus className="w-3.5 h-3.5" /> Ajouter
-          </button>
-        )}
+        <h2>Glucides</h2>
+        <span className="text-xs text-text-tertiary">sans insuline</span>
       </div>
 
-      <p className="text-[11px] text-text-tertiary mt-1 leading-snug">
-        Glucides mangés sans injection : re-sucrage, compote, collation non bolussée.
-        Pris en compte dans le plan nuit.
-      </p>
+      {/* Raccourcis : pré-remplissent le formulaire (re-sucrage, collation)
+          sans rien calculer — l'entrée reste validée par « Ajouter ». */}
+      {!showForm && (
+        <div className="flex flex-wrap gap-1.5">
+          {[5, 10, 15, 20].map((g) => (
+            <button
+              key={g}
+              type="button"
+              onClick={() => quick(g)}
+              className="chip font-mono font-medium"
+            >
+              +{g} g
+            </button>
+          ))}
+          <button type="button" onClick={() => quick(15, "Resucrage")} className="chip">
+            Resucrage
+          </button>
+          <button type="button" onClick={open} className="chip" aria-label="Saisie détaillée">
+            <Plus className="w-3.5 h-3.5 inline -mt-0.5" /> Détail
+          </button>
+        </div>
+      )}
 
       {active.length > 0 && (
         <div className="flex flex-col gap-1.5 mt-3">

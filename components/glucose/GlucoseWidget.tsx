@@ -12,7 +12,7 @@
 
 import { useEffect, useState } from "react";
 import { useGlucose } from "@/hooks/useGlucose";
-import { glucoseToneColor, formatReadingAge } from "@/lib/libre-link/utils";
+import { glucoseToneColor, formatReadingAge, trendStringToNumber } from "@/lib/libre-link/utils";
 
 type Props = {
   /** Valeur de repli (lecture manuelle la plus récente du store) */
@@ -27,6 +27,22 @@ function toneToPulse(
   if (tone === "target") return "success";
   if (tone === "hypo" || tone === "hyper") return "error";
   return "warning";
+}
+
+/**
+ * Vitesse de tendance Libre (mg/dL/min) — slide rule Abbott, mêmes valeurs
+ * que `lib/glucose-prediction.ts` (fonction privée là-bas). Affichage
+ * seulement : la projection « dans 30 min » de cette carte est un repère
+ * de lecture, pas une entrée de calcul.
+ */
+function trendVelocityMgPerMin(arrow?: number): number {
+  switch (arrow) {
+    case 1: return -1.5;
+    case 2: return -0.7;
+    case 4: return 0.7;
+    case 5: return 1.5;
+    default: return 0;
+  }
 }
 
 function glucoseStatusText(value: number): string {
@@ -69,11 +85,11 @@ export default function GlucoseWidget({ fallbackValue, fallbackRecordedAt }: Pro
       <div className="panel-hd">
         <div className="flex items-center gap-2">
           <span className={`led ${led}`} />
-          <b>Glycémie live</b>
+          <b className="whitespace-nowrap">Glycémie live</b>
         </div>
         <span className={`pill ${hasLive ? "green" : ""}`}>
           {hasLive
-            ? `FreeStyle · ${displayDate ? formatReadingAge(displayDate, nowMs) : "live"}`
+            ? `FreeStyle · ${displayDate ? formatReadingAge(displayDate, nowMs).replace(/^il y a /, "") : "live"}`
             : notConfigured
               ? "non connecté"
               : displayDate
@@ -83,6 +99,7 @@ export default function GlucoseWidget({ fallbackValue, fallbackRecordedAt }: Pro
       </div>
 
       {displayValue !== undefined ? (
+        <>
         <div className="flex items-start gap-3">
           <span className="num-hero text-[52px] leading-none" style={color ? { color } : undefined}>
             {displayValue}
@@ -93,18 +110,32 @@ export default function GlucoseWidget({ fallbackValue, fallbackRecordedAt }: Pro
             </span>
           )}
           <div className="ml-auto text-right">
-            <p className="text-[11px] text-text-tertiary">Statut</p>
-            <p className="text-sm font-semibold text-text-primary">
-              {hasLive ? current!.statusLabel : glucoseStatusText(displayValue)}
-            </p>
-            {hasLive && (
+            {hasLive ? (
               <>
-                <p className="text-[11px] text-text-tertiary mt-1.5">Tendance</p>
-                <p className="num text-sm">{current!.trendLabel}</p>
+                <p className="text-[11px] text-text-tertiary">Tendance</p>
+                <p className="num text-sm">
+                  {(() => {
+                    const v = trendVelocityMgPerMin(trendStringToNumber(current!.trend));
+                    return v === 0 ? "stable" : `${v > 0 ? "+" : "−"}${Math.abs(v).toFixed(1).replace(".", ",")} /min`;
+                  })()}
+                </p>
+                <p className="text-[11px] text-text-tertiary mt-1.5">Dans 30 min</p>
+                <p className="num text-sm">
+                  ≈ {Math.round(displayValue + trendVelocityMgPerMin(trendStringToNumber(current!.trend)) * 30)}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[11px] text-text-tertiary">Statut</p>
+                <p className="text-sm font-semibold text-text-primary">{glucoseStatusText(displayValue)}</p>
               </>
             )}
           </div>
         </div>
+        {hasLive && (
+          <p className="text-xs text-text-secondary mt-1">{current!.statusLabel} · {current!.trendLabel}</p>
+        )}
+        </>
       ) : (
         <div className="flex items-start gap-3">
           <span className="num-hero text-[52px] leading-none text-text-tertiary">

@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { Card, PageHeader, Button, Badge, SectionTitle, InfoBox } from "@/components/ui";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useStore } from "@/lib/store";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
@@ -443,13 +444,14 @@ export default function ProfilPage() {
   return (
     <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 lg:py-8 pb-32">
       <PageHeader
-        title="Mon Profil"
-        subtitle="Configure tes informations personnelles, diabete et entrainement"
+        title="Profil"
+        subtitle="Informations personnelles, diabète et entraînement"
         action={
           <div className="flex items-center gap-3">
             {saved && (
-              <span className="text-xs text-[var(--success)] animate-pulse">Sauvegarde !</span>
+              <span className="text-xs text-[var(--success)]">Sauvegardé</span>
             )}
+            <ThemeToggle />
             <Button onClick={handleSaveAll}>Sauvegarder</Button>
           </div>
         }

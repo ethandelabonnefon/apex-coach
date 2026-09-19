@@ -23,17 +23,23 @@ type NavItem = {
 /* Brand v5 "Instrument" : icônes au trait, onglet actif en cobalt
    (--accent) quel que soit le module — la couleur de catégorie reste un
    code de données dans les pages, pas un signal de navigation. */
+/* Barre mobile = 5 onglets du prototype (Overview · Muscu · Running · T1D ·
+   Profil). La nutrition se rejoint depuis l'Overview et la sidebar desktop. */
 const NAV: NavItem[] = [
   { href: "/", label: "Overview", Icon: LayoutDashboard },
-  { href: "/muscu", label: "Séances", Icon: CalendarDays },
+  { href: "/muscu", label: "Muscu", Icon: CalendarDays },
   { href: "/running", label: "Running", Icon: Footprints },
-  { href: "/nutrition", label: "Nutrition", Icon: Apple },
   { href: "/diabete", label: "T1D", Icon: Droplet },
+  { href: "/profil", label: "Profil", Icon: UserRound },
 ];
 
 const SIDEBAR_NAV: NavItem[] = [
-  ...NAV,
-  { href: "/profil", label: "Profil", Icon: UserRound },
+  NAV[0],
+  NAV[1],
+  NAV[2],
+  { href: "/nutrition", label: "Nutrition", Icon: Apple },
+  NAV[3],
+  NAV[4],
 ];
 
 function useActive(href: string) {
@@ -131,25 +137,6 @@ export function Navigation() {
           </div>
         </Link>
       </aside>
-
-      {/* ============ Header mobile ============ */}
-      <header className="lg:hidden sticky top-0 z-40 glass px-4 py-3 pt-safe">
-        <div className="flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <Logo size={24} withWordmark />
-          </Link>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <Link
-              href="/profil"
-              className="h-9 w-9 rounded-md flex items-center justify-center border border-border-default bg-bg-secondary touch-target"
-              aria-label="Profil"
-            >
-              <UserRound size={16} className="text-text-secondary" />
-            </Link>
-          </div>
-        </div>
-      </header>
 
       {/* ============ Bottom nav mobile ============ */}
       <nav
