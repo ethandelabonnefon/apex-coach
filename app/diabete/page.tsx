@@ -361,12 +361,16 @@ export default function DiabetePage() {
   // conseillés. Décocher enregistre l'injection et déclare la séance sans
   // taguer de glucides.
   const [preWorkoutTakeCarbs, setPreWorkoutTakeCarbs] = useState(true);
+  const [preWorkoutCarbsOverride, setPreWorkoutCarbsOverride] = useState<number | null>(null);
   const preWorkoutSport = getSport(preWorkoutSportKey);
   const workoutType: ExerciseSource | null = preWorkoutSport?.family ?? null;
   const safePreWorkoutDurationMin = Math.min(
     300,
     Number.isFinite(preWorkoutDurationMin) ? Math.max(0, preWorkoutDurationMin) : 0,
   );
+  useEffect(() => {
+    setPreWorkoutCarbsOverride(null);
+  }, [preWorkoutSportKey, minutesUntilWorkout, preWorkoutDurationMin]);
   function handleSelectPreWorkoutSport(key: string) {
     setPreWorkoutSportKey(key);
     if (!preWorkoutDurationTouched) {
@@ -393,10 +397,18 @@ export default function DiabetePage() {
   const [briefingSportKey, setBriefingSportKey] = useState<string | null>(null);
   const [briefingMinutes, setBriefingMinutes] = useState<number>(30);
   const [briefingRefreshing, setBriefingRefreshing] = useState(false);
+  // Quantité de glucides ajustée à la main avant de valider (sept. 2026).
+  // `null` = on suit le conseil. Remise à null dès que le conseil change de
+  // contexte (sport, délai, durée) — on ne garde pas une saisie faite pour
+  // une autre séance.
+  const [briefingCarbsOverride, setBriefingCarbsOverride] = useState<number | null>(null);
   // Durée prévue — pré-remplie depuis `getSport(key).defaultDurationMin` à
   // chaque changement de sport, sauf si l'utilisateur l'a modifiée à la main
   // (même motif que `macrosManuallyEdited` sur le calculateur de bolus).
   const [briefingDurationMin, setBriefingDurationMin] = useState<number>(60);
+  useEffect(() => {
+    setBriefingCarbsOverride(null);
+  }, [briefingSportKey, briefingMinutes, briefingDurationMin]);
   /**
    * Durée bornée dans le CODE, pas seulement par les attributs du champ
    * (revue des correctifs, sept. 2026) : une saisie aberrante gardait une
@@ -847,13 +859,12 @@ export default function DiabetePage() {
     // apprentissage, nuit) ne savait pourquoi la dose était basse.
     let sportSessionId: string | undefined;
     if (isPreWorkout && preWorkoutSport) {
-      const takeCarbs =
-        preWorkoutTakeCarbs && bolusSportPlan !== null && bolusSportPlan.carbsG > 0;
+      const carbs = effectivePreWorkoutCarbs();
       sportSessionId = declareSportSession(
         preWorkoutSport,
         Date.now() + minutesUntilWorkout * 60_000,
         safePreWorkoutDurationMin,
-        takeCarbs ? bolusSportPlan.carbsG : null,
+        preWorkoutTakeCarbs && carbs > 0 ? carbs : null,
       );
     }
 
@@ -941,15 +952,21 @@ export default function DiabetePage() {
    * déclarer : même écriture de séance + glucides que l'enregistrement,
    * sans InsulinLog. Confirmation native comme partout.
    */
+  /** Glucides retenus pour le flux calculateur : la saisie manuelle prime sur le conseil. */
+  function effectivePreWorkoutCarbs(): number {
+    if (preWorkoutCarbsOverride !== null) return preWorkoutCarbsOverride;
+    return bolusSportPlan?.carbsG ?? 0;
+  }
+
   function handleDeclareWithoutInjection() {
     if (!isPreWorkout || !preWorkoutSport) return;
-    const takeCarbs =
-      preWorkoutTakeCarbs && bolusSportPlan !== null && bolusSportPlan.carbsG > 0;
+    const carbs = effectivePreWorkoutCarbs();
+    const takeCarbs = preWorkoutTakeCarbs && carbs > 0;
     if (
       typeof window !== "undefined" &&
       !window.confirm(
         takeCarbs
-          ? `Déclarer ${preWorkoutSport.label.toLowerCase()} dans ${minutesUntilWorkout} min et enregistrer ${bolusSportPlan!.carbsG} g de glucides, sans injection ?`
+          ? `Déclarer ${preWorkoutSport.label.toLowerCase()} dans ${minutesUntilWorkout} min et enregistrer ${carbs} g de glucides, sans injection ?`
           : `Déclarer ${preWorkoutSport.label.toLowerCase()} dans ${minutesUntilWorkout} min, sans injection ?`,
       )
     ) {
@@ -959,7 +976,7 @@ export default function DiabetePage() {
       preWorkoutSport,
       Date.now() + minutesUntilWorkout * 60_000,
       safePreWorkoutDurationMin,
-      takeCarbs ? bolusSportPlan!.carbsG : null,
+      takeCarbs ? carbs : null,
     );
     setIsPreWorkout(false);
     setPreWorkoutSportKey(null);
@@ -2513,16 +2530,27 @@ export default function DiabetePage() {
                     (r) => r.type === "eat-carbs" && r.quantity !== undefined,
                   );
                   if (eatCarbsReco) {
+                    const carbs = briefingCarbsOverride ?? eatCarbsReco.quantity!;
                     return (
-                      <button
-                        type="button"
-                        onClick={() => createBriefingSession(briefingSport, eatCarbsReco.quantity!)}
-                        disabled={briefingSessionSubmittedRef.current}
-                        className="mt-3 w-full min-h-11 flex items-center justify-center gap-2 text-sm font-semibold rounded-xl bg-diabete text-ink py-3 transition-colors hover:bg-diabete/90 tap-scale disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        <Apple className="w-4 h-4" />
-                        Je mange {eatCarbsReco.quantity}g et je pars
-                      </button>
+                      <div className="mt-3 space-y-2">
+                        {/* La quantité se corrige à la main avant de valider
+                            (demande d'Ethan, 19 sept.) : ce qui est tapé est
+                            ce qui est tagué. */}
+                        <CarbsStepper
+                          value={carbs}
+                          suggested={eatCarbsReco.quantity!}
+                          onChange={setBriefingCarbsOverride}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => createBriefingSession(briefingSport, carbs > 0 ? carbs : null)}
+                          disabled={briefingSessionSubmittedRef.current}
+                          className="w-full min-h-11 flex items-center justify-center gap-2 text-sm font-semibold rounded-xl bg-diabete text-ink py-3 transition-colors hover:bg-diabete/90 tap-scale disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <Apple className="w-4 h-4" />
+                          {carbs > 0 ? `Je mange ${carbs}g et je pars` : "Je pars sans manger"}
+                        </button>
+                      </div>
                     );
                   }
                   return (
@@ -3015,15 +3043,24 @@ export default function DiabetePage() {
                             : "Rien à manger avant : la dose réduite suffit"}
                         </p>
                         {plan.carbsG > 0 && (
-                          <label className="flex items-center gap-2 text-[11px] text-text-secondary cursor-pointer select-none pt-1">
-                            <input
-                              type="checkbox"
-                              checked={preWorkoutTakeCarbs}
-                              onChange={(e) => setPreWorkoutTakeCarbs(e.target.checked)}
-                              className="accent-[var(--diabete)] w-4 h-4"
-                            />
-                            et je prends {plan.carbsG} g (enregistrés avec la séance)
-                          </label>
+                          <div className="pt-1 space-y-1.5">
+                            <label className="flex items-center gap-2 text-[11px] text-text-secondary cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={preWorkoutTakeCarbs}
+                                onChange={(e) => setPreWorkoutTakeCarbs(e.target.checked)}
+                                className="accent-[var(--diabete)] w-4 h-4"
+                              />
+                              et je prends (enregistrés avec la séance) :
+                            </label>
+                            {preWorkoutTakeCarbs && (
+                              <CarbsStepper
+                                value={effectivePreWorkoutCarbs()}
+                                suggested={plan.carbsG}
+                                onChange={setPreWorkoutCarbsOverride}
+                              />
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -3405,8 +3442,8 @@ export default function DiabetePage() {
               className="w-full mt-2 min-h-11 border border-diabete/40 text-diabete font-semibold py-3 rounded-xl hover:bg-diabete/10 transition-colors tap-scale"
             >
               Déclarer la séance sans injection
-              {preWorkoutTakeCarbs && bolusSportPlan && bolusSportPlan.carbsG > 0
-                ? ` (+ ${bolusSportPlan.carbsG} g)`
+              {preWorkoutTakeCarbs && effectivePreWorkoutCarbs() > 0
+                ? ` (+ ${effectivePreWorkoutCarbs()} g)`
                 : ""}
             </button>
           )}
@@ -3651,6 +3688,69 @@ export default function DiabetePage() {
  * du toggle du briefing, pour que l'annulation reste toujours trouvable
  * (sinon une séance fantôme réduirait le prochain bolus sans raison).
  */
+/**
+ * Quantité de glucides ajustable avant validation (sept. 2026). Le conseil
+ * reste visible comme repère ; − / + par pas de 5 g, saisie libre, bornée
+ * 0–120 g. Ce que l'utilisateur laisse ici est ce qui est enregistré.
+ */
+function CarbsStepper({
+  value,
+  suggested,
+  onChange,
+}: {
+  value: number;
+  suggested: number;
+  onChange: (v: number) => void;
+}) {
+  const clamp = (v: number) => Math.min(120, Math.max(0, Math.round(v)));
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => onChange(clamp(value - 5))}
+        aria-label="Moins 5 g"
+        className="w-11 h-11 rounded-full border border-border-default bg-bg-tertiary text-text-primary text-lg font-semibold tap-scale flex items-center justify-center"
+      >
+        −
+      </button>
+      <div className="relative flex-1">
+        <input
+          type="number"
+          inputMode="numeric"
+          value={value}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            onChange(Number.isFinite(v) ? clamp(v) : 0);
+          }}
+          min={0}
+          max={120}
+          className="num w-full min-h-11 bg-bg-tertiary border border-border-subtle rounded-xl px-3 py-2.5 text-center text-base font-semibold text-text-primary focus:outline-none focus:border-diabete/50 transition-colors"
+        />
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-text-tertiary uppercase tracking-wide pointer-events-none">
+          g
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange(clamp(value + 5))}
+        aria-label="Plus 5 g"
+        className="w-11 h-11 rounded-full border border-border-default bg-bg-tertiary text-text-primary text-lg font-semibold tap-scale flex items-center justify-center"
+      >
+        +
+      </button>
+      {value !== suggested && (
+        <button
+          type="button"
+          onClick={() => onChange(suggested)}
+          className="text-[10px] text-text-tertiary underline underline-offset-2 whitespace-nowrap tap-scale"
+        >
+          conseil : {suggested} g
+        </button>
+      )}
+    </div>
+  );
+}
+
 /**
  * Sélecteur de sport partagé (sept. 2026) — 12 sports rangés en 3
  * familles. Utilisé par le calculateur (briefing au moment du bolus) ET
