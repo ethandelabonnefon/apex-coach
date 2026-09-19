@@ -539,16 +539,6 @@ export default function RunningPage() {
 
         <div className="surface-1 p-5 sm:p-6 lg:p-8 relative overflow-hidden">
           {/* Glow phase color — bumped opacity pour matcher refs fitness */}
-          <div
-            aria-hidden
-            className="absolute -top-32 -right-32 h-80 w-80 rounded-full opacity-[0.16] blur-3xl"
-            style={{ background: phaseColor(currentWeekData.phase) }}
-          />
-          <div
-            aria-hidden
-            className="absolute -bottom-24 -left-20 h-56 w-56 rounded-full opacity-[0.06] blur-3xl"
-            style={{ background: "var(--running)" }}
-          />
 
           {/* Mobile-first : top bar avec week number + chevrons */}
           <div className="relative">
@@ -647,7 +637,7 @@ export default function RunningPage() {
                   </div>
                   <div className="h-1.5 rounded-full bg-bg-tertiary overflow-hidden">
                     <div
-                      className="h-full rounded-full transition-all duration-700"
+                      className="h-full rounded-md transition-all duration-700"
                       style={{
                         width: `${weekTotalPlanned > 0 ? Math.min(100, (weekTotalDone / weekTotalPlanned) * 100) : 0}%`,
                         background: phaseColor(currentWeekData.phase),
@@ -1193,7 +1183,7 @@ export default function RunningPage() {
               <button
                 onClick={() => setAnalysisOpen(false)}
                 style={{ touchAction: "manipulation" }}
-                className="h-8 w-8 rounded-full hover:bg-bg-hover flex items-center justify-center tap-scale"
+                className="h-8 w-8 rounded-lg hover:bg-bg-hover flex items-center justify-center tap-scale"
                 aria-label="Fermer"
               >
                 <X size={16} />

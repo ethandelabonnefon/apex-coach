@@ -73,7 +73,7 @@ function WhoopConnectionInner() {
   useEffect(() => {
     const w = searchParams?.get("whoop");
     if (w === "connected") {
-      setToast({ kind: "ok", msg: "Whoop connecté ✅" });
+      setToast({ kind: "ok", msg: "Whoop connecté" });
       // Nettoie les params URL
       router.replace("/diabete/parametres");
       fetchStatus();
@@ -117,7 +117,7 @@ function WhoopConnectionInner() {
           <Activity className="w-4 h-4 text-running" />
           <h2 className="text-base font-semibold text-text-primary">Whoop</h2>
           {status?.connected && (
-            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-success/15 text-success border border-success/30">
+            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-md font-semibold bg-success/15 text-success border border-success/30">
               <CheckCircle2 className="w-3 h-3" />
               Connecté
             </span>

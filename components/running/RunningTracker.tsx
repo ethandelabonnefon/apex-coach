@@ -71,11 +71,11 @@ interface RunningTrackerProps {
 type Feeling = 'great' | 'good' | 'ok' | 'hard' | 'bad';
 
 const FEELINGS: { id: Feeling; label: string; emoji: string }[] = [
-  { id: 'great', label: 'Excellent', emoji: '🔥' },
-  { id: 'good',  label: 'Bon',       emoji: '👍' },
-  { id: 'ok',    label: 'OK',        emoji: '👌' },
-  { id: 'hard',  label: 'Dur',       emoji: '😓' },
-  { id: 'bad',   label: 'Mauvais',   emoji: '😣' },
+  { id: 'great', label: 'Excellent', emoji: '++' },
+  { id: 'good',  label: 'Bon',       emoji: '+' },
+  { id: 'ok',    label: 'OK',        emoji: '=' },
+  { id: 'hard',  label: 'Dur',       emoji: '−' },
+  { id: 'bad',   label: 'Mauvais',   emoji: '−−' },
 ];
 
 export default function RunningTracker({ onSave, onClose }: RunningTrackerProps) {
@@ -130,7 +130,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
               type="button"
               onClick={handleDiscard}
               aria-label="Fermer sans enregistrer"
-              className="w-10 h-10 rounded-full bg-bg-tertiary border border-border-subtle flex items-center justify-center text-text-secondary hover:text-error hover:border-error/40 transition-colors tap-scale"
+              className="w-10 h-10 rounded-lg bg-bg-tertiary border border-border-subtle flex items-center justify-center text-text-secondary hover:text-error hover:border-error/40 transition-colors tap-scale"
             >
               <X className="w-4 h-4" />
             </button>
@@ -149,7 +149,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
           {/* Carte avec trace complète (Phase B) */}
           {summary.points.length >= 2 && (
             <section className="surface-1 rounded-2xl overflow-hidden mb-4 relative">
-              <div className="absolute top-3 left-3 z-[500] flex items-center gap-1.5 bg-bg-tertiary/80 backdrop-blur-md rounded-full px-2.5 py-1 border border-border-subtle">
+              <div className="absolute top-3 left-3 z-[500] flex items-center gap-1.5 bg-bg-tertiary/80 backdrop-blur-md rounded-md px-2.5 py-1 border border-border-subtle">
                 <MapPin className="w-3 h-3 text-running" />
                 <span className="text-[10px] uppercase tracking-wide text-text-secondary font-semibold">
                   Trace GPS
@@ -163,11 +163,11 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
                 />
               </div>
               <div className="absolute bottom-3 right-3 z-[500] flex flex-col items-end gap-1 text-[9px] text-text-tertiary">
-                <div className="flex items-center gap-1 bg-bg-tertiary/80 backdrop-blur-md rounded-full px-2 py-0.5 border border-border-subtle">
+                <div className="flex items-center gap-1 bg-bg-tertiary/80 backdrop-blur-md rounded-md px-2 py-0.5 border border-border-subtle">
                   <span className="w-1.5 h-1.5 rounded-full bg-success" />
                   <span>Départ</span>
                 </div>
-                <div className="flex items-center gap-1 bg-bg-tertiary/80 backdrop-blur-md rounded-full px-2 py-0.5 border border-border-subtle">
+                <div className="flex items-center gap-1 bg-bg-tertiary/80 backdrop-blur-md rounded-md px-2 py-0.5 border border-border-subtle">
                   <span className="w-1.5 h-1.5 rounded-full bg-error" />
                   <span>Arrivée</span>
                 </div>
@@ -439,7 +439,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
             type="button"
             onClick={handleDiscard}
             aria-label="Quitter le tracker"
-            className="w-9 h-9 rounded-full bg-bg-tertiary/80 border border-border-subtle flex items-center justify-center text-text-secondary hover:text-error transition-colors tap-scale"
+            className="w-9 h-9 rounded-lg bg-bg-tertiary/80 border border-border-subtle flex items-center justify-center text-text-secondary hover:text-error transition-colors tap-scale"
           >
             <X className="w-4 h-4" />
           </button>
@@ -494,7 +494,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
               type="button"
               onClick={tracker.pause}
               disabled={isStarting}
-              className="w-14 h-14 rounded-full bg-bg-tertiary/90 border border-border-default flex items-center justify-center text-text-primary hover:bg-bg-hover transition-colors tap-scale disabled:opacity-40 backdrop-blur-md"
+              className="w-14 h-14 rounded-lg bg-bg-tertiary/90 border border-border-default flex items-center justify-center text-text-primary hover:bg-bg-hover transition-colors tap-scale disabled:opacity-40 backdrop-blur-md"
               aria-label="Pause"
             >
               <Pause className="w-5 h-5" />
@@ -503,7 +503,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
             <button
               type="button"
               onClick={tracker.resume}
-              className="w-14 h-14 rounded-full bg-running/30 border border-running/50 flex items-center justify-center text-running hover:bg-running/40 transition-colors tap-scale backdrop-blur-md"
+              className="w-14 h-14 rounded-lg bg-running/30 border border-running/50 flex items-center justify-center text-running hover:bg-running/40 transition-colors tap-scale backdrop-blur-md"
               aria-label="Reprendre"
             >
               <Play className="w-5 h-5 ml-0.5" />
@@ -513,7 +513,7 @@ export default function RunningTracker({ onSave, onClose }: RunningTrackerProps)
             type="button"
             onClick={handleStop}
             disabled={isStarting}
-            className="w-18 h-18 rounded-full bg-running text-ink flex items-center justify-center font-bold transition-all tap-scale disabled:opacity-40 hover:bg-running/90 shadow-xl shadow-running/30"
+            className="w-18 h-18 rounded-md bg-running text-ink flex items-center justify-center font-bold transition-all tap-scale disabled:opacity-40 hover:bg-running/90 shadow-xl shadow-running/30"
             style={{ width: '4.5rem', height: '4.5rem' }}
             aria-label="Arrêter et enregistrer"
           >

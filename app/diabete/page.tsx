@@ -1895,11 +1895,6 @@ export default function DiabetePage() {
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto stagger">
       {/* ── HERO : Glycémie + IOB ── */}
       <section className="surface-1 rounded-3xl p-6 sm:p-8 mb-4 relative overflow-hidden">
-        <div
-          aria-hidden
-          className="absolute -top-24 -left-16 h-64 w-64 rounded-full opacity-[0.10] blur-3xl"
-          style={{ background: "var(--diabete)" }}
-        />
 
         <div className="relative flex items-start justify-between gap-4 mb-6">
           <div>
@@ -3109,7 +3104,7 @@ export default function DiabetePage() {
                 return (
                   <span
                     title={cfg.title}
-                    className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold border ${cfg.cls}`}
+                    className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-md font-semibold border ${cfg.cls}`}
                   >
                     <cfg.Icon className="w-3 h-3" />
                     {cfg.label}
@@ -3138,7 +3133,7 @@ export default function DiabetePage() {
             <button
               type="button"
               onClick={() => setUnitsOverride(Math.max(0, finalUnits - 1))}
-              className="shrink-0 w-11 h-11 rounded-full bg-bg-tertiary border border-border-default text-diabete text-xl font-semibold hover:bg-bg-hover transition-colors tap-scale"
+              className="shrink-0 w-11 h-11 rounded-lg bg-bg-tertiary border border-border-default text-diabete text-xl font-semibold hover:bg-bg-hover transition-colors tap-scale"
               aria-label="Diminuer d'1U"
             >
               −
@@ -3152,7 +3147,7 @@ export default function DiabetePage() {
             <button
               type="button"
               onClick={() => setUnitsOverride(finalUnits + 1)}
-              className="shrink-0 w-11 h-11 rounded-full bg-bg-tertiary border border-border-default text-diabete text-xl font-semibold hover:bg-bg-hover transition-colors tap-scale"
+              className="shrink-0 w-11 h-11 rounded-lg bg-bg-tertiary border border-border-default text-diabete text-xl font-semibold hover:bg-bg-hover transition-colors tap-scale"
               aria-label="Augmenter d'1U"
             >
               +
@@ -3524,7 +3519,7 @@ export default function DiabetePage() {
                           onClick={() => handleClearUncertain(log)}
                           title="Lever le drapeau et saisir la quantité"
                           aria-label="Lever le drapeau « incertain » et saisir la quantité"
-                          className="tap-scale rounded-full"
+                          className="tap-scale rounded-md"
                         >
                           <Badge variant="warning" size="sm">
                             incertain
@@ -3677,7 +3672,7 @@ function CarbsStepper({
         type="button"
         onClick={() => onChange(clamp(value - 5))}
         aria-label="Moins 5 g"
-        className="w-11 h-11 rounded-full border border-border-default bg-bg-tertiary text-text-primary text-lg font-semibold tap-scale flex items-center justify-center"
+        className="w-11 h-11 rounded-lg border border-border-default bg-bg-tertiary text-text-primary text-lg font-semibold tap-scale flex items-center justify-center"
       >
         −
       </button>
@@ -3702,7 +3697,7 @@ function CarbsStepper({
         type="button"
         onClick={() => onChange(clamp(value + 5))}
         aria-label="Plus 5 g"
-        className="w-11 h-11 rounded-full border border-border-default bg-bg-tertiary text-text-primary text-lg font-semibold tap-scale flex items-center justify-center"
+        className="w-11 h-11 rounded-lg border border-border-default bg-bg-tertiary text-text-primary text-lg font-semibold tap-scale flex items-center justify-center"
       >
         +
       </button>

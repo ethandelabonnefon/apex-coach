@@ -178,7 +178,7 @@ export default function CorrectionSuggestion() {
           {isHyper && (
             <div className="rounded-xl bg-error/10 border border-error/25 p-3 mb-3">
               <p className="text-xs text-error font-medium mb-1">
-                ⚠️ Vérifie les cétones
+                Vérifie les cétones
               </p>
               <p className="text-[11px] text-text-secondary leading-relaxed">
                 Au-dessus de 250 mg/dL, teste la cétonémie (bandelette ou

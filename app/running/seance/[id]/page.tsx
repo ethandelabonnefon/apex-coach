@@ -64,11 +64,11 @@ const RunningMap = dynamic(() => import("@/components/running/RunningMap"), {
 });
 
 const FEELING_LABELS: Record<string, { label: string; emoji: string; tone: string }> = {
-  great: { label: "Excellent", emoji: "🔥", tone: "text-success" },
-  good:  { label: "Bon",       emoji: "👍", tone: "text-success" },
-  ok:    { label: "OK",        emoji: "👌", tone: "text-text-secondary" },
-  hard:  { label: "Dur",       emoji: "😓", tone: "text-warning" },
-  bad:   { label: "Mauvais",   emoji: "😣", tone: "text-error" },
+  great: { label: "Excellent", emoji: "++", tone: "text-success" },
+  good:  { label: "Bon",       emoji: "+", tone: "text-success" },
+  ok:    { label: "OK",        emoji: "=", tone: "text-text-secondary" },
+  hard:  { label: "Dur",       emoji: "−", tone: "text-warning" },
+  bad:   { label: "Mauvais",   emoji: "−−", tone: "text-error" },
 };
 
 export default function RunningSeanceDetailPage({
@@ -181,7 +181,7 @@ export default function RunningSeanceDetailPage({
           type="button"
           onClick={handleDelete}
           aria-label="Supprimer la séance"
-          className="w-9 h-9 rounded-full bg-bg-tertiary border border-border-subtle flex items-center justify-center text-text-secondary hover:text-error hover:border-error/40 transition-colors tap-scale"
+          className="w-9 h-9 rounded-lg bg-bg-tertiary border border-border-subtle flex items-center justify-center text-text-secondary hover:text-error hover:border-error/40 transition-colors tap-scale"
         >
           <Trash2 className="w-4 h-4" />
         </button>
@@ -227,7 +227,7 @@ export default function RunningSeanceDetailPage({
               glucoseCheckpoints={cps}
               scrubIndex={scrubIdx}
             />
-            <div className="absolute top-3 left-3 z-[500] flex items-center gap-1.5 bg-bg-tertiary/80 backdrop-blur-md rounded-full px-2.5 py-1 border border-border-subtle">
+            <div className="absolute top-3 left-3 z-[500] flex items-center gap-1.5 bg-bg-tertiary/80 backdrop-blur-md rounded-md px-2.5 py-1 border border-border-subtle">
               <MapPin className="w-3 h-3 text-running" />
               <span className="text-[10px] uppercase tracking-wide text-text-secondary font-semibold">
                 Trace GPS · {gpsPoints.length} pts
@@ -243,7 +243,7 @@ export default function RunningSeanceDetailPage({
                   if (scrubIdx < 0) setScrubIdx(0);
                   setIsPlaying((v) => !v);
                 }}
-                className="shrink-0 w-9 h-9 rounded-full bg-running/15 border border-running/30 flex items-center justify-center text-running hover:bg-running/25 transition-colors tap-scale"
+                className="shrink-0 w-9 h-9 rounded-lg bg-running/15 border border-running/30 flex items-center justify-center text-running hover:bg-running/25 transition-colors tap-scale"
                 aria-label={isPlaying ? "Pause replay" : "Lancer replay"}
               >
                 {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}

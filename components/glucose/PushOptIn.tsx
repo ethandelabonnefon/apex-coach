@@ -160,7 +160,7 @@ export default function PushOptIn() {
       setState({ kind: "testing" });
       await fetch("/api/push/test");
       setState({ kind: "subscribed" });
-      flashToast("Notif test envoyée ✅");
+      flashToast("Notif test envoyée");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "inconnu";
       setState({ kind: "error", message: msg });
@@ -192,7 +192,7 @@ export default function PushOptIn() {
           `Test échoué${data.reason ? ` (${data.reason})` : ` (HTTP ${res.status})`}`,
         );
       } else {
-        flashToast("Notif test envoyée ✅");
+        flashToast("Notif test envoyée");
       }
     } finally {
       setState({ kind: "subscribed" });

@@ -326,7 +326,7 @@ function FullCard({
               onClick={onRefresh}
               disabled={loading}
               aria-label="Rafraîchir Whoop"
-              className="w-8 h-8 rounded-full bg-bg-tertiary border border-border-subtle flex items-center justify-center text-text-secondary hover:text-running transition-colors tap-scale disabled:opacity-50"
+              className="w-8 h-8 rounded-lg bg-bg-tertiary border border-border-subtle flex items-center justify-center text-text-secondary hover:text-running transition-colors tap-scale disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
             </button>
@@ -488,7 +488,7 @@ function Gauge({
       </div>
       <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(0,0,0,0.08)" }}>
         <div
-          className="h-full rounded-full transition-all"
+          className="h-full rounded-md transition-all"
           style={{ width: `${pct}%`, background: color }}
         />
       </div>

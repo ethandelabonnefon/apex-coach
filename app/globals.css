@@ -3,240 +3,241 @@
 
 @layer base {
   :root {
-    /* ============ APEX v4 — "Apple" (juillet 2026) ============
-       Couche de tokens extraite de DESIGN.md (langage visuel Apple).
+    /* ============ APEX v5 — "Instrument" (septembre 2026) ============
+       Tableau de bord d'endurance et de santé métabolique : précis,
+       rassurant, personnel. Chaque couleur signale une information :
+         cobalt  = cardio / interactif (liens, focus, onglet actif)
+         vert    = glycémie, validé
+         ambre   = alerte, à surveiller
+         anthracite = force, actions primaires
        LIGHT = valeurs par défaut ci-dessous · DARK = overrides plus bas.
        Tous les composants consomment ces variables via @theme inline,
        donc redéfinir un token bascule tout ce qui en dépend. */
 
     color-scheme: light;
 
-    /* Surfaces — parchemin Apple + cartes blanches (DESIGN canvas/parchment) */
-    --bg-primary: #f5f5f7;   /* fond de page (Parchment) */
-    --bg-secondary: #ffffff; /* cartes (Canvas) */
-    --bg-tertiary: #f5f5f7;  /* insets dans les cartes blanches */
+    /* Surfaces — gris bleuté + cartes blanc cassé */
+    --bg-primary: #eef1f4;   /* fond de page */
+    --bg-secondary: #fbfcfd; /* cartes */
+    --bg-tertiary: #e9edf1;  /* insets dans les cartes */
     --bg-elevated: #ffffff;  /* sheets / modals / tooltips */
-    --bg-hover: rgba(0, 0, 0, 0.04); /* hover / pressed fill */
+    --bg-hover: rgba(30, 37, 45, 0.05); /* hover / pressed fill */
 
-    /* Accent primaire : Action Blue — seul accent interactif (DESIGN) */
-    --accent: #0066cc;
-    --accent-hover: #0071e3;         /* DESIGN Focus Blue */
-    --accent-pressed: #0058b0;
-    --accent-subtle: rgba(0, 102, 204, 0.10);
-    --accent-glow: rgba(0, 102, 204, 0.22);
+    /* Accent primaire — cobalt (interactif + cardio) */
+    --accent: #1f4fd8;
+    --accent-hover: #1a44bd;
+    --accent-pressed: #163aa3;
+    --accent-subtle: rgba(31, 79, 216, 0.10);
+    --accent-glow: rgba(31, 79, 216, 0.18);
     --accent-ink: #ffffff; /* texte sur accent */
 
-    /* Accent secondaire : Indigo — données cliniques T1D (data hue, pas CTA) */
-    --accent-2: #5856d6;
-    --accent-2-hover: #4b49c6;
-    --accent-2-subtle: rgba(88, 86, 214, 0.10);
-    --accent-2-glow: rgba(88, 86, 214, 0.22);
+    /* Accent secondaire — gris acier (ex-indigo IA/diabète → neutre) */
+    --accent-2: #5b6b7a;
+    --accent-2-hover: #4f5d6b;
+    --accent-2-subtle: rgba(91, 107, 122, 0.10);
+    --accent-2-glow: rgba(91, 107, 122, 0.18);
 
-    /* Texte — ink Apple (pas de noir pur, cf. DESIGN) */
-    --text-primary: #1d1d1f;
-    --text-secondary: #6e6e73;
-    --text-tertiary: #86868b;
-    --text-disabled: #b0b0b5;
+    /* Texte — anthracite */
+    --text-primary: #1e252d;
+    --text-secondary: #4f5d6b;
+    --text-tertiary: #8593a1;
+    --text-disabled: #b4c0cb;
     --text-ink: #ffffff;
 
-    /* Bordures — hairlines */
-    --border-subtle: rgba(0, 0, 0, 0.06);
-    --border-default: rgba(0, 0, 0, 0.10);
-    --border-strong: rgba(0, 0, 0, 0.16);
+    /* Bordures — séparateurs fins */
+    --border-subtle: #eaeef2;
+    --border-default: #d9e0e7;
+    --border-strong: #b4c0cb;
 
-    /* États sémantiques (couleurs système iOS) */
-    --success: #34c759;
-    --warning: #ff9500;
-    --error: #ff3b30;
-    --info: #0066cc;
+    /* Sémantique */
+    --success: #178c5e;
+    --warning: #c97b12;
+    --error: #b23a3a;
+    --info: #1f4fd8;
 
-    /* Catégories (data hues par domaine) */
-    --muscu: #ff9500;
-    --running: #ff2d55;
-    --nutrition: #34c759;
-    --diabete: #5856d6;
+    /* Catégories — codes de données, jamais décoratifs */
+    --muscu: #1e252d;     /* force = anthracite */
+    --running: #1f4fd8;   /* cardio = cobalt */
+    --nutrition: #5b6b7a; /* nutrition = acier */
+    --diabete: #178c5e;   /* glycémie = vert */
 
-    /* Glucose scale — précision médicale */
-    --glucose-low: #ff3b30;
-    --glucose-normal: #34c759;
-    --glucose-high: #ff9500;
-    --glucose-critical: #ff2d55;
+    /* Glucose */
+    --glucose-low: #c97b12;
+    --glucose-normal: #178c5e;
+    --glucose-high: #c97b12;
+    --glucose-critical: #b23a3a;
 
-    /* Data chart accents */
-    --chart-1: #0066cc;
-    --chart-2: #32ade6;
-    --chart-3: #ff9500;
-    --chart-4: #5856d6;
-    --chart-5: #ff3b30;
+    /* Charts */
+    --chart-1: #1f4fd8;
+    --chart-2: #5b6b7a;
+    --chart-3: #c97b12;
+    --chart-4: #178c5e;
+    --chart-5: #b23a3a;
 
-    /* Glass — barre nav translucide (tokenisé pour bascule light/dark) */
-    --glass-bg: rgba(245, 245, 247, 0.82);
-    --glass-border: rgba(0, 0, 0, 0.06);
+    /* Glass — neutralisé : barres opaques à bordure fine */
+    --glass-bg: #fbfcfd;
+    --glass-border: #d9e0e7;
 
-    /* Skeleton shimmer */
-    --skeleton-base: #e5e5ea;
-    --skeleton-shine: #f2f2f7;
+    /* Skeleton */
+    --skeleton-base: #e4e9ee;
+    --skeleton-shine: #f3f5f8;
 
-    /* Sélection texte */
-    --selection-bg: rgba(0, 102, 204, 0.20);
+    /* Sélection */
+    --selection-bg: rgba(31, 79, 216, 0.18);
 
     /* Safe areas */
     --safe-area-inset-top: env(safe-area-inset-top);
     --safe-area-inset-bottom: env(safe-area-inset-bottom);
 
-    /* Radii — DESIGN + carte app arrondie, avec pill signature */
-    --radius-sm: 8px;
-    --radius-md: 12px;
-    --radius-lg: 18px;
-    --radius-xl: 22px;
-    --radius-2xl: 28px;
-    --radius-pill: 9999px;
+    /* Rayons — modérés, jamais de capsule */
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 12px;
+    --radius-2xl: 16px;
+    --radius-pill: 8px;
 
-    /* Ombres — élévation par la couleur de surface, pas par le drop-shadow.
-       card = quasi imperceptible · elevated = sheets/modals ·
-       product = signature DESIGN, réservée à l'imagerie/anneaux. */
-    --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-    --shadow-elevated: 0 8px 30px rgba(0, 0, 0, 0.12);
-    --shadow-product: 0 5px 30px rgba(0, 0, 0, 0.22);
+    /* Ombres — minimales, la hiérarchie vient des bordures */
+    --card-shadow: 0 1px 2px rgba(30, 37, 45, 0.06);
+    --shadow-elevated: 0 8px 24px -12px rgba(30, 37, 45, 0.28);
+    --shadow-product: 0 8px 24px -12px rgba(30, 37, 45, 0.28);
   }
 
-  /* ============ DARK — palette délibérée ============
-     Échelle Apple sombre (true-black → cartes qui montent en clarté) +
-     Sky Link Blue #2997ff de DESIGN (Action Blue disparaîtrait sur noir),
-     texte off-white (jamais #fff sur #000), hues data éclaircies (AA).
+  /* ============ DARK — mêmes rôles, valeurs éclaircies ============
+     Anthracite bleuté (jamais true-black), cobalt/vert/ambre relevés pour
+     tenir AA sur fond sombre, texte off-white.
 
      Deux déclencheurs, mêmes valeurs :
        (a) override explicite      → :root[data-theme="dark"]
        (b) préférence système dark → sauf si l'utilisateur a forcé "light". */
   :root[data-theme="dark"] {
     color-scheme: dark;
+    --bg-primary: #14191f;
+    --bg-secondary: #1c232b;
+    --bg-tertiary: #252d36;
+    --bg-elevated: #252d36;
+    --bg-hover: rgba(255, 255, 255, 0.06);
 
-    --bg-primary: #000000;
-    --bg-secondary: #1c1c1e;
-    --bg-tertiary: #2c2c2e;
-    --bg-elevated: #2c2c2e;
-    --bg-hover: rgba(255, 255, 255, 0.08);
+    --accent: #6d8df0;
+    --accent-hover: #86a1f4;
+    --accent-pressed: #5a7ae0;
+    --accent-subtle: rgba(109, 141, 240, 0.14);
+    --accent-glow: rgba(109, 141, 240, 0.24);
+    --accent-ink: #0f1318;
 
-    --accent: #2997ff;
-    --accent-hover: #47a6ff;
-    --accent-pressed: #1f7fe0;
-    --accent-subtle: rgba(41, 151, 255, 0.14);
-    --accent-glow: rgba(41, 151, 255, 0.28);
-    --accent-ink: #ffffff;
+    --accent-2: #9aa8b5;
+    --accent-2-hover: #b0bcc7;
+    --accent-2-subtle: rgba(154, 168, 181, 0.14);
+    --accent-2-glow: rgba(154, 168, 181, 0.24);
 
-    --accent-2: #7d7aff;
-    --accent-2-hover: #9491ff;
-    --accent-2-subtle: rgba(125, 122, 255, 0.16);
-    --accent-2-glow: rgba(125, 122, 255, 0.30);
+    --text-primary: #eef1f4;
+    --text-secondary: #a9b4c0;
+    --text-tertiary: #7f8b98;
+    --text-disabled: #4a5561;
+    --text-ink: #0f1318;
 
-    --text-primary: #f5f5f7;
-    --text-secondary: #a1a1a6;
-    --text-tertiary: #8a8a8f;
-    --text-disabled: #48484a;
-    --text-ink: #ffffff;
+    --border-subtle: #242c35;
+    --border-default: #2e3843;
+    --border-strong: #3f4a57;
 
-    --border-subtle: rgba(255, 255, 255, 0.07);
-    --border-default: rgba(255, 255, 255, 0.13);
-    --border-strong: rgba(255, 255, 255, 0.22);
+    --success: #3fb489;
+    --warning: #e39a34;
+    --error: #d9605a;
+    --info: #6d8df0;
 
-    --success: #30d158;
-    --warning: #ff9f0a;
-    --error: #ff453a;
-    --info: #2997ff;
+    --muscu: #eef1f4;
+    --running: #6d8df0;
+    --nutrition: #9aa8b5;
+    --diabete: #3fb489;
 
-    --muscu: #ff9f0a;
-    --running: #ff375f;
-    --nutrition: #30d158;
-    --diabete: #7d7aff;
+    --glucose-low: #e39a34;
+    --glucose-normal: #3fb489;
+    --glucose-high: #e39a34;
+    --glucose-critical: #d9605a;
 
-    --glucose-low: #ff453a;
-    --glucose-normal: #30d158;
-    --glucose-high: #ff9f0a;
-    --glucose-critical: #ff375f;
+    --chart-1: #6d8df0;
+    --chart-2: #9aa8b5;
+    --chart-3: #e39a34;
+    --chart-4: #3fb489;
+    --chart-5: #d9605a;
 
-    --chart-1: #2997ff;
-    --chart-2: #64d2ff;
-    --chart-3: #ff9f0a;
-    --chart-4: #7d7aff;
-    --chart-5: #ff453a;
+    --glass-bg: #1c232b;
+    --glass-border: #2e3843;
 
-    --glass-bg: rgba(28, 28, 30, 0.72);
-    --glass-border: rgba(255, 255, 255, 0.08);
+    --skeleton-base: #1c232b;
+    --skeleton-shine: #252d36;
 
-    --skeleton-base: #1c1c1e;
-    --skeleton-shine: #2c2c2e;
-
-    --selection-bg: rgba(41, 151, 255, 0.30);
+    --selection-bg: rgba(109, 141, 240, 0.30);
 
     --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-elevated: 0 10px 40px rgba(0, 0, 0, 0.6);
-    --shadow-product: 0 5px 30px rgba(0, 0, 0, 0.5);
+    --shadow-elevated: 0 10px 32px -14px rgba(0, 0, 0, 0.7);
+    --shadow-product: 0 10px 32px -14px rgba(0, 0, 0, 0.7);
   }
 
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       color-scheme: dark;
 
-      --bg-primary: #000000;
-      --bg-secondary: #1c1c1e;
-      --bg-tertiary: #2c2c2e;
-      --bg-elevated: #2c2c2e;
-      --bg-hover: rgba(255, 255, 255, 0.08);
+      --bg-primary: #14191f;
+      --bg-secondary: #1c232b;
+      --bg-tertiary: #252d36;
+      --bg-elevated: #252d36;
+      --bg-hover: rgba(255, 255, 255, 0.06);
 
-      --accent: #2997ff;
-      --accent-hover: #47a6ff;
-      --accent-pressed: #1f7fe0;
-      --accent-subtle: rgba(41, 151, 255, 0.14);
-      --accent-glow: rgba(41, 151, 255, 0.28);
-      --accent-ink: #ffffff;
+      --accent: #6d8df0;
+      --accent-hover: #86a1f4;
+      --accent-pressed: #5a7ae0;
+      --accent-subtle: rgba(109, 141, 240, 0.14);
+      --accent-glow: rgba(109, 141, 240, 0.24);
+      --accent-ink: #0f1318;
 
-      --accent-2: #7d7aff;
-      --accent-2-hover: #9491ff;
-      --accent-2-subtle: rgba(125, 122, 255, 0.16);
-      --accent-2-glow: rgba(125, 122, 255, 0.30);
+      --accent-2: #9aa8b5;
+      --accent-2-hover: #b0bcc7;
+      --accent-2-subtle: rgba(154, 168, 181, 0.14);
+      --accent-2-glow: rgba(154, 168, 181, 0.24);
 
-      --text-primary: #f5f5f7;
-      --text-secondary: #a1a1a6;
-      --text-tertiary: #8a8a8f;
-      --text-disabled: #48484a;
-      --text-ink: #ffffff;
+      --text-primary: #eef1f4;
+      --text-secondary: #a9b4c0;
+      --text-tertiary: #7f8b98;
+      --text-disabled: #4a5561;
+      --text-ink: #0f1318;
 
-      --border-subtle: rgba(255, 255, 255, 0.07);
-      --border-default: rgba(255, 255, 255, 0.13);
-      --border-strong: rgba(255, 255, 255, 0.22);
+      --border-subtle: #242c35;
+      --border-default: #2e3843;
+      --border-strong: #3f4a57;
 
-      --success: #30d158;
-      --warning: #ff9f0a;
-      --error: #ff453a;
-      --info: #2997ff;
+      --success: #3fb489;
+      --warning: #e39a34;
+      --error: #d9605a;
+      --info: #6d8df0;
 
-      --muscu: #ff9f0a;
-      --running: #ff375f;
-      --nutrition: #30d158;
-      --diabete: #7d7aff;
+      --muscu: #eef1f4;
+      --running: #6d8df0;
+      --nutrition: #9aa8b5;
+      --diabete: #3fb489;
 
-      --glucose-low: #ff453a;
-      --glucose-normal: #30d158;
-      --glucose-high: #ff9f0a;
-      --glucose-critical: #ff375f;
+      --glucose-low: #e39a34;
+      --glucose-normal: #3fb489;
+      --glucose-high: #e39a34;
+      --glucose-critical: #d9605a;
 
-      --chart-1: #2997ff;
-      --chart-2: #64d2ff;
-      --chart-3: #ff9f0a;
-      --chart-4: #7d7aff;
-      --chart-5: #ff453a;
+      --chart-1: #6d8df0;
+      --chart-2: #9aa8b5;
+      --chart-3: #e39a34;
+      --chart-4: #3fb489;
+      --chart-5: #d9605a;
 
-      --glass-bg: rgba(28, 28, 30, 0.72);
-      --glass-border: rgba(255, 255, 255, 0.08);
+      --glass-bg: #1c232b;
+      --glass-border: #2e3843;
 
-      --skeleton-base: #1c1c1e;
-      --skeleton-shine: #2c2c2e;
+      --skeleton-base: #1c232b;
+      --skeleton-shine: #252d36;
 
-      --selection-bg: rgba(41, 151, 255, 0.30);
+      --selection-bg: rgba(109, 141, 240, 0.30);
 
       --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-      --shadow-elevated: 0 10px 40px rgba(0, 0, 0, 0.6);
-      --shadow-product: 0 5px 30px rgba(0, 0, 0, 0.5);
+      --shadow-elevated: 0 10px 32px -14px rgba(0, 0, 0, 0.7);
+      --shadow-product: 0 10px 32px -14px rgba(0, 0, 0, 0.7);
     }
   }
 }
@@ -284,10 +285,13 @@
   --color-glucose-high: var(--glucose-high);
   --color-glucose-critical: var(--glucose-critical);
 
-  /* Fonts — 100% système : SF Pro sur Apple via -apple-system (aucune webfont).
-     Satisfait la contrainte "pas d'embed SF Pro". */
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  /* Fonts — chargées par next/font dans app/layout.tsx (variables CSS) :
+       --font-instrument-sans  → texte
+       --font-bricolage        → titres
+       --font-plex-mono        → données (glycémie, BPM, RPE, charges) */
+  --font-sans: var(--font-instrument-sans), "Instrument Sans", system-ui, sans-serif;
+  --font-display: var(--font-bricolage), "Bricolage Grotesque", var(--font-sans);
+  --font-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, Menlo, monospace;
 
   /* Aliases techniques utilisés par certains composants Tailwind */
   --color-background: var(--bg-primary);
@@ -308,7 +312,13 @@
     font-weight: 400;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    letter-spacing: -0.01em;
+    letter-spacing: 0;
+  }
+
+  /* Titres — sans expressive mais fonctionnelle */
+  h1, h2, h3, .disp {
+    font-family: var(--font-display);
+    letter-spacing: -0.015em;
   }
 
   /* Empêche iOS de zoomer sur focus */
@@ -366,83 +376,77 @@
   /* Radius pill signature DESIGN (CTA, search, chips) */
   .rounded-pill { border-radius: var(--radius-pill); }
 
-  /* ============ Échelle typographique DESIGN.md ============
-     SF Pro via -apple-system. Tracking négatif aux tailles display
-     ("Apple tight"). Body à 17px (rythme de lecture Apple). */
+  /* ============ Échelle typographique — Bricolage pour les titres ============ */
   .t-hero {
-    font-size: 56px; font-weight: 600; line-height: 1.07; letter-spacing: -0.28px;
+    font-family: var(--font-display); font-size: 44px; font-weight: 600; line-height: 1.05; letter-spacing: -0.02em;
   }
   .t-display-lg {
-    font-size: 40px; font-weight: 600; line-height: 1.1; letter-spacing: 0;
+    font-family: var(--font-display); font-size: 34px; font-weight: 600; line-height: 1.08; letter-spacing: -0.02em;
   }
   .t-display-md {
-    font-size: 34px; font-weight: 600; line-height: 1.12; letter-spacing: -0.374px;
+    font-family: var(--font-display); font-size: 28px; font-weight: 600; line-height: 1.1; letter-spacing: -0.015em;
   }
   .t-lead {
-    font-size: 28px; font-weight: 400; line-height: 1.14; letter-spacing: 0.196px;
+    font-family: var(--font-display); font-size: 22px; font-weight: 500; line-height: 1.2; letter-spacing: -0.01em;
   }
   .t-tagline {
-    font-size: 21px; font-weight: 600; line-height: 1.19; letter-spacing: 0.231px;
+    font-family: var(--font-display); font-size: 18px; font-weight: 600; line-height: 1.25; letter-spacing: -0.01em;
   }
   .t-body-strong {
-    font-size: 17px; font-weight: 600; line-height: 1.24; letter-spacing: -0.374px;
+    font-size: 15px; font-weight: 600; line-height: 1.4; letter-spacing: 0;
   }
   .t-body {
-    font-size: 17px; font-weight: 400; line-height: 1.47; letter-spacing: -0.374px;
+    font-size: 15px; font-weight: 400; line-height: 1.5; letter-spacing: 0;
   }
   .t-caption {
-    font-size: 14px; font-weight: 400; line-height: 1.43; letter-spacing: -0.224px;
+    font-size: 13px; font-weight: 400; line-height: 1.45; letter-spacing: 0;
   }
   .t-fine {
-    font-size: 12px; font-weight: 400; line-height: 1.33; letter-spacing: -0.12px;
+    font-size: 12px; font-weight: 400; line-height: 1.35; letter-spacing: 0;
   }
 
-  /* ============ Chiffres : SF Pro bold tabular (style Santé) ============ */
+  /* ============ Données : IBM Plex Mono tabular ============
+     Tout ce qui est mesuré (glycémie, BPM, RPE, charges, durées) porte
+     `.num` — c'est la signature visuelle de l'instrument. */
   .num {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
-    font-weight: 600;
+    font-weight: 500;
     letter-spacing: -0.01em;
   }
   .num-hero {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
-    font-weight: 700;
-    letter-spacing: -0.02em;
+    font-weight: 500;
+    letter-spacing: -0.03em;
   }
+  .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
-  /* Label système — petites capitales grises (headers de sections iOS) */
+  /* Label — mono, petites capitales, gris (en-têtes de sections) */
   .label {
-    font-size: 11px;
-    font-weight: 600;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.08em;
     color: var(--text-tertiary);
   }
 
-  /* Glass effect headers — barre de navigation translucide (tokenisé) */
+  /* Barres opaques à bordure fine (l'ancien effet verre est neutralisé) */
   .glass {
     background: var(--glass-bg);
-    backdrop-filter: saturate(180%) blur(20px);
-    -webkit-backdrop-filter: saturate(180%) blur(20px);
     border-bottom: 1px solid var(--glass-border);
   }
 
-  /* Glow accent — ombres douces */
-  .glow-accent {
-    box-shadow: 0 4px 16px -6px var(--accent-glow);
-  }
-  .glow-accent-2 {
-    box-shadow: 0 4px 16px -6px var(--accent-2-glow);
-  }
-  .glow-ring {
-    box-shadow: 0 0 0 1px var(--accent), 0 4px 16px -6px var(--accent-glow);
-  }
+  /* Glow — neutralisés : la hiérarchie vient des bordures, pas des halos */
+  .glow-accent { box-shadow: none; }
+  .glow-accent-2 { box-shadow: none; }
+  .glow-ring { box-shadow: 0 0 0 1px var(--accent); }
 
-  /* Surface levels — cartes sur fond (hiérarchie par profondeur) */
-  .surface-1 { background: var(--bg-secondary); border-radius: var(--radius-lg); box-shadow: var(--card-shadow); }
-  .surface-2 { background: var(--bg-tertiary); border-radius: var(--radius-lg); }
-  .surface-3 { background: var(--bg-elevated); border-radius: var(--radius-lg); box-shadow: var(--shadow-elevated); }
+  /* Surface levels — cartes bordées, ombre minimale */
+  .surface-1 { background: var(--bg-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-lg); box-shadow: var(--card-shadow); }
+  .surface-2 { background: var(--bg-tertiary); border-radius: var(--radius-md); }
+  .surface-3 { background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: var(--radius-lg); box-shadow: var(--shadow-elevated); }
 
   /* Tap feedback iOS */
   .tap-scale { transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1); }
@@ -474,8 +478,8 @@
     transition: transform 0.2s ease, box-shadow 0.2s ease;
   }
   .hover-lift:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-elevated);
+    transform: none;
+    background: var(--bg-hover);
   }
 }
 
@@ -483,6 +487,7 @@
 /* Carte legacy (ancien design system ui.tsx) — carte blanche/sombre selon thème */
 .card {
   background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   box-shadow: var(--card-shadow);
 }
@@ -502,9 +507,10 @@
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 2px 10px;
-  border-radius: 9999px;
-  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
   font-weight: 500;
 }
 

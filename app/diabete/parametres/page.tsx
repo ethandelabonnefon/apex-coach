@@ -510,7 +510,7 @@ export default function DiabeteParametresPage() {
             const isRenaming = renamingProfile === p.id;
             if (isRenaming) {
               return (
-                <div key={p.id} className="flex items-center gap-1 bg-bg-tertiary border border-diabete/50 rounded-full px-3 py-1.5">
+                <div key={p.id} className="flex items-center gap-1 bg-bg-tertiary border border-diabete/50 rounded-md px-3 py-1.5">
                   <input
                     autoFocus
                     value={renameDraft}
@@ -543,7 +543,7 @@ export default function DiabeteParametresPage() {
                 key={p.id}
                 onClick={() => { if (!isActive) setActiveRatioProfile(p.id); flash(); }}
                 onDoubleClick={() => { setRenamingProfile(p.id); setRenameDraft(p.name); }}
-                className={`group flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium border transition-all tap-scale ${
+                className={`group flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium border transition-all tap-scale ${
                   isActive
                     ? "bg-diabete/15 border-diabete/40 text-diabete glow-accent-2"
                     : "bg-bg-tertiary border-border-subtle text-text-secondary hover:border-diabete/30 hover:text-text-primary"
@@ -562,13 +562,13 @@ export default function DiabeteParametresPage() {
           {!creatingProfile ? (
             <button
               onClick={() => setCreatingProfile(true)}
-              className="flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium border border-dashed border-border-default text-text-tertiary hover:text-diabete hover:border-diabete/40 tap-scale"
+              className="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium border border-dashed border-border-default text-text-tertiary hover:text-diabete hover:border-diabete/40 tap-scale"
             >
               <Copy className="w-3 h-3" />
               Nouveau profil
             </button>
           ) : (
-            <div className="flex items-center gap-1 bg-bg-tertiary border border-diabete/50 rounded-full px-3 py-1.5">
+            <div className="flex items-center gap-1 bg-bg-tertiary border border-diabete/50 rounded-md px-3 py-1.5">
               <input
                 autoFocus
                 placeholder="Nom du profil…"

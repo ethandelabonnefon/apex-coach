@@ -11,14 +11,14 @@ interface DiagnosticTabsProps {
   runningCompleted: boolean;
 }
 
-const TABS: { id: DiagnosticTab; label: string; icon: string }[] = [
-  { id: "morphologie", label: "Morphologie", icon: "🧍" },
-  { id: "running", label: "Running", icon: "🏃" },
+const TABS: { id: DiagnosticTab; label: string }[] = [
+  { id: "morphologie", label: "Morphologie" },
+  { id: "running", label: "Running" },
 ];
 
 function StatusIcon({ completed }: { completed: boolean }) {
-  if (completed) return <span className="text-[10px]">✅</span>;
-  return <span className="text-[10px]">❌</span>;
+  if (completed) return <span className="text-[10px] font-mono text-success">✓</span>;
+  return <span className="text-[10px] font-mono text-text-tertiary">—</span>;
 }
 
 export default function DiagnosticTabs({ active, onChange, morphoCompleted, runningCompleted }: DiagnosticTabsProps) {
@@ -41,7 +41,6 @@ export default function DiagnosticTabs({ active, onChange, morphoCompleted, runn
                 : "bg-bg-hover border-border-subtle text-text-secondary hover:bg-bg-hover hover:text-text-secondary"
             }`}
           >
-            <span>{tab.icon}</span>
             <span className="hidden sm:inline">{tab.label}</span>
             <StatusIcon completed={statuses[tab.id]} />
           </button>

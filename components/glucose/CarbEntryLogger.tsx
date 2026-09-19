@@ -93,7 +93,7 @@ export default function CarbEntryLogger() {
           <button
             type="button"
             onClick={open}
-            className="flex items-center gap-1 text-xs text-accent-ink bg-accent rounded-full px-2.5 py-1 tap-scale"
+            className="flex items-center gap-1 text-xs text-accent-ink bg-accent rounded-md px-2.5 py-1 tap-scale"
           >
             <Plus className="w-3.5 h-3.5" /> Ajouter
           </button>

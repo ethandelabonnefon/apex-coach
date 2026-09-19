@@ -11,7 +11,7 @@ import WhoopCard from "@/components/whoop/WhoopCard";
 import RecoveryFigure from "@/components/whoop/RecoveryFigure";
 import {
   ArrowUpRight,
-  Dumbbell,
+  CalendarDays,
   Footprints,
   Apple,
   Droplet,
@@ -137,9 +137,8 @@ export default function Dashboard() {
             month: "long",
           })}
         </p>
-        <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight mb-6">
-          {greeting},{" "}
-          <span style={{ color: "var(--accent)" }}>{profile.name}</span>.
+        <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight mb-6">
+          {greeting}, {profile.name}.
         </h1>
 
         {/* ACTION DU JOUR — une seule, gros CTA */}
@@ -149,11 +148,6 @@ export default function Dashboard() {
             href="/diabete"
             className="group block surface-1 p-6 lg:p-7 relative overflow-hidden tap-scale hover:bg-bg-tertiary transition-colors"
           >
-            <div
-              aria-hidden
-              className="absolute -top-20 -right-20 h-48 w-48 rounded-full opacity-[0.15] blur-3xl"
-              style={{ background: "var(--diabete)" }}
-            />
             <div className="relative flex items-center gap-5">
               <div className="h-14 w-14 rounded-xl bg-diabete/15 flex items-center justify-center flex-shrink-0">
                 <Droplet size={24} className="text-diabete" />
@@ -201,11 +195,6 @@ export default function Dashboard() {
           className="group block surface-1 relative overflow-hidden p-5 sm:p-6 tap-scale hover:bg-bg-tertiary transition-colors"
         >
           {/* Glow lavender en fond */}
-          <div
-            aria-hidden
-            className="absolute -bottom-24 -left-16 h-56 w-56 rounded-full opacity-[0.10] blur-3xl"
-            style={{ background: "var(--diabete)" }}
-          />
 
           <div className="relative">
             <div className="flex items-center gap-1.5 mb-3">
@@ -414,8 +403,8 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 gap-2">
           <QuickLink
             href="/muscu"
-            icon={<Dumbbell size={18} />}
-            label="Musculation"
+            icon={<CalendarDays size={18} />}
+            label="Séances"
             color="muscu"
           />
           <QuickLink
@@ -440,7 +429,7 @@ export default function Dashboard() {
       </section>
 
       <footer className="mt-10 text-center text-[10px] text-text-tertiary">
-        APEX · <span className="num">v3</span> · Precision Coach ·{" "}
+        APEX · <span className="num">v5</span> · Tableau de bord ·{" "}
         <Link href="/credits" className="hover:text-text-secondary transition-colors">
           Crédits
         </Link>

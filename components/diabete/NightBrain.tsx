@@ -204,7 +204,7 @@ export default function NightBrain({
                     {/* Numéro + icône */}
                     <div className="shrink-0 flex flex-col items-center gap-1">
                       <span
-                        className={`w-6 h-6 rounded-full ${tone.ring} ${tone.text} text-xs font-bold flex items-center justify-center num`}
+                        className={`w-6 h-6 rounded-md ${tone.ring} ${tone.text} text-xs font-bold flex items-center justify-center num`}
                       >
                         {badge}
                       </span>

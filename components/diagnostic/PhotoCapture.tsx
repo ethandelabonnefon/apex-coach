@@ -9,9 +9,9 @@ interface PhotoCaptureProps {
 }
 
 const PHOTO_SLOTS = [
-  { label: "Face (avant)", icon: "🧍", instruction: "Tiens-toi droit, bras le long du corps, face à la caméra" },
-  { label: "Profil (côté)", icon: "🧍‍♂️", instruction: "Tourne-toi de 90° à droite, bras le long du corps" },
-  { label: "Dos (arrière)", icon: "🔄", instruction: "Tourne le dos à la caméra, bras le long du corps" },
+  { label: "Face (avant)", icon: "", instruction: "Tiens-toi droit, bras le long du corps, face à la caméra" },
+  { label: "Profil (côté)", icon: "", instruction: "Tourne-toi de 90° à droite, bras le long du corps" },
+  { label: "Dos (arrière)", icon: "", instruction: "Tourne le dos à la caméra, bras le long du corps" },
 ];
 
 function compressImage(file: File, maxWidth: number = 800): Promise<string> {

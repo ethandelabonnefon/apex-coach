@@ -301,7 +301,7 @@ export default function NutritionResults({
                     {meal.suggestions.map((s, j) => (
                       <span
                         key={j}
-                        className="text-[10px] text-text-tertiary px-2 py-0.5 rounded-full bg-bg-secondary border border-border-subtle"
+                        className="text-[10px] text-text-tertiary px-2 py-0.5 rounded-md bg-bg-secondary border border-border-subtle"
                       >
                         {s}
                       </span>
@@ -411,7 +411,7 @@ function MacroLine({
       </div>
       <div className="h-2 bg-bg-tertiary rounded-full overflow-hidden">
         <div
-          className="h-full rounded-full transition-all duration-500"
+          className="h-full rounded-md transition-all duration-500"
           style={{ width: `${ratio}%`, background: colorVar }}
         />
       </div>

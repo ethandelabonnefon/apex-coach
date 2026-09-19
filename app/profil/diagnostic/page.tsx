@@ -218,14 +218,14 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
     <div className="flex items-center gap-2 mb-6">
       {Array.from({ length: total }, (_, i) => (
         <div key={i} className="flex items-center gap-2">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${i < current ? "bg-[var(--success)] text-text-primary" : i === current ? "bg-[var(--success)]/20 text-[var(--success)] border border-[var(--success)]/50" : "bg-bg-hover text-text-tertiary"}`}>
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-semibold transition-all ${i < current ? "bg-[var(--success)] text-text-primary" : i === current ? "bg-[var(--success)]/20 text-[var(--success)] border border-[var(--success)]/50" : "bg-bg-hover text-text-tertiary"}`}>
             {i < current ? (
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
             ) : (
               i + 1
             )}
           </div>
-          {i < total - 1 && <div className={`w-8 h-0.5 rounded-full transition-all ${i < current ? "bg-[var(--success)]" : "bg-bg-hover"}`} />}
+          {i < total - 1 && <div className={`w-8 h-0.5 rounded-md transition-all ${i < current ? "bg-[var(--success)]" : "bg-bg-hover"}`} />}
         </div>
       ))}
     </div>
@@ -624,7 +624,7 @@ export default function DiagnosticPage() {
               analysis.recommendations.map((rec, i) => (
                 <Card key={i}>
                   <div className="flex gap-3">
-                    <div className="w-6 h-6 rounded-full bg-[var(--success)]/15 flex items-center justify-center shrink-0 mt-0.5">
+                    <div className="w-6 h-6 rounded-md bg-[var(--success)]/15 flex items-center justify-center shrink-0 mt-0.5">
                       <span className="text-[var(--success)] text-xs font-bold">{i + 1}</span>
                     </div>
                     <p className="text-sm text-text-primary leading-relaxed">{rec}</p>

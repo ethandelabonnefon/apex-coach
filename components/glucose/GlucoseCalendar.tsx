@@ -231,7 +231,7 @@ function Mini({ label, value }: { label: string; value: string }) {
 function Badge({ tone, children }: { tone: "ok" | "warn"; children: React.ReactNode }) {
   return (
     <span
-      className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${
+      className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-md font-semibold ${
         tone === "ok"
           ? "bg-success/15 text-success"
           : "bg-warning/15 text-warning"

@@ -34,10 +34,10 @@ function resolveRecoveryHex(score: number | null): string {
   const cs = getComputedStyle(document.documentElement);
   const pick = (v: string, fallback: string) =>
     cs.getPropertyValue(v).trim() || fallback;
-  if (score === null || Number.isNaN(score)) return pick("--text-tertiary", "#8a8a8f");
-  if (score >= 67) return pick("--success", "#34c759");
-  if (score >= 34) return pick("--warning", "#ff9500");
-  return pick("--error", "#ff3b30");
+  if (score === null || Number.isNaN(score)) return pick("--text-tertiary", "#8593a1");
+  if (score >= 67) return pick("--success", "#178c5e");
+  if (score >= 34) return pick("--warning", "#c97b12");
+  return pick("--error", "#b23a3a");
 }
 
 function Model({

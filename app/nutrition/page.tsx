@@ -223,11 +223,6 @@ export default function NutritionPage() {
       {/* ── HERO : Macros du jour — Ring central géant + glow nutrition ── */}
       <section className="surface-1 rounded-3xl p-6 sm:p-8 mb-4 relative overflow-hidden">
         {/* Glow orange en fond pour signature visuelle */}
-        <div
-          aria-hidden
-          className="absolute -top-24 -right-16 h-64 w-64 rounded-full opacity-[0.10] blur-3xl"
-          style={{ background: "var(--nutrition)" }}
-        />
 
         <div className="relative flex items-start justify-between gap-4 mb-6">
           <div>

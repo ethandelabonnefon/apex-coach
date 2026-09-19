@@ -83,7 +83,7 @@ export default function HypoFeedback() {
                   </p>
                   {isOverBolus && (
                     <span
-                      className="inline-flex items-center gap-1 rounded-full bg-warning/15 border border-warning/30 px-1.5 py-0.5 text-[9px] font-semibold text-warning"
+                      className="inline-flex items-center gap-1 rounded-md bg-warning/15 border border-warning/30 px-1.5 py-0.5 text-[9px] font-semibold text-warning"
                       title="Hypo due à un over-bolus probable. Exclue du calcul du GRG."
                     >
                       <ShieldAlert className="w-2.5 h-2.5" />
@@ -113,7 +113,7 @@ export default function HypoFeedback() {
               </p>
               {feedback.nextTime && (
                 <p className="text-[10px] text-text-primary mt-1 leading-snug italic">
-                  💡 {feedback.nextTime}
+                  {feedback.nextTime}
                 </p>
               )}
               {/* Mini-courbe en chiffres */}

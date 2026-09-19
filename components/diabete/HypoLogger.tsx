@@ -262,7 +262,7 @@ export default function HypoLogger({
         <button
           type="button"
           onClick={() => setSelectedCarbs((v) => Math.max(0, v - 1))}
-          className="w-9 h-9 rounded-full bg-bg-tertiary border border-border-default flex items-center justify-center text-text-primary hover:bg-bg-hover transition-colors tap-scale"
+          className="w-9 h-9 rounded-lg bg-bg-tertiary border border-border-default flex items-center justify-center text-text-primary hover:bg-bg-hover transition-colors tap-scale"
           aria-label="Moins 1g"
         >
           <Minus className="w-4 h-4" />
@@ -276,7 +276,7 @@ export default function HypoLogger({
         <button
           type="button"
           onClick={() => setSelectedCarbs((v) => v + 1)}
-          className="w-9 h-9 rounded-full bg-bg-tertiary border border-border-default flex items-center justify-center text-text-primary hover:bg-bg-hover transition-colors tap-scale"
+          className="w-9 h-9 rounded-lg bg-bg-tertiary border border-border-default flex items-center justify-center text-text-primary hover:bg-bg-hover transition-colors tap-scale"
           aria-label="Plus 1g"
         >
           <Plus className="w-4 h-4" />
