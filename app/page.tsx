@@ -20,16 +20,6 @@ import {
   Activity,
 } from "lucide-react";
 
-const DAYS_FR = [
-  "Dimanche",
-  "Lundi",
-  "Mardi",
-  "Mercredi",
-  "Jeudi",
-  "Vendredi",
-  "Samedi",
-];
-
 function glucoseToneText(value: number): "success" | "warning" | "error" {
   if (value < 70 || value > 250) return "error";
   if (value > 180 || value < 80) return "warning";
@@ -50,8 +40,6 @@ export default function Dashboard() {
     glucoseReadings,
     meals,
     completedWorkouts,
-    activeProgram,
-    muscuProgram,
   } = useStore();
 
   // ─── Glucose live + 8h history pour le sparkline ─────
@@ -72,11 +60,6 @@ export default function Dashboard() {
       : hours < 18
       ? "Bel après-midi"
       : "Bonsoir";
-  const todayName = DAYS_FR[now.getDay()];
-
-  // ─── Action du jour : séance muscu si programmée ──
-  const sessions = activeProgram?.sessions || muscuProgram.sessions;
-  const todaySession = sessions.find((s) => s.day === todayName);
 
   // ─── Glycémie : live + fallback manuel ─────────────
   const lastManualGlucose = glucoseReadings[0];
@@ -122,7 +105,8 @@ export default function Dashboard() {
     const diff = (nowMs - new Date(w.date).getTime()) / 86400000;
     return diff < 7;
   }).length;
-  const sessionsPlanned = sessions.length || 4;
+  // Module séances en reconstruction : objectif hebdo provisoire.
+  const sessionsPlanned = 4;
   const sessionsPct = Math.min(
     100,
     Math.round((completedThisWeek / sessionsPlanned) * 100),
@@ -159,40 +143,7 @@ export default function Dashboard() {
         </h1>
 
         {/* ACTION DU JOUR — une seule, gros CTA */}
-        {todaySession ? (
-          <Link
-            href={`/muscu/seance/${todaySession.id}`}
-            className="group block surface-1 p-6 lg:p-7 relative overflow-hidden tap-scale hover:bg-bg-tertiary transition-colors"
-          >
-            <div
-              aria-hidden
-              className="absolute -top-20 -right-20 h-48 w-48 rounded-full opacity-[0.15] blur-3xl"
-              style={{ background: "var(--muscu)" }}
-            />
-            <div className="relative flex items-center gap-5">
-              <div className="h-14 w-14 rounded-xl bg-muscu/15 flex items-center justify-center flex-shrink-0">
-                <Dumbbell size={24} className="text-muscu" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <span className="label">Séance du jour</span>
-                <p className="text-lg sm:text-xl font-semibold tracking-tight mt-1 truncate">
-                  {todaySession.name}
-                </p>
-                <p className="text-xs text-text-tertiary mt-0.5">
-                  <span className="num">{todaySession.exercises.length}</span>{" "}
-                  exos ·{" "}
-                  <span className="num">{todaySession.duration}</span>min ·{" "}
-                  {todaySession.focus}
-                </p>
-              </div>
-              <ArrowUpRight
-                size={22}
-                strokeWidth={2.5}
-                className="text-text-tertiary group-hover:text-muscu transition-colors flex-shrink-0"
-              />
-            </div>
-          </Link>
-        ) : displayGlucose !== undefined &&
+        {displayGlucose !== undefined &&
           glucoseToneText(displayGlucose) !== "success" ? (
           <Link
             href="/diabete"

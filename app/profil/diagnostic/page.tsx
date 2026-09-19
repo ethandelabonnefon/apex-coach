@@ -3,18 +3,13 @@
 import { useState, useCallback, useEffect } from "react";
 import { Card, PageHeader, Button, Badge, InfoBox, SectionTitle, ProgressBar } from "@/components/ui";
 import { useStore } from "@/lib/store";
-import type { DiagnosticEntry, ProgramChange } from "@/lib/store";
+import type { DiagnosticEntry } from "@/lib/store";
 import PhotoCapture from "@/components/diagnostic/PhotoCapture";
 import BodyAnalysisResult from "@/components/diagnostic/BodyAnalysisResult";
 import DiagnosticSummary from "@/components/diagnostic/DiagnosticSummary";
 import SectionEditor from "@/components/diagnostic/SectionEditor";
-import ProgramUpdateModal from "@/components/programs/ProgramUpdateModal";
-import { compareDiagnostics } from "@/lib/diagnostic-comparison";
-import type { DiagnosticDiff } from "@/lib/diagnostic-comparison";
 import DiagnosticTabs, { type DiagnosticTab } from "@/components/diagnostic/DiagnosticTabs";
-import MuscuDiagnosticForm from "@/components/diagnostic/MuscuDiagnosticForm";
 import RunningDiagnosticForm from "@/components/diagnostic/RunningDiagnosticForm";
-import BodyAnalysisSection from "@/components/body-map/BodyAnalysisSection";
 
 // ─── Types ───────────────────────────────────────────────────────
 interface Mensurations {
@@ -243,10 +238,7 @@ export default function DiagnosticPage() {
     profile, setDiagnosticData, setDiagnosticCompleted,
     diagnosticCompleted, diagnosticData,
     diagnosticHistory, addDiagnosticEntry,
-    programChanges, addProgramChange, acknowledgeProgramChange,
-    muscuProgram,
-    muscuDiagnosticCompleted, runningDiagnosticCompleted,
-    activeProgram, setActiveProgram,
+    runningDiagnosticCompleted,
   } = useStore();
   const height = profile.height || 180;
 
@@ -261,11 +253,6 @@ export default function DiagnosticPage() {
   // Section editing
   const [editingSection, setEditingSection] = useState<string | null>(null);
 
-  // Program update modal
-  const [showProgramModal, setShowProgramModal] = useState(false);
-  const [latestProgramChange, setLatestProgramChange] = useState<ProgramChange | null>(null);
-  const [latestDiff, setLatestDiff] = useState<DiagnosticDiff | null>(null);
-
   // Form state
   const [mensurations, setMensurations] = useState<Mensurations>({ chest: "", shoulders: "", waist: "", hips: "", armRelaxed: "", armFlexed: "", thigh: "", calf: "" });
   const [longueurs, setLongueurs] = useState<Longueurs>({ armSpan: "", torsoLength: "" });
@@ -276,7 +263,6 @@ export default function DiagnosticPage() {
   const [photoAnalysis, setPhotoAnalysis] = useState<string | null>(null);
   const [analyzingPhotos, setAnalyzingPhotos] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
-  const [updatingPrograms, setUpdatingPrograms] = useState(false);
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
 
   // Pre-fill form from last diagnostic entry
@@ -367,9 +353,6 @@ export default function DiagnosticPage() {
     addDiagnosticEntry(updatedEntry);
     setDiagnosticData({ ...updatedEntry, analysis: result, completedAt: updatedEntry.date });
     setEditingSection(null);
-
-    // Trigger program update
-    triggerProgramUpdate(updatedEntry, lastEntry);
   };
 
   // Photo analysis
@@ -393,97 +376,6 @@ export default function DiagnosticPage() {
     } finally {
       setAnalyzingPhotos(false);
     }
-  };
-
-  // Trigger program update via API
-  const triggerProgramUpdate = async (newEntry: DiagnosticEntry, previousEntry: DiagnosticEntry | null) => {
-    if (!previousEntry) return;
-
-    const diff = compareDiagnostics(previousEntry, newEntry);
-    if (!diff.hasSignificantChanges) return;
-
-    setUpdatingPrograms(true);
-    try {
-      const res = await fetch("/api/update-programs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          previousDiagnostic: previousEntry,
-          newDiagnostic: newEntry,
-          diff,
-          currentProgram: muscuProgram,
-          userContext: { name: profile.name, age: profile.age, height: profile.height, weight: profile.weight, goals: profile.goals },
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erreur serveur");
-
-      const change: ProgramChange = {
-        id: crypto.randomUUID(),
-        date: new Date().toISOString(),
-        programType: "muscu",
-        triggerReason: "diagnostic_update",
-        changesSummary: data.summary?.changesDetected || [],
-        comparativeAnalysis: data.comparativeAnalysis || [],
-        exerciseChanges: data.exerciseChanges || [],
-        volumeAdjustments: data.volumeAdjustments || {},
-        priorities: data.priorities || [],
-        predictions: data.predictions?.week8 || {},
-        fullAnalysis: data.fullAnalysis || "",
-        acknowledged: false,
-      };
-
-      addProgramChange(change);
-      setLatestProgramChange(change);
-      setLatestDiff(diff);
-      setShowProgramModal(true);
-    } catch (err) {
-      console.error("Erreur mise à jour programme:", err);
-    } finally {
-      setUpdatingPrograms(false);
-    }
-  };
-
-  // Apply program changes from the update modal
-  const applyProgramChanges = (change: ProgramChange) => {
-    if (!activeProgram) return;
-
-    const updatedProgram = { ...activeProgram };
-    const updatedSessions = updatedProgram.sessions.map((session) => {
-      const updatedExercises = session.exercises.map((ex) => {
-        // Apply exercise swaps
-        const swap = change.exerciseChanges.find(
-          (c) => c.oldExercise.toLowerCase() === ex.name.toLowerCase()
-        );
-        if (swap) {
-          return { ...ex, name: swap.newExercise, reasoning: swap.reason };
-        }
-        return ex;
-      });
-      return { ...session, exercises: updatedExercises };
-    });
-
-    // Apply volume adjustments to distribution
-    const updatedVolume = { ...updatedProgram.volumeDistribution };
-    for (const [muscle, adj] of Object.entries(change.volumeAdjustments)) {
-      if (updatedVolume[muscle]) {
-        updatedVolume[muscle] = {
-          ...updatedVolume[muscle],
-          setsPerWeek: adj.after,
-          justification: adj.reason,
-        };
-      }
-    }
-
-    setActiveProgram({
-      ...updatedProgram,
-      sessions: updatedSessions,
-      volumeDistribution: updatedVolume,
-      version: updatedProgram.version + 1,
-    });
-
-    acknowledgeProgramChange(change.id);
-    setShowProgramModal(false);
   };
 
   // Full form submit
@@ -511,11 +403,6 @@ export default function DiagnosticPage() {
     addDiagnosticEntry(newEntry);
     setDiagnosticData({ ...newEntry, completedAt: newEntry.date });
     setDiagnosticCompleted(true);
-
-    // Trigger program update if there's a previous entry
-    if (lastEntry) {
-      triggerProgramUpdate(newEntry, lastEntry);
-    }
   };
 
   const handleReset = () => {
@@ -532,23 +419,21 @@ export default function DiagnosticPage() {
     setPhotoError(null);
   };
 
-  // ─── MUSCU / RUNNING TABS ─────────────────────────────────────
-  if (activeTab === "musculation" || activeTab === "running") {
+  // ─── RUNNING TAB ──────────────────────────────────────────────
+  if (activeTab === "running") {
     return (
       <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
         <PageHeader
           title="Mon Diagnostic"
-          subtitle="Morphologie, musculation et running"
+          subtitle="Morphologie et running"
         />
         <DiagnosticTabs
           active={activeTab}
           onChange={setActiveTab}
           morphoCompleted={diagnosticCompleted}
-          muscuCompleted={muscuDiagnosticCompleted}
           runningCompleted={runningDiagnosticCompleted}
         />
-        {activeTab === "musculation" && <MuscuDiagnosticForm />}
-        {activeTab === "running" && <RunningDiagnosticForm />}
+        <RunningDiagnosticForm />
       </div>
     );
   }
@@ -559,13 +444,12 @@ export default function DiagnosticPage() {
       <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
         <PageHeader
           title="Mon Diagnostic"
-          subtitle="Morphologie, musculation et running"
+          subtitle="Morphologie et running"
         />
         <DiagnosticTabs
           active={activeTab}
           onChange={setActiveTab}
           morphoCompleted={diagnosticCompleted}
-          muscuCompleted={muscuDiagnosticCompleted}
           runningCompleted={runningDiagnosticCompleted}
         />
 
@@ -579,41 +463,13 @@ export default function DiagnosticPage() {
           />
         )}
 
-        {/* Program update modal */}
-        {showProgramModal && latestProgramChange && (
-          <ProgramUpdateModal
-            change={latestProgramChange}
-            diff={latestDiff}
-            onAcknowledge={() => {
-              acknowledgeProgramChange(latestProgramChange.id);
-              setShowProgramModal(false);
-            }}
-            onApply={activeProgram ? () => applyProgramChanges(latestProgramChange) : undefined}
-            onClose={() => setShowProgramModal(false)}
-          />
-        )}
 
-        {updatingPrograms && (
-          <div className="mb-6">
-            <InfoBox variant="info">
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-[var(--chart-2)] border-t-transparent rounded-full animate-spin" />
-                <span className="text-xs">Mise à jour du programme en cours...</span>
-              </div>
-            </InfoBox>
-          </div>
-        )}
 
         <DiagnosticSummary
           entry={lastEntry}
           onEditAll={handleEditAll}
           onEditSection={handleEditSection}
         />
-
-        {/* Body Map */}
-        <div className="mt-8">
-          <BodyAnalysisSection />
-        </div>
 
         {/* History */}
         {diagnosticHistory.length > 1 && (
@@ -726,34 +582,10 @@ export default function DiagnosticPage() {
           active={activeTab}
           onChange={setActiveTab}
           morphoCompleted={diagnosticCompleted}
-          muscuCompleted={muscuDiagnosticCompleted}
           runningCompleted={runningDiagnosticCompleted}
         />
 
-        {updatingPrograms && (
-          <div className="mb-6">
-            <InfoBox variant="info">
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-[var(--chart-2)] border-t-transparent rounded-full animate-spin" />
-                <span className="text-xs">Analyse des modifications et mise à jour du programme en cours...</span>
-              </div>
-            </InfoBox>
-          </div>
-        )}
 
-        {/* Program update modal */}
-        {showProgramModal && latestProgramChange && (
-          <ProgramUpdateModal
-            change={latestProgramChange}
-            diff={latestDiff}
-            onAcknowledge={() => {
-              acknowledgeProgramChange(latestProgramChange.id);
-              setShowProgramModal(false);
-            }}
-            onApply={activeProgram ? () => applyProgramChanges(latestProgramChange) : undefined}
-            onClose={() => setShowProgramModal(false)}
-          />
-        )}
 
         <InfoBox variant="success">
           Diagnostic complété ! Les données ont été sauvegardées et seront utilisées pour personnaliser ton programme.
@@ -814,11 +646,6 @@ export default function DiagnosticPage() {
           </div>
         )}
 
-        {/* Body Map */}
-        <div className="mt-8">
-          <BodyAnalysisSection />
-        </div>
-
         {/* Photo Analysis */}
         {(analyzingPhotos || photoAnalysis || photoError) && (
           <div className="mt-8">
@@ -867,7 +694,7 @@ export default function DiagnosticPage() {
     <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
       <PageHeader
         title="Mon Diagnostic"
-        subtitle="Morphologie, musculation et running"
+        subtitle="Morphologie et running"
         action={diagnosticCompleted && lastEntry ? (
           <Button variant="ghost" onClick={() => setViewMode("summary")}>Retour au résumé</Button>
         ) : undefined}
@@ -876,7 +703,6 @@ export default function DiagnosticPage() {
         active={activeTab}
         onChange={setActiveTab}
         morphoCompleted={diagnosticCompleted}
-        muscuCompleted={muscuDiagnosticCompleted}
         runningCompleted={runningDiagnosticCompleted}
       />
 

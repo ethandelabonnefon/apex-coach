@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Navigation } from "@/components/navigation";
-import CoachProvider from "@/components/coach/CoachProvider";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { InstallBanner } from "@/components/InstallBanner";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
@@ -59,7 +58,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="lg:ml-60 min-h-screen pb-24 lg:pb-0">
           <main>{children}</main>
         </div>
-        <CoachProvider />
         <InstallBanner />
         <ServiceWorkerRegistrar />
       </body>

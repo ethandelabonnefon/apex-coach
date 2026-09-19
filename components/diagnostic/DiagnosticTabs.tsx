@@ -2,19 +2,17 @@
 
 import { Badge } from "@/components/ui";
 
-export type DiagnosticTab = "morphologie" | "musculation" | "running";
+export type DiagnosticTab = "morphologie" | "running";
 
 interface DiagnosticTabsProps {
   active: DiagnosticTab;
   onChange: (tab: DiagnosticTab) => void;
   morphoCompleted: boolean;
-  muscuCompleted: boolean;
   runningCompleted: boolean;
 }
 
 const TABS: { id: DiagnosticTab; label: string; icon: string }[] = [
   { id: "morphologie", label: "Morphologie", icon: "🧍" },
-  { id: "musculation", label: "Musculation", icon: "💪" },
   { id: "running", label: "Running", icon: "🏃" },
 ];
 
@@ -23,10 +21,9 @@ function StatusIcon({ completed }: { completed: boolean }) {
   return <span className="text-[10px]">❌</span>;
 }
 
-export default function DiagnosticTabs({ active, onChange, morphoCompleted, muscuCompleted, runningCompleted }: DiagnosticTabsProps) {
+export default function DiagnosticTabs({ active, onChange, morphoCompleted, runningCompleted }: DiagnosticTabsProps) {
   const statuses: Record<DiagnosticTab, boolean> = {
     morphologie: morphoCompleted,
-    musculation: muscuCompleted,
     running: runningCompleted,
   };
 

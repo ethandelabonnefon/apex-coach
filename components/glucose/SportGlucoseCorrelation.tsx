@@ -98,8 +98,8 @@ export default function SportGlucoseCorrelation({
           </h2>
         </div>
         <p className="text-xs text-text-tertiary text-center py-6">
-          Aucune séance loggée pour l&apos;instant. Termine une séance dans /muscu/seance/[id]
-          ou logue un running pour voir l&apos;impact réel sur ta glycémie.
+          Aucune séance loggée pour l&apos;instant. Logue un running ou une séance
+          de force pour voir l&apos;impact réel sur ta glycémie.
         </p>
       </section>
     );

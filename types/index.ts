@@ -337,29 +337,6 @@ export interface FoodItem {
   fat: number;
 }
 
-export interface Exercise {
-  order: number;
-  name: string;
-  sets: number;
-  reps: string;
-  rir: number;
-  rest: number;
-  weight: number | null;
-  reasoning: string;
-  cues: string[];
-  alternatives: { name: string; reason: string }[];
-}
-
-export interface WorkoutSession {
-  id: string;
-  name: string;
-  type: 'muscu' | 'running';
-  duration: number;
-  focus: string;
-  exercises: Exercise[];
-  notes: { glycemia: string; recovery: string; progression: string };
-}
-
 export interface CompletedSet {
   reps: number;
   weight: number;
