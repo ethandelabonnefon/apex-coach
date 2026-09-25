@@ -27,6 +27,8 @@ import { glucoseToneColor } from "@/lib/libre-link/utils";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { CalendarDays, Footprints, Droplet, Apple, Stethoscope, ChevronRight } from "lucide-react";
 import { StoreRestoreBanner } from "@/components/diabete/StoreRestoreBanner";
+import { isWorkoutKind, WORKOUT_TEMPLATES } from "@/lib/training/phase0";
+import { daysUntilStart, doneSessionIds, localISODate, nextSession, recoveryAdvice, sessionsOn } from "@/lib/training/schedule";
 
 function glucoseTone(value: number): "green" | "amber" | "red" {
   if (value < 70 || value > 250) return "red";
@@ -50,7 +52,7 @@ function fmtMin(min: number | null): string {
 }
 
 export default function Dashboard() {
-  const { profile, glucoseReadings, meals, completedWorkouts, insulinLogs } = useStore();
+  const { profile, glucoseReadings, meals, completedWorkouts, insulinLogs, trainingLogs } = useStore();
 
   const { current: liveGlucose, history: liveHistory } = useGlucose({ mode: "history" });
   const whoop = useWhoop();
@@ -209,41 +211,60 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* ── Action du jour ── */}
-      <section className="panel">
-        <div className="panel-hd">
-          <b>Action du jour</b>
-          <span className="pill">
-            {completedThisWeek} séance{completedThisWeek > 1 ? "s" : ""} · 7 j
-          </span>
-        </div>
-        <div className="row-item">
-          <span className="sq ink" />
-          <div>
-            <div className="t">Séances — module en reconstruction</div>
-            <div className="s">calendrier Phase 0 importé de Notion à venir</div>
-          </div>
-          <Link href="/muscu" className="ml-auto text-text-tertiary" aria-label="Séances">
-            <ChevronRight size={16} />
-          </Link>
-        </div>
-        <div className="row-item">
-          <span className="sq cobalt" />
-          <div>
-            <div className="t">Running</div>
-            <div className="s">GPS Apex ou Watch → Whoop</div>
-          </div>
-          <Link href="/running" className="ml-auto text-text-tertiary" aria-label="Running">
-            <ChevronRight size={16} />
-          </Link>
-        </div>
-        <Link
-          href="/diabete"
-          className="mt-3 flex h-11 items-center justify-center rounded-lg bg-text-primary text-bg-secondary text-sm font-semibold"
-        >
-          Briefing pré-sport
-        </Link>
-      </section>
+      {/* ── Action du jour (programme Phase 0, Notion) ── */}
+      {(() => {
+        const todayIso = localISODate(now);
+        const done = doneSessionIds(trainingLogs);
+        const todays = sessionsOn(todayIso);
+        const list = todays.length ? todays : [nextSession(todayIso, done)].filter((x): x is NonNullable<typeof x> => x !== null);
+        const countdown = daysUntilStart(todayIso);
+        const advice = recoveryAdvice(recovery);
+        const firstOpen = list.find((x) => !done.has(x.id));
+        return (
+          <section className="panel">
+            <div className="panel-hd">
+              <b>{todays.length ? "Action du jour" : countdown > 0 ? `Programme · J−${countdown}` : "Prochaine séance"}</b>
+              {todays.length > 0 && advice.light === "yellow" ? (
+                <span className="pill amber">Feu jaune · −20 %</span>
+              ) : todays.length > 0 && advice.light === "red" ? (
+                <span className="pill amber">Feu rouge · léger</span>
+              ) : (
+                <span className="pill">{completedThisWeek} séance{completedThisWeek > 1 ? "s" : ""} · 7 j</span>
+              )}
+            </div>
+            {list.length === 0 ? (
+              <p className="text-sm text-text-secondary">Phase 0 terminée.</p>
+            ) : (
+              list.map((x) => (
+                <Link key={x.id} href={`/muscu/seance/${x.id}`} className="row-item hover:bg-bg-hover -mx-4 px-4 transition-colors">
+                  <span className={`sq ${isWorkoutKind(x.kind) ? "ink" : "cobalt"}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className={`t ${done.has(x.id) ? "line-through text-text-tertiary" : ""}`}>{x.title}</div>
+                    <div className="s">
+                      {!todays.length ? `${new Date(x.date + "T12:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} · ` : ""}
+                      {isWorkoutKind(x.kind) ? `${WORKOUT_TEMPLATES[x.kind].exercises.length} exos · ${WORKOUT_TEMPLATES[x.kind].focus}` : `${x.durationMin ?? "—"} min · Z2`}
+                    </div>
+                  </div>
+                  <ChevronRight size={16} className="text-text-tertiary flex-none" />
+                </Link>
+              ))
+            )}
+            {firstOpen && todays.length > 0 && (
+              <Link
+                href={`/muscu/seance/${firstOpen.id}`}
+                className={`mt-3 flex h-11 items-center justify-center rounded-lg text-sm font-semibold ${isWorkoutKind(firstOpen.kind) ? "bg-text-primary text-bg-secondary" : "bg-accent text-accent-ink"}`}
+              >
+                Démarrer {firstOpen.title.split(" — ")[0].split(" + ")[0]}
+              </Link>
+            )}
+            {!todays.length && (
+              <Link href="/muscu" className="mt-3 flex h-11 items-center justify-center rounded-lg border border-border-default text-sm font-semibold text-text-primary">
+                Voir le calendrier
+              </Link>
+            )}
+          </section>
+        );
+      })()}
 
       {/* ── Nutrition ── */}
       <Link href="/nutrition" className="panel block hover:bg-bg-hover transition-colors">

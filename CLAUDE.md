@@ -40,7 +40,8 @@ apex-coach/
 │   │   ├── parametres/           # Config ratios insuline, ISF, cibles
 │   │   └── patterns/             # 4 patterns glycémiques documentés
 │   ├── muscu/
-│   │   └── page.tsx              # Page d'attente — module calendrier & séances à venir (sept. 2026)
+│   │   ├── page.tsx              # Calendrier Phase 0 (import Notion) : aujourd'hui, semaine cochable, mois, séances types, règles d'or
+│   │   └── seance/[id]/          # Séance : saisie série par série, charge suggérée (progression), feu Whoop, glycémie avant/après
 │   ├── running/
 │   │   ├── page.tsx              # Plan 14 semaines semi-marathon
 │   │   └── zones/                # Zones Z1-Z5 (allures, FC, sensations)
@@ -76,6 +77,7 @@ apex-coach/
 │   ├── nutrition-calculator.ts   # BMR + NEAT + TEF + exercice = TDEE + macros
 │   ├── meal-distribution.ts      # Répartition macros par repas
 │   ├── calculators/              # Fonctions calcul nutrition + running
+│   ├── training/                 # phase0.ts (programme + 47 séances importés de Notion) · schedule.ts (calendrier, progression, feu Whoop — pur, testé)
 │   ├── insulin-calculator.ts     # Bolus, FPU, split dose, IOB (getInsulinOnBoard), pre-sport
 │   ├── bedtime-advisor.ts        # Phase G : prédiction glycémie nuit + reco split
 │   ├── hypo-resucrage.ts         # Phase H : GRG perso, suggestCarbs, classifyHypoContext

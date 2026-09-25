@@ -42,6 +42,7 @@ export const BACKED_UP_KEYS = [
   "nightPredictionLogs",
   "manualDigestion",
   "completedWorkouts",
+  "trainingLogs",
   "completedRunningSessions",
   "currentRunningWeek",
   "declaredSportSessions",

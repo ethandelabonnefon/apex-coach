@@ -4,10 +4,11 @@ import { STORE_KEY, wouldWipeInsulinLogs } from '@/lib/store-backup/payload';
 import { USER_PROFILE, DIABETES_CONFIG, DIABETES_PROFILES_DEFAULT } from './constants';
 import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile, SplitDoseReminder, HypoEvent, CarbEntry, DeclaredSportSession } from '@/types';
 import type { NightPredictionRecord } from '@/lib/night-calibration';
+import type { TrainingLog } from '@/lib/training/schedule';
 import { computeRatioStamps, hasNewRatioStamps } from '@/lib/dose-validation';
 import { syncInsulinRatios } from '@/lib/ratio-sync';
 
-interface CompletedWorkout {
+export interface CompletedWorkout {
   id: string;
   sessionId: string;
   date: string;
@@ -94,6 +95,13 @@ interface AppState {
   // sensibilité post-exercice). Le module calendrier/séances y écrira.
   completedWorkouts: CompletedWorkout[];
   addCompletedWorkout: (workout: CompletedWorkout) => void;
+  removeCompletedWorkout: (id: string) => void;
+
+  // Séances du programme (import Notion, sept. 2026) — une entrée par
+  // séance planifiée (clé = sessionId), en cours ou faite.
+  trainingLogs: TrainingLog[];
+  upsertTrainingLog: (log: TrainingLog) => void;
+  removeTrainingLog: (sessionId: string) => void;
 
   // Running
   currentRunningWeek: number;
@@ -462,7 +470,21 @@ export const useStore = create<AppState>()(
       addMeal: (meal) => set((s) => ({ meals: [meal, ...s.meals].slice(0, 500) })),
 
       completedWorkouts: [],
-      addCompletedWorkout: (workout) => set((s) => ({ completedWorkouts: [workout, ...s.completedWorkouts] })),
+      addCompletedWorkout: (workout) => set((s) => ({
+        // Idempotent par id : terminer deux fois la même séance ne la double pas.
+        completedWorkouts: [workout, ...s.completedWorkouts.filter((w) => w.id !== workout.id)],
+      })),
+      removeCompletedWorkout: (id) => set((s) => ({
+        completedWorkouts: s.completedWorkouts.filter((w) => w.id !== id),
+      })),
+
+      trainingLogs: [],
+      upsertTrainingLog: (log) => set((s) => ({
+        trainingLogs: [log, ...s.trainingLogs.filter((l) => l.sessionId !== log.sessionId)],
+      })),
+      removeTrainingLog: (sessionId) => set((s) => ({
+        trainingLogs: s.trainingLogs.filter((l) => l.sessionId !== sessionId),
+      })),
 
       currentRunningWeek: 1,
       setRunningWeek: (week) => set({ currentRunningWeek: week }),
