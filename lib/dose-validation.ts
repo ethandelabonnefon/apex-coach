@@ -139,6 +139,25 @@ export interface DoseValidationInput {
   ratios: { morning: number; lunch: number; snack: number; dinner: number };
   /** Créneau → ISO du dernier changement de ratio. La fenêtre ne remonte jamais avant. */
   ratioChangedAt: Partial<Record<string, string>>;
+  /**
+   * ISO du dernier changement de dose de LENTE (`UserProfile.basalDoseChangedAt`).
+   * La fenêtre d'analyse ne remonte jamais avant, sur TOUS les créneaux à la
+   * fois — contrairement à `ratioChangedAt` qui est par créneau.
+   *
+   * Pourquoi (demande d'Ethan, 7 oct. 2026) : la basale agit 24 h sur 24. Une
+   * lente à 26 U et une lente à 24 U sont deux régimes différents, et les repas
+   * analysés sous l'ancienne dose ne disent plus rien de ce qu'il faut sous la
+   * nouvelle — ils tirent la moyenne vers un réglage qui n'existe plus. Les
+   * mélanger dans le même échantillon reviendrait à mesurer deux traitements à
+   * la fois.
+   *
+   * La calibration nuit se remet déjà à zéro sur ce même tampon
+   * (`app/diabete/page.tsx`, `recalibratingSince`) ; cette entrée aligne la
+   * validation des doses sur la même règle.
+   *
+   * Absente → comportement inchangé (aucun plancher basale).
+   */
+  basalChangedAt?: string;
   nowMs?: number;
   /**
    * Séances du briefing pré-sport (Task 3, `lib/store.ts` `declaredSportSessions`).
@@ -153,11 +172,16 @@ export interface DoseValidationInput {
   sportSessions?: DeclaredSportSession[];
 }
 
+/** Ce qui borne la fenêtre d'analyse : ancienneté max, ratio, ou lente. */
+export type FloorReason = "window" | "ratio" | "basal";
+
 export interface SlotSelection {
   meals: EligibleMeal[];
   excluded: Partial<Record<ExclusionReason, number>>;
   /** Profondeur réellement atteinte par la fenêtre (jours). */
   windowDays: number;
+  /** Ce qui borne la fenêtre — affiché quand les données sont insuffisantes. */
+  floorReason: FloorReason;
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -421,10 +445,26 @@ export function selectEligibleMeals(
   const now = input.nowMs ?? Date.now();
   const changedAt = input.ratioChangedAt?.[mealType];
   const changedMs = changedAt ? toMs(changedAt) : null;
-  const floor = Math.max(
-    now - MAX_WINDOW_DAYS * DAY_MS,
-    Number.isFinite(changedMs as number) && changedMs !== null ? changedMs : -Infinity,
-  );
+  // Changement de LENTE : plancher commun à tous les créneaux (cf.
+  // `basalChangedAt`). Le plus récent des deux tampons gagne — on ne garde
+  // que les repas faits sous le réglage actuel, ratio ET basale.
+  const basalMs = input.basalChangedAt ? toMs(input.basalChangedAt) : null;
+  const ratioFloor =
+    Number.isFinite(changedMs as number) && changedMs !== null ? changedMs : -Infinity;
+  const basalFloor =
+    Number.isFinite(basalMs as number) && basalMs !== null ? basalMs : -Infinity;
+  const maxFloor = now - MAX_WINDOW_DAYS * DAY_MS;
+  const floor = Math.max(maxFloor, ratioFloor, basalFloor);
+  // Qui a imposé le plancher — pour que l'écran puisse DIRE pourquoi la
+  // fenêtre est courte au lieu d'afficher un « 0 repas analysable » qui
+  // ressemble à une panne. La basale gagne les égalités : c'est le
+  // changement le plus large (tous les créneaux d'un coup).
+  const floorReason: FloorReason =
+    basalFloor === floor && basalFloor > maxFloor
+      ? "basal"
+      : ratioFloor === floor && ratioFloor > maxFloor
+        ? "ratio"
+        : "window";
 
   const logs = input.insulinLogs ?? [];
   const points = input.archivePoints ?? [];
@@ -561,6 +601,7 @@ export function selectEligibleMeals(
     meals: eligible.filter((m) => m.injectedAt >= windowStart),
     excluded,
     windowDays,
+    floorReason,
   };
 }
 
@@ -586,6 +627,8 @@ export interface SlotAnalysis {
   hypoRate: number;
   confidence: SlotConfidence;
   windowDays: number;
+  /** Ce qui borne la fenêtre — affiché quand les données sont insuffisantes. */
+  floorReason: FloorReason;
   excluded: Partial<Record<ExclusionReason, number>>;
   /** Écart moyen glycémie en fin de fenêtre − glycémie avant repas (mg/dL). */
   avgLandingDelta: number | null;
@@ -664,6 +707,7 @@ export function analyzeSlot(
     hypoRate: round1(hypoRate * 100) / 100,
     confidence,
     windowDays: selection.windowDays,
+    floorReason: selection.floorReason,
     excluded: selection.excluded,
     avgLandingDelta,
     avgWindowMin,

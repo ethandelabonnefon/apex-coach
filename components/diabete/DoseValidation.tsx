@@ -65,6 +65,17 @@ function SlotCard({
 
       {analysis.verdict === "insufficient-data" ? (
         <p className="text-xs text-text-secondary">
+          {/* Dire POURQUOI la fenêtre est courte. Après une baisse de lente,
+              tous les créneaux retombent à « données insuffisantes » d'un
+              coup : sans cette phrase, ça ressemble à une panne. */}
+          {analysis.floorReason === "basal" ? (
+            <>
+              Remis à zéro depuis ton changement de lente — les repas d&apos;avant
+              ont été faits sous l&apos;ancienne dose.{" "}
+            </>
+          ) : analysis.floorReason === "ratio" ? (
+            <>Remis à zéro depuis ton changement de ratio sur ce créneau. </>
+          ) : null}
           {analysis.eligibleCount} repas analysable
           {analysis.eligibleCount > 1 ? "s" : ""} sur les {analysis.windowDays}{" "}
           derniers jours — il en faut {MIN_ELIGIBLE_MEALS}.

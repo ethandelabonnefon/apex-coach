@@ -314,6 +314,10 @@ export default function DiabeteHistoriquePage() {
       sportSessions: declaredSportSessions,
       ratios: diabetesConfig.ratios,
       ratioChangedAt: profile.ratioChangedAt ?? {},
+      // Changement de lente → la fenêtre repart de zéro sur TOUS les créneaux
+      // (demande d'Ethan, 7 oct. 2026) : les repas d'avant ont été faits sous
+      // une autre basale, ils ne disent plus rien du réglage actuel.
+      basalChangedAt: profile.basalDoseChangedAt,
     });
   }, [
     insulinLogs,
@@ -323,6 +327,7 @@ export default function DiabeteHistoriquePage() {
     declaredSportSessions,
     diabetesConfig.ratios,
     profile.ratioChangedAt,
+    profile.basalDoseChangedAt,
   ]);
 
   // ─── État Bilan IA (Phase 10c) ────────────────────────────────────────

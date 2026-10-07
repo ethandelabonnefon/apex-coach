@@ -941,7 +941,7 @@ function selection(n: number, hypos: number, over: Partial<EligibleMeal> = {}): 
       ...over,
     });
   }
-  return { meals, excluded: {}, windowDays: 7 };
+  return { meals, excluded: {}, windowDays: 7, floorReason: "window" as const };
 }
 
 test("D2 — le minimum de repas éligibles est bien 5", () => {
@@ -1129,4 +1129,133 @@ test("formatRatio : ratios réels du profil (6,7 / 8,3 / 10 / 11,1)", () => {
   assert.equal(formatRatio(8.3), "1 U / 8,3 g");
   assert.equal(formatRatio(10), "1 U / 10 g");
   assert.equal(formatRatio(11.1), "1 U / 11,1 g");
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// Changement de LENTE → l'analyse des ratios repart de zéro (7 oct. 2026)
+// ───────────────────────────────────────────────────────────────────────
+//
+// Demande d'Ethan : « si je baisse d'un coup de deux unités de lente, on ne
+// peut pas partir sur les bases qu'on avait avec les 26 unités ». La basale
+// agit 24 h sur 24 : les repas faits sous l'ancienne dose décrivent un autre
+// réglage et tireraient la moyenne vers un traitement qui n'existe plus.
+
+test("LE test : un changement de lente écarte tous les repas d'avant", () => {
+  const sel = selectEligibleMeals(
+    input({
+      insulinLogs: [meal(1), meal(2), meal(20), meal(30)],
+      basalChangedAt: new Date(NOW - 10 * DAY).toISOString(),
+    }),
+    "lunch",
+  );
+  assert.equal(sel.meals.length, 2, "seuls les repas d'après le changement comptent");
+  assert.ok(sel.meals.every((m) => m.injectedAt >= NOW - 10 * DAY));
+});
+
+test("le changement de lente vaut pour TOUS les créneaux, pas un seul", () => {
+  // `ratioChangedAt` est par créneau ; la basale, elle, agit partout.
+  const logs = [
+    meal(2, { id: "l-2", mealType: "lunch" }),
+    meal(20, { id: "l-20", mealType: "lunch" }),
+    meal(2, { id: "d-2", mealType: "dinner" }),
+    meal(20, { id: "d-20", mealType: "dinner" }),
+    meal(2, { id: "m-2", mealType: "morning" }),
+    meal(20, { id: "m-20", mealType: "morning" }),
+    meal(2, { id: "s-2", mealType: "snack" }),
+    meal(20, { id: "s-20", mealType: "snack" }),
+  ];
+  const basalChangedAt = new Date(NOW - 10 * DAY).toISOString();
+  for (const slot of ["morning", "lunch", "snack", "dinner"]) {
+    const sel = selectEligibleMeals(input({ insulinLogs: logs, basalChangedAt }), slot);
+    assert.equal(sel.meals.length, 1, `${slot} : le repas d'il y a 20 j doit être écarté`);
+  }
+});
+
+test("le tampon le plus RÉCENT gagne — ratio et basale ne s'annulent pas", () => {
+  const logs = [meal(1), meal(4), meal(8), meal(20)];
+  // Ratio changé il y a 10 j, lente il y a 5 j → le plancher est à 5 j.
+  const sel = selectEligibleMeals(
+    input({
+      insulinLogs: logs,
+      ratioChangedAt: { lunch: new Date(NOW - 10 * DAY).toISOString() },
+      basalChangedAt: new Date(NOW - 5 * DAY).toISOString(),
+    }),
+    "lunch",
+  );
+  assert.ok(sel.meals.every((m) => m.injectedAt >= NOW - 5 * DAY));
+  assert.equal(sel.meals.length, 2);
+
+  // Et dans l'autre sens : lente il y a 10 j, ratio il y a 5 j → idem 5 j.
+  const inverse = selectEligibleMeals(
+    input({
+      insulinLogs: logs,
+      ratioChangedAt: { lunch: new Date(NOW - 5 * DAY).toISOString() },
+      basalChangedAt: new Date(NOW - 10 * DAY).toISOString(),
+    }),
+    "lunch",
+  );
+  assert.equal(inverse.meals.length, 2);
+});
+
+test("juste après le changement de lente : données insuffisantes, aucun verdict", () => {
+  // Le lendemain d'une baisse de 26 → 24 U, l'app ne doit RIEN proposer sur
+  // les ratios : elle n'a plus assez de repas sous le nouveau réglage.
+  const slots = analyzeAllSlots(
+    input({
+      insulinLogs: [meal(1), meal(2), meal(3), meal(10), meal(15), meal(20), meal(25)],
+      basalChangedAt: new Date(NOW - 1 * DAY).toISOString(),
+    }),
+  );
+  const lunch = slots.find((s) => s.mealType === "lunch")!;
+  assert.equal(lunch.verdict, "insufficient-data");
+  assert.equal(lunch.proposedRatio, null, "aucune proposition de ratio sur l'ancien régime");
+});
+
+test("sans changement de lente, rien ne change (non-régression)", () => {
+  const logs = [meal(1), meal(2), meal(20), meal(30)];
+  const sans = selectEligibleMeals(input({ insulinLogs: logs }), "lunch");
+  const vide = selectEligibleMeals(input({ insulinLogs: logs, basalChangedAt: undefined }), "lunch");
+  assert.equal(sans.meals.length, vide.meals.length);
+  assert.equal(sans.meals.length, 4, "les 4 repas des 90 j restent analysables");
+});
+
+test("un tampon de lente illisible n'écarte rien", () => {
+  const sel = selectEligibleMeals(
+    input({ insulinLogs: [meal(1), meal(20)], basalChangedAt: "pas une date" }),
+    "lunch",
+  );
+  assert.equal(sel.meals.length, 2);
+});
+
+test("la raison du plancher est dite — la basale gagne quand c'est elle qui borne", () => {
+  const logs = [meal(1), meal(2), meal(20)];
+  assert.equal(
+    selectEligibleMeals(input({ insulinLogs: logs }), "lunch").floorReason,
+    "window",
+    "sans tampon : c'est l'ancienneté max qui borne",
+  );
+  assert.equal(
+    selectEligibleMeals(
+      input({ insulinLogs: logs, basalChangedAt: new Date(NOW - 5 * DAY).toISOString() }),
+      "lunch",
+    ).floorReason,
+    "basal",
+  );
+  assert.equal(
+    selectEligibleMeals(
+      input({ insulinLogs: logs, ratioChangedAt: { lunch: new Date(NOW - 5 * DAY).toISOString() } }),
+      "lunch",
+    ).floorReason,
+    "ratio",
+  );
+  // Les deux au même instant → la basale l'emporte : c'est le changement le
+  // plus large, et c'est l'explication la plus utile à afficher.
+  const both = new Date(NOW - 5 * DAY).toISOString();
+  assert.equal(
+    selectEligibleMeals(
+      input({ insulinLogs: logs, basalChangedAt: both, ratioChangedAt: { lunch: both } }),
+      "lunch",
+    ).floorReason,
+    "basal",
+  );
 });
