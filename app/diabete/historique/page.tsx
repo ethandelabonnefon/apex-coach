@@ -434,17 +434,22 @@ export default function DiabeteHistoriquePage() {
     }
   };
 
-  // Tâche 4 — applique la baisse de ratio proposée pour un créneau. Aucune
-  // écriture sans clic explicite + confirmation native : c'est la seule
-  // action de ce type dans toute la page.
+  // Tâche 4 — applique le pas de ratio proposé pour un créneau, dans un sens
+  // ou dans l'autre. Aucune écriture sans clic explicite + confirmation
+  // native : c'est la seule action de ce type dans toute la page.
   function handleApplyRatio(a: SlotAnalysis) {
     if (!a.proposedRatio) return;
     const slot = a.mealType as "morning" | "lunch" | "snack" | "dinner";
     const label = { morning: "matin", lunch: "midi", snack: "goûter", dinner: "soir" }[slot];
+    // Nommer le SENS du changement dans la confirmation. Depuis que le
+    // détecteur sait aussi renforcer, « passer de X à Y » ne dit plus si on
+    // ajoute ou retire de l'insuline — et c'est précisément l'information
+    // qu'on veut sous les yeux avant de valider une hausse.
+    const direction = a.verdict === "under-bolus" ? "Renforcer" : "Alléger";
     if (
       typeof window !== "undefined" &&
       !window.confirm(
-        `Passer le ratio du ${label} de ${formatRatio(a.proposedRatio.current)} à ${formatRatio(a.proposedRatio.proposed)} ?`,
+        `${direction} le ratio du ${label} : ${formatRatio(a.proposedRatio.current)} → ${formatRatio(a.proposedRatio.proposed)} ?`,
       )
     ) {
       return;

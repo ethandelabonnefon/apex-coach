@@ -23,6 +23,8 @@ import {
   MIN_WINDOW_DAYS,
   MUSCU_EXCLUSION_MIN_DURATION,
   RATIO_STEP,
+  UNDER_BOLUS_MIN_LANDING_DELTA,
+  UNDER_BOLUS_MIN_RATE,
   type ArchivePoint,
   type DoseValidationInput,
   type EligibleMeal,
@@ -941,7 +943,13 @@ function selection(n: number, hypos: number, over: Partial<EligibleMeal> = {}): 
       ...over,
     });
   }
-  return { meals, excluded: {}, windowDays: 7, floorReason: "window" as const };
+  return {
+    meals,
+    excluded: {},
+    windowDays: 7,
+    floorReason: "window" as const,
+    excludedWithHypo: 0,
+  };
 }
 
 test("D2 — le minimum de repas éligibles est bien 5", () => {
@@ -1020,6 +1028,158 @@ test("atterrissage : moyenne sur les seuls repas ayant les deux mesures", () => 
 test("atterrissage : null si aucun repas n'a les deux mesures", () => {
   const s = selection(3, 0, { glucoseBefore: null });
   assert.equal(analyzeSlot(s, 10, "lunch").avgLandingDelta, null);
+});
+
+// ─── Sous-dosage (verdict `under-bolus`) ────────────────────────────────
+//
+// Le détecteur ne savait corriger que vers le bas : chaque hypo proposait
+// d'affaiblir un créneau, rien ne proposait jamais de le renforcer. Sur les
+// ratios d'Ethan, trois créneaux sur quatre ont dérivé de 17 à 33 % vers le
+// bas en quatre mois. Un détecteur à sens unique finit toujours par dériver
+// dans ce sens-là ; ces tests verrouillent le sens retour ET ses garde-fous.
+
+/** Sélection qualifiant pour `under-bolus` : `n` repas confirmés, 0 hypo, atterrissage haut. */
+function highLanding(n: number, delta = 60): SlotSelection {
+  const s = selection(n, 0, { confirmed: true });
+  for (const m of s.meals) {
+    m.glucoseBefore = 120;
+    m.glucoseAtWindowEnd = 120 + delta;
+  }
+  return s;
+}
+
+test("sous-dosage : repas confirmés, zéro hypo, atterrissages hauts → under-bolus", () => {
+  const a = analyzeSlot(highLanding(6), 10, "lunch");
+  assert.equal(a.verdict, "under-bolus");
+  assert.equal(a.highLandingCount, 6);
+});
+
+test("sous-dosage : le pas RENFORCE le ratio (moins de grammes par unité)", () => {
+  const a = analyzeSlot(highLanding(6), 10, "lunch");
+  // 0,10 U/g → 0,11 U/g ⇒ 9 g/U. Sens inverse de `over-bolus` (11,1 g/U).
+  assert.equal(a.proposedRatio?.current, 10);
+  assert.equal(a.proposedRatio?.proposed, 9);
+  assert.ok(
+    (a.proposedRatio?.proposed ?? 99) < (a.proposedRatio?.current ?? 0),
+    "renforcer doit DIMINUER les grammes par unité, sinon le pas va dans le mauvais sens",
+  );
+});
+
+test("LE garde-fou : une seule hypo suffit à interdire le renforcement", () => {
+  // Zéro, pas « peu ». C'est la seule conclusion du module qui ajoute de
+  // l'insuline : un créneau qui produit déjà une hypo ne se renforce pas,
+  // quels que soient ses atterrissages.
+  const s = highLanding(6);
+  s.meals[0].hadHypo = true;
+  const a = analyzeSlot(s, 10, "lunch");
+  assert.notEqual(a.verdict, "under-bolus");
+  assert.equal(a.verdict, "ok");
+  assert.equal(a.proposedRatio, null, "aucune hausse ne doit être proposée");
+});
+
+test("garde-fou : une hypo sur un repas ÉCARTÉ bloque aussi le renforcement", () => {
+  // Les motifs d'exclusion sont corrélés aux hypos (low-at-meal, correction,
+  // sport écartent précisément les repas qui ont mal tourné). Sans cette
+  // condition, un créneau se renforcerait parce que ses mauvais repas ont
+  // été mis de côté — exactement le biais que le taux d'exclusion élevé
+  // d'Ethan rend probable.
+  const s = highLanding(6);
+  s.excludedWithHypo = 1;
+  assert.equal(analyzeSlot(s, 10, "lunch").verdict, "ok");
+  s.excludedWithHypo = 0;
+  assert.equal(analyzeSlot(s, 10, "lunch").verdict, "under-bolus");
+});
+
+test("garde-fou : sur glucides provisoires, on n'ajoute pas d'insuline", () => {
+  // Un repas qui atterrit haut est ambigu : ratio trop faible, OU glucides
+  // sous-estimés. Seul l'échantillon confirmé sépare les deux. Asymétrie
+  // assumée : affaiblir accepte le provisoire, renforcer l'exige confirmé.
+  const s = highLanding(6);
+  for (const m of s.meals) m.confirmed = false;
+  const a = analyzeSlot(s, 10, "lunch");
+  assert.equal(a.confidence, "provisoire");
+  assert.equal(a.verdict, "ok");
+});
+
+test("garde-fou : un seul repas très haut ne déclenche rien (règle de majorité)", () => {
+  const s = highLanding(6, 0);
+  s.meals[0].glucoseAtWindowEnd = 120 + 400; // moyenne tirée à +67
+  const a = analyzeSlot(s, 10, "lunch");
+  assert.ok(
+    (a.avgLandingDelta ?? 0) >= UNDER_BOLUS_MIN_LANDING_DELTA,
+    "la moyenne seule franchit bien le seuil — c'est tout l'objet du test",
+  );
+  assert.equal(a.highLandingCount, 1);
+  assert.equal(a.verdict, "ok", "la moyenne ne suffit pas : il faut la majorité");
+});
+
+test("garde-fou : une mesure manquante joue CONTRE le renforcement", () => {
+  // Le taux se calcule sur tous les repas retenus, pas sur les seuls
+  // mesurés : 3 repas hauts sur 8 retenus = 37,5 %, sous le seuil, même si
+  // les 3 mesurés sont tous hauts.
+  const s = highLanding(8);
+  for (let i = 3; i < 8; i++) s.meals[i].glucoseBefore = null;
+  const a = analyzeSlot(s, 10, "lunch");
+  assert.equal(a.avgLandingDelta, 60, "la moyenne des mesurés franchit le seuil");
+  assert.equal(a.highLandingCount, 3);
+  assert.equal(a.verdict, "ok");
+});
+
+test("priorité : les hypos passent avant les atterrissages hauts", () => {
+  const s = highLanding(8);
+  s.meals[0].hadHypo = true;
+  s.meals[1].hadHypo = true;
+  const a = analyzeSlot(s, 10, "lunch");
+  assert.equal(a.verdict, "over-bolus");
+  assert.ok(
+    (a.proposedRatio?.proposed ?? 0) > 10,
+    "sur over-bolus le ratio doit s'AFFAIBLIR, jamais se renforcer",
+  );
+});
+
+test("borne — atterrissage exactement au seuil : déclenche ; un mg/dL sous : non", () => {
+  assert.equal(UNDER_BOLUS_MIN_LANDING_DELTA, 50);
+  assert.equal(
+    analyzeSlot(highLanding(6, UNDER_BOLUS_MIN_LANDING_DELTA), 10, "lunch").verdict,
+    "under-bolus",
+  );
+  assert.equal(
+    analyzeSlot(highLanding(6, UNDER_BOLUS_MIN_LANDING_DELTA - 1), 10, "lunch").verdict,
+    "ok",
+  );
+});
+
+test("borne — taux exactement à la moitié des repas", () => {
+  assert.equal(UNDER_BOLUS_MIN_RATE, 0.5);
+  const s = highLanding(6, 0);
+  for (let i = 0; i < 3; i++) s.meals[i].glucoseAtWindowEnd = 120 + 120;
+  const a = analyzeSlot(s, 10, "lunch");
+  // 3 hauts sur 6 = 50 %, et la moyenne (+60) franchit le seuil.
+  assert.equal(a.highLandingCount, 3);
+  assert.equal(a.avgLandingDelta, 60);
+  assert.equal(a.verdict, "under-bolus");
+});
+
+test("borne — moins de 5 repas : aucun renforcement, même parfaitement qualifié", () => {
+  assert.equal(analyzeSlot(highLanding(4), 10, "lunch").verdict, "insufficient-data");
+  assert.equal(analyzeSlot(highLanding(5), 10, "lunch").verdict, "under-bolus");
+});
+
+test("borne — currentRatio = 0 : aucune proposition, même sur under-bolus", () => {
+  const a = analyzeSlot(highLanding(6), 0, "lunch");
+  assert.equal(a.verdict, "under-bolus");
+  assert.equal(a.proposedRatio, null, "ne jamais multiplier un ratio nul");
+});
+
+test("sous-dosage : un seul pas, quelle que soit l'ampleur de l'écart", () => {
+  const modere = analyzeSlot(highLanding(6, 55), 10, "lunch");
+  const severe = analyzeSlot(highLanding(6, 300), 10, "lunch");
+  assert.equal(modere.proposedRatio?.proposed, severe.proposedRatio?.proposed);
+});
+
+test("un créneau qui atterrit pile sur son départ reste « ok »", () => {
+  // Le cas nominal ne doit jamais basculer en under-bolus.
+  assert.equal(analyzeSlot(highLanding(8, 0), 10, "lunch").verdict, "ok");
 });
 
 test("analyzeAllSlots rend les 4 créneaux, même vides", () => {

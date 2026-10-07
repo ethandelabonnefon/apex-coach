@@ -23,16 +23,41 @@ const SLOT_LABELS: Record<string, string> = {
   dinner: "Soir",
 };
 
-const EXCLUSION_LABELS: Record<string, string> = {
-  sport: "suivis de sport",
-  iob: "avec insuline résiduelle",
-  uncertain: "à quantité incertaine",
-  correction: "suivis d'une correction",
-  "short-window": "trop proches du repas suivant",
-  "no-coverage": "sans mesure capteur suffisante",
-  "low-at-meal": "pris en dessous de 80 mg/dL",
-  "sport-carbs": "suivis de glucides pris pour le sport",
+/**
+ * Motif d'exclusion → libellé, au singulier et au pluriel.
+ *
+ * Deux formes et pas un `+ "s"` : « 1 suivis d'une correction » se lit dans
+ * la liste la plus souvent affichée de l'écran, et la plupart des motifs
+ * tombent à 1 occurrence.
+ */
+const EXCLUSION_LABELS: Record<string, { one: string; many: string }> = {
+  sport: { one: "suivi de sport", many: "suivis de sport" },
+  iob: { one: "avec insuline résiduelle", many: "avec insuline résiduelle" },
+  uncertain: { one: "à quantité incertaine", many: "à quantité incertaine" },
+  correction: { one: "suivi d'une correction", many: "suivis d'une correction" },
+  "short-window": {
+    one: "trop proche du repas suivant",
+    many: "trop proches du repas suivant",
+  },
+  "no-coverage": {
+    one: "sans mesure capteur suffisante",
+    many: "sans mesure capteur suffisante",
+  },
+  "low-at-meal": {
+    one: "pris en dessous de 80 mg/dL",
+    many: "pris en dessous de 80 mg/dL",
+  },
+  "sport-carbs": {
+    one: "suivi de glucides pris pour le sport",
+    many: "suivis de glucides pris pour le sport",
+  },
 };
+
+function exclusionLabel(reason: string, n: number): string {
+  const entry = EXCLUSION_LABELS[reason];
+  if (!entry) return reason;
+  return n > 1 ? entry.many : entry.one;
+}
 
 function SlotCard({
   analysis,
@@ -50,9 +75,14 @@ function SlotCard({
   const tone =
     analysis.verdict === "over-bolus"
       ? { led: "amber", pill: "amber", text: "À revoir" }
-      : analysis.verdict === "ok"
-        ? { led: "green", pill: "green", text: "OK" }
-        : { led: "steel", pill: "", text: "Données insuffisantes" };
+      : // Sous-dosage : information, pas alerte. L'ambre est réservé à ce qui
+        // menace — les hypos. Un créneau qui atterrit haut se règle, il ne
+        // se craint pas.
+        analysis.verdict === "under-bolus"
+        ? { led: "cobalt", pill: "cobalt", text: "À renforcer" }
+        : analysis.verdict === "ok"
+          ? { led: "green", pill: "green", text: "OK" }
+          : { led: "steel", pill: "", text: "Données insuffisantes" };
 
   return (
     <div className="row-item items-start">
@@ -85,7 +115,7 @@ function SlotCard({
               {excludedTotal} écarté{excludedTotal > 1 ? "s" : ""} :{" "}
               {Object.entries(analysis.excluded)
                 .filter(([, n]) => (n ?? 0) > 0)
-                .map(([r, n]) => `${n} ${EXCLUSION_LABELS[r] ?? r}`)
+                .map(([r, n]) => `${n} ${exclusionLabel(r, n ?? 0)}`)
                 .join(", ")}
               .
             </>
@@ -116,9 +146,26 @@ function SlotCard({
 
       {analysis.proposedRatio && (
         <div className="mt-3 pt-3 border-t border-border-subtle">
+          {/* Dire ce que le pas corrige, pour que la flèche ne soit pas un
+              ordre sans motif. Les deux sens existent désormais : sans cette
+              ligne, rien ne distingue une baisse d'une hausse à l'écran. */}
+          <p className="text-[11px] text-text-tertiary mb-1.5">
+            {analysis.verdict === "over-bolus" ? (
+              <>Les hypos de ce créneau pointent une dose trop forte : −10 % d&apos;insuline par gramme.</>
+            ) : (
+              <>
+                {analysis.highLandingCount} repas sur {analysis.eligibleCount}{" "}
+                atterrissent haut, sans aucune hypo : +10 % d&apos;insuline par gramme.
+              </>
+            )}
+          </p>
           <p className="num text-xs text-text-secondary mb-2">
             {formatRatio(analysis.proposedRatio.current)} →{" "}
-            <span className="text-warning font-semibold">
+            <span
+              className={`font-semibold ${
+                analysis.verdict === "over-bolus" ? "text-warning" : "text-accent"
+              }`}
+            >
               {formatRatio(analysis.proposedRatio.proposed)}
             </span>
           </p>

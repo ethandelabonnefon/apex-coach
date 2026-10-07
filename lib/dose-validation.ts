@@ -182,6 +182,21 @@ export interface SlotSelection {
   windowDays: number;
   /** Ce qui borne la fenêtre — affiché quand les données sont insuffisantes. */
   floorReason: FloorReason;
+  /**
+   * Repas ÉCARTÉS qui montraient tout de même une hypo dans leur fenêtre.
+   *
+   * Garde-fou du verdict `under-bolus` (le seul qui ajoute de l'insuline).
+   * Les motifs d'exclusion sont corrélés aux hypos — `low-at-meal`,
+   * `correction`, `sport` écartent précisément les repas qui ont mal tourné.
+   * Juger « 0 hypo donc on peut renforcer » sur le seul échantillon retenu
+   * reviendrait à conclure sur un échantillon appauvri en hypos par
+   * construction. Ce compteur rend ce biais visible : tant qu'il n'est pas
+   * nul, on ne renforce pas.
+   *
+   * Un repas sans couverture capteur compte 0 : on ne sait pas, on ne
+   * prétend pas qu'il y a eu une hypo.
+   */
+  excludedWithHypo: number;
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -472,9 +487,9 @@ export function selectEligibleMeals(
   // Exclusions horodatées : elles ne seront comptées que sur la fenêtre
   // finalement retenue, pour ne pas afficher « 0 repas sur 7 jours — 90
   // écartés » (les 90 étant les candidats des 90 jours explorés).
-  const excludedEvents: { reason: ExclusionReason; t: number }[] = [];
-  const bump = (reason: ExclusionReason, t: number) => {
-    excludedEvents.push({ reason, t });
+  const excludedEvents: { reason: ExclusionReason; t: number; hadHypo: boolean }[] = [];
+  const bump = (reason: ExclusionReason, t: number, hadHypo = false) => {
+    excludedEvents.push({ reason, t, hadHypo });
   };
 
   const candidates = logs
@@ -502,26 +517,36 @@ export function selectEligibleMeals(
       nextMeal ?? Number.POSITIVE_INFINITY,
     );
 
+    // Hypo dans la fenêtre — calculée AVANT les exclusions, pour tous les
+    // candidats. Les repas écartés ont besoin de cette valeur : voir
+    // `SlotSelection.excludedWithHypo`. Ne dépend que de `windowEnd` et des
+    // points capteur, donc la placer ici ne change rien pour les repas
+    // retenus. L'hypo n'est imputée au bolus qu'après HYPO_LATENCY_MIN.
+    const hypoFrom = t + HYPO_LATENCY_MIN * MIN_MS;
+    const hadHypo = points.some(
+      (p) => p.t >= hypoFrom && p.t <= windowEnd && p.value < HYPO_THRESHOLD,
+    );
+
     // Ordre des exclusions : le premier motif rencontré est celui compté,
     // pour que la somme des motifs égale le nombre de repas écartés.
     if (!isLearnable(log)) {
-      bump("uncertain", t);
+      bump("uncertain", t, hadHypo);
       continue;
     }
     if (hasSportAround(input.workouts ?? [], t, windowEnd)) {
-      bump("sport", t);
+      bump("sport", t, hadHypo);
       continue;
     }
     if (hasDeclaredSportAround(input.sportSessions ?? [], t, windowEnd)) {
-      bump("sport-carbs", t);
+      bump("sport-carbs", t, hadHypo);
       continue;
     }
     if (iobBefore(logs, t, log.id) > IOB_EXCLUSION_U) {
-      bump("iob", t);
+      bump("iob", t, hadHypo);
       continue;
     }
     if (hasInterveningCorrection(logs, t, log.id, windowEnd)) {
-      bump("correction", t);
+      bump("correction", t, hadHypo);
       continue;
     }
 
@@ -529,7 +554,7 @@ export function selectEligibleMeals(
     if (windowMin < MIN_TRUNCATED_WINDOW_MIN) {
       // Un goûter muet est honnête ; un goûter jugé sur l'insuline du dîner
       // ne l'est pas.
-      bump("short-window", t);
+      bump("short-window", t, hadHypo);
       continue;
     }
 
@@ -539,20 +564,16 @@ export function selectEligibleMeals(
     const expectedPoints = windowMin / ARCHIVE_CADENCE_MIN;
     const actualPoints = countPointsIn(points, t, windowEnd);
     if (glucoseBefore === null || actualPoints < MIN_COVERAGE_RATIO * expectedPoints) {
+      // Couverture insuffisante : `hadHypo` n'est pas fiable ici, on ne le
+      // propage pas (cf. `excludedWithHypo` — on ne sait pas, on se taît).
       bump("no-coverage", t);
       continue;
     }
 
     if (glucoseBefore < LOW_AT_MEAL_THRESHOLD) {
-      bump("low-at-meal", t);
+      bump("low-at-meal", t, hadHypo);
       continue;
     }
-
-    // L'hypo n'est imputée au bolus qu'après HYPO_LATENCY_MIN.
-    const hypoFrom = t + HYPO_LATENCY_MIN * MIN_MS;
-    const hadHypo = points.some(
-      (p) => p.t >= hypoFrom && p.t <= windowEnd && p.value < HYPO_THRESHOLD,
-    );
 
     eligible.push({
       injectionId: log.id,
@@ -592,9 +613,11 @@ export function selectEligibleMeals(
 
   const windowStart = now - windowDays * DAY_MS;
   const excluded: Partial<Record<ExclusionReason, number>> = {};
+  let excludedWithHypo = 0;
   for (const e of excludedEvents) {
     if (e.t < windowStart) continue;
     excluded[e.reason] = (excluded[e.reason] ?? 0) + 1;
+    if (e.hadHypo) excludedWithHypo++;
   }
 
   return {
@@ -602,6 +625,7 @@ export function selectEligibleMeals(
     excluded,
     windowDays,
     floorReason,
+    excludedWithHypo,
   };
 }
 
@@ -613,10 +637,31 @@ export function selectEligibleMeals(
 export const OVER_BOLUS_MIN_HYPOS = 2;
 /** Taux minimal de repas avec hypo pour parler de sur-dosage. */
 export const OVER_BOLUS_MIN_RATE = 0.25;
-/** Pas de correction : −10 % sur l'insuline par gramme. */
+/** Pas de correction : ±10 % sur l'insuline par gramme. */
 export const RATIO_STEP = 0.1;
 
-export type SlotVerdict = "insufficient-data" | "ok" | "over-bolus";
+/**
+ * Excès d'atterrissage au-delà duquel un repas est dit « sous-dosé » (mg/dL).
+ *
+ * Un repas correctement couvert revient près de son point de départ en fin de
+ * fenêtre. Finir 50 mg/dL plus haut, à l'ISF de 100 mg/dL/U, c'est un déficit
+ * d'environ 0,5 U — soit, sur un repas de 60 g dosé à 6 U, à peu près les
+ * 10 % d'un RATIO_STEP. Le seuil et le pas de correction sont donc calés l'un
+ * sur l'autre : on ne propose un pas que quand l'écart mesuré en vaut un.
+ */
+export const UNDER_BOLUS_MIN_LANDING_DELTA = 50;
+
+/**
+ * Fraction des repas qui doivent dépasser ce seuil pour parler de sous-dosage.
+ *
+ * La moyenne seule ne suffit pas : un unique repas à +250 mg/dL (un écart de
+ * comptage, un repas plus gros qu'annoncé) la tirerait au-dessus du seuil à
+ * lui tout seul. On exige que la MAJORITÉ des repas du créneau atterrissent
+ * haut — ce qui est la signature d'un ratio, pas celle d'un accident.
+ */
+export const UNDER_BOLUS_MIN_RATE = 0.5;
+
+export type SlotVerdict = "insufficient-data" | "ok" | "over-bolus" | "under-bolus";
 export type SlotConfidence = "provisoire" | "confirmé";
 
 export interface SlotAnalysis {
@@ -632,9 +677,13 @@ export interface SlotAnalysis {
   excluded: Partial<Record<ExclusionReason, number>>;
   /** Écart moyen glycémie en fin de fenêtre − glycémie avant repas (mg/dL). */
   avgLandingDelta: number | null;
+  /** Repas atterrissant au moins UNDER_BOLUS_MIN_LANDING_DELTA au-dessus du départ. */
+  highLandingCount: number;
+  /** Repas écartés qui montraient quand même une hypo (cf. `SlotSelection`). */
+  excludedWithHypo: number;
   /** Durée moyenne des fenêtres d'observation retenues (min), `null` si vide. */
   avgWindowMin: number | null;
-  /** Ratios en g par U. `null` hors verdict `over-bolus`. */
+  /** Ratios en g par U. `null` hors verdicts `over-bolus` / `under-bolus`. */
   proposedRatio: { current: number; proposed: number } | null;
 }
 
@@ -677,26 +726,76 @@ export function analyzeSlot(
     landings.length > 0
       ? Math.round(landings.reduce((s, v) => s + v, 0) / landings.length)
       : null;
+  const highLandingCount = landings.filter(
+    (d) => d >= UNDER_BOLUS_MIN_LANDING_DELTA,
+  ).length;
 
   const avgWindowMin =
     eligibleCount > 0
       ? Math.round(meals.reduce((s, m) => s + m.windowMin, 0) / eligibleCount)
       : null;
 
+  /**
+   * Sous-dosage : le créneau mérite-t-il d'être RENFORCÉ ?
+   *
+   * C'est la seule conclusion de ce module qui ajoute de l'insuline, donc la
+   * seule qui puisse causer une hypo. Ses conditions sont volontairement plus
+   * dures que celles de `over-bolus`, et cette asymétrie est le garde-fou :
+   *
+   * 1. `hypoCount === 0` — zéro, pas « peu ». Un créneau qui produit déjà des
+   *    hypos ne se renforce pas, quoi que disent les atterrissages.
+   * 2. `excludedWithHypo === 0` — les motifs d'exclusion sont corrélés aux
+   *    hypos ; sans cette condition, un créneau pourrait se renforcer parce
+   *    que ses mauvais repas ont été écartés.
+   * 3. `confidence === "confirmé"` — un repas qui atterrit haut est ambigu :
+   *    ratio trop faible, OU glucides sous-estimés. Seul un échantillon à
+   *    glucides confirmés sépare les deux. Affaiblir (sens sûr) accepte le
+   *    provisoire ; renforcer l'exige confirmé.
+   * 4. la majorité des repas doit atterrir haut, pas seulement la moyenne —
+   *    et le taux se calcule sur TOUS les repas retenus, pas sur les seuls
+   *    mesurés : une mesure manquante joue contre le déclenchement.
+   *
+   * Pas de plancher absolu sur la force du ratio, volontairement : la boucle
+   * se ferme d'elle-même. Un pas de trop fait apparaître une hypo, l'hypo
+   * bloque immédiatement toute nouvelle hausse (condition 1) et finit par
+   * déclencher `over-bolus`. C'est précisément ce que le détecteur à sens
+   * unique n'avait pas — il ne savait corriger que vers le bas, et dérivait
+   * donc toujours vers le bas.
+   */
+  const underBolus =
+    hypoCount === 0 &&
+    selection.excludedWithHypo === 0 &&
+    confidence === "confirmé" &&
+    avgLandingDelta !== null &&
+    avgLandingDelta >= UNDER_BOLUS_MIN_LANDING_DELTA &&
+    highLandingCount / eligibleCount >= UNDER_BOLUS_MIN_RATE;
+
   let verdict: SlotVerdict;
   if (eligibleCount < MIN_ELIGIBLE_MEALS) {
     verdict = "insufficient-data";
   } else if (hypoCount >= OVER_BOLUS_MIN_HYPOS && hypoRate >= OVER_BOLUS_MIN_RATE) {
+    // Les hypos passent toujours avant : la sécurité d'abord, même si les
+    // atterrissages sont hauts par ailleurs.
     verdict = "over-bolus";
+  } else if (underBolus) {
+    verdict = "under-bolus";
   } else {
     verdict = "ok";
   }
 
   // Le ratio est stocké en grammes par unité. Retirer 10 % d'insuline par
   // gramme revient à AUGMENTER les grammes par unité : 10 g/U → 11,1 g/U.
+  // En ajouter 10 % les diminue : 10 g/U → 9 g/U.
   const proposedRatio =
-    verdict === "over-bolus" && currentRatio > 0
-      ? { current: currentRatio, proposed: round1(currentRatio / (1 - RATIO_STEP)) }
+    currentRatio > 0 && (verdict === "over-bolus" || verdict === "under-bolus")
+      ? {
+          current: currentRatio,
+          proposed: round1(
+            verdict === "over-bolus"
+              ? currentRatio / (1 - RATIO_STEP)
+              : currentRatio * (1 - RATIO_STEP),
+          ),
+        }
       : null;
 
   return {
@@ -710,6 +809,8 @@ export function analyzeSlot(
     floorReason: selection.floorReason,
     excluded: selection.excluded,
     avgLandingDelta,
+    highLandingCount,
+    excludedWithHypo: selection.excludedWithHypo,
     avgWindowMin,
     proposedRatio,
   };
