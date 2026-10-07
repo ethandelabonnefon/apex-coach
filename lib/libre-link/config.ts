@@ -21,10 +21,43 @@ export const LIBRE_LINK_CONFIG = {
   // (lecture capteur rafraîchie toutes les 60s max côté FreeStyle Libre 2).
   cacheTtlSeconds: 60,
 
-  // Backoff sur erreur : si l'API Abbott renvoie 4xx/5xx, on ne retente
-  // pas avant ce délai (évite rate-limit 429 en cascade).
-  errorBackoffSeconds: 120,
+  // Backoff sur erreur, ESCALADANT (incident du 7 oct. 2026).
+  //
+  // Un palier unique de 120 s était plus court que le cron glucose-check
+  // (5 min) : chaque passage du cron dépassait le backoff et retentait un
+  // login chez Abbott. Après le blocage « AcceptDocument » du 7 octobre,
+  // ces tentatives répétées ont déclenché un **429 Abbott** que le système
+  // entretenait tout seul — une tentative toutes les 5 min, le rate-limit
+  // ne pouvait jamais expirer. Ethan est resté sans glycémie live.
+  //
+  // L'escalade résout ça sans avoir à identifier le 429 : la librairie
+  // `@diakem/libre-link-up-api-client` lit `authTicket.token` sur la
+  // réponse d'erreur et lève un `TypeError` — le code HTTP d'Abbott n'est
+  // jamais visible côté appelant (cf. `extractStatus`). On ne peut donc
+  // pas réagir AU 429 ; on réagit à la RÉPÉTITION, ce qui couvre aussi
+  // bien le rate-limit que les pannes durables.
+  //
+  // Le dernier palier (30 min) dépasse largement le cron : à partir de la
+  // 4ᵉ erreur consécutive, Abbott n'est plus sollicité que 2 fois par
+  // heure, de quoi laisser un rate-limit retomber.
+  errorBackoffLadderSeconds: [120, 300, 900, 1800],
 } as const;
+
+/**
+ * Délai avant la prochaine tentative (s), selon le nombre d'échecs
+ * CONSÉCUTIFS. Fonction pure, exportée pour être testée seule.
+ *
+ * Pourquoi une escalade plutôt qu'une réaction au code 429 : la librairie
+ * Abbott lit `authTicket.token` sur la réponse d'erreur et lève un
+ * `TypeError` avant qu'on puisse voir le code HTTP (incident du 7 oct.
+ * 2026 — « Cannot read properties of undefined (reading 'token') » pour un
+ * 429). On réagit donc à la répétition, qui est observable.
+ */
+export function backoffSecondsFor(consecutiveFailures: number): number {
+  const ladder = LIBRE_LINK_CONFIG.errorBackoffLadderSeconds;
+  if (!Number.isFinite(consecutiveFailures) || consecutiveFailures < 1) return ladder[0];
+  return ladder[Math.min(consecutiveFailures, ladder.length) - 1];
+}
 
 /**
  * Seuils glycémiques (mg/dL) — alignés sur la logique T1D d'Ethan.
@@ -55,4 +88,34 @@ export const GLUCOSE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
  */
 export function isLibreLinkConfigured(): boolean {
   return Boolean(LIBRE_LINK_CONFIG.email && LIBRE_LINK_CONFIG.password);
+}
+
+/**
+ * Traduit une erreur LibreLink en consigne actionnable pour l'écran.
+ *
+ * Incident du 7 oct. 2026 : Abbott renvoyait « Additional action required
+ * for your account: AcceptDocument » — le message dit EXACTEMENT quoi
+ * faire, et la tuile glycémie affichait « Aucune lecture disponible ».
+ * Ethan n'avait aucun moyen de savoir qu'il devait ouvrir LibreLink Up ;
+ * il a dû demander. Un cul-de-sac sur la donnée la plus critique de l'app.
+ *
+ * `null` quand l'erreur n'a pas de geste associé — on n'invente pas une
+ * consigne qu'on ne sait pas donner.
+ */
+export function libreLinkActionHint(message: string | null | undefined): string | null {
+  if (!message) return null;
+  const m = message.toLowerCase();
+  if (m.includes("acceptdocument") || m.includes("additional action required")) {
+    return "Ouvre LibreLink Up et accepte le document qu'Abbott demande — la glycémie revient ensuite toute seule.";
+  }
+  if (m.includes("backoff actif")) {
+    return "Nouvelle tentative automatique en cours. Inutile de rafraîchir : chaque essai rallonge l'attente.";
+  }
+  if (m.includes("token") || m.includes("429") || m.includes("too many")) {
+    return "Abbott limite temporairement les connexions. L'app réessaiera seule, laisse-la tranquille quelques minutes.";
+  }
+  if (m.includes("not_configured") || m.includes("manquants")) {
+    return "LibreLink n'est pas configuré côté serveur.";
+  }
+  return null;
 }

@@ -11,7 +11,7 @@
 
 import "server-only";
 import { LibreLinkUpClient } from "@diakem/libre-link-up-api-client";
-import { LIBRE_LINK_CONFIG, isLibreLinkConfigured } from "./config";
+import { LIBRE_LINK_CONFIG, backoffSecondsFor, isLibreLinkConfigured } from "./config";
 
 export type GlucoseReading = {
   value: number; // mg/dL
@@ -43,7 +43,22 @@ type ErrorEntry = {
   status?: number;
   /** Timestamp ms du dernier fail */
   failedAt: number;
+  /** Échecs consécutifs — pilote l'escalade du backoff (cf. config). */
+  consecutiveFailures: number;
 };
+
+/**
+ * Une erreur qui laisse le client dans un état inutilisable ?
+ *
+ * Le reset ne portait que sur 401/403. Or un 429 (ou toute réponse sans
+ * ticket d'auth) remonte en `TypeError` sans code HTTP : le client restait
+ * alors en cache avec une session morte. On traite donc aussi la signature
+ * de cette erreur.
+ */
+function isAuthShapedFailure(status: number | undefined, message: string): boolean {
+  if (status === 401 || status === 403 || status === 429) return true;
+  return /reading 'token'|authTicket|Cannot read properties of undefined/i.test(message);
+}
 
 // ─── Singletons (module-scope, vivent tant que le serveur tourne) ────────
 let clientInstance: ReturnType<typeof LibreLinkUpClient> | null = null;
@@ -101,7 +116,9 @@ export async function fetchGlucoseSnapshot(options: {
 } = {}): Promise<GlucoseSnapshot> {
   const now = Date.now();
   const ttlMs = LIBRE_LINK_CONFIG.cacheTtlSeconds * 1000;
-  const errorBackoffMs = LIBRE_LINK_CONFIG.errorBackoffSeconds * 1000;
+  // Escalade : plus on enchaîne les échecs, plus on laisse Abbott tranquille.
+  const errorBackoffMs =
+    backoffSecondsFor(lastError?.consecutiveFailures ?? 1) * 1000;
 
   // Cache OK chaud → renvoie direct
   if (
@@ -112,12 +129,14 @@ export async function fetchGlucoseSnapshot(options: {
     return cache.snapshot;
   }
 
-  // Erreur récente → on ne réessaye pas tout de suite, on protège Abbott
-  if (
-    !options.forceRefresh &&
-    lastError &&
-    now - lastError.failedAt < errorBackoffMs
-  ) {
+  // Erreur récente → on ne réessaye pas tout de suite, on protège Abbott.
+  //
+  // ⚠️ `forceRefresh` ne court-circuite PLUS le backoff (7 oct. 2026) : le
+  // bouton « Rafraîchir » du briefing et le re-fetch au retour d'onglet
+  // passaient outre, et chaque tap relançait une tentative de login sur un
+  // compte déjà rate-limité. Forcer un rafraîchissement ne peut pas être
+  // un moyen de contourner une protection contre soi-même.
+  if (lastError && now - lastError.failedAt < errorBackoffMs) {
     if (cache) {
       // On a un snapshot précédent : le renvoyer stale plutôt que bombarder.
       return cache.snapshot;
@@ -163,14 +182,18 @@ export async function fetchGlucoseSnapshot(options: {
     } catch (err) {
       const status = extractStatus(err);
       const message = err instanceof Error ? err.message : "erreur inconnue";
-      lastError = { message, status, failedAt: Date.now() };
+      const consecutiveFailures = (lastError?.consecutiveFailures ?? 0) + 1;
+      lastError = { message, status, failedAt: Date.now(), consecutiveFailures };
       console.error(
-        `[libre-link] Abbott API error status=${status ?? "?"} msg=${message}`,
+        `[libre-link] Abbott API error status=${status ?? "?"} échec #${consecutiveFailures} ` +
+          `prochain essai dans ${backoffSecondsFor(consecutiveFailures)}s msg=${message}`,
       );
 
-      // Si session expirée (401) ou rejet auth (403) → on réinitialise
-      // le client pour forcer un relogin au prochain tour (après backoff).
-      if (status === 401 || status === 403) {
+      // Session morte (401/403), rate-limit (429) ou réponse sans ticket
+      // d'auth → on réinitialise le client pour forcer un relogin propre au
+      // prochain tour (après backoff). Avant, seuls 401/403 étaient traités
+      // et un client coincé le restait.
+      if (isAuthShapedFailure(status, message)) {
         clientInstance = null;
       }
       throw err;

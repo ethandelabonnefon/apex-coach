@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { libreLinkActionHint } from "@/lib/libre-link/config";
 import { useGlucose } from "@/hooks/useGlucose";
 import { glucoseToneColor, formatReadingAge, trendStringToNumber } from "@/lib/libre-link/utils";
 
@@ -54,7 +55,11 @@ function glucoseStatusText(value: number): string {
 }
 
 export default function GlucoseWidget({ fallbackValue, fallbackRecordedAt }: Props) {
-  const { current, notConfigured, loading } = useGlucose({ mode: "current" });
+  const { current, notConfigured, loading, error } = useGlucose({ mode: "current" });
+  // Incident du 7 oct. 2026 : Abbott disait quoi faire, la tuile affichait
+  // « Aucune lecture disponible ». Le hook avait l'erreur depuis toujours —
+  // c'est l'affichage qui la jetait.
+  const actionHint = libreLinkActionHint(error);
 
   // Tick toutes les 30s pour rafraîchir l'étiquette "il y a X min"
   // sans dépendre d'un Date.now() impur au rendu.
@@ -149,6 +154,10 @@ export default function GlucoseWidget({ fallbackValue, fallbackRecordedAt }: Pro
                 : "Aucune lecture disponible"}
           </p>
         </div>
+      )}
+
+      {actionHint && (
+        <p className="alert mt-2 text-xs leading-snug">{actionHint}</p>
       )}
     </div>
   );
