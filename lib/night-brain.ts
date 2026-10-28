@@ -367,7 +367,8 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
     const withFloor = (normal: CurveSummary, events: typeof safetyEvents): CurveSummary => {
       if (!hasTail) return normal;
       const curve = computeBedtimeAdvice({ ...input, events }).curve ?? [];
-      if (curve.length < 2) return normal;
+      // Courbe sécurité inexploitable → on bloque la dose (fail-closed).
+      if (curve.length < 2) return { ...normal, min: -Infinity, minAtMs: normal.minAtMs };
       const safety = summarizeCurve(curve, nowMs);
       return { ...normal, min: safety.min, minAtMs: safety.minAtMs };
     };
@@ -384,9 +385,10 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
       // dessus (anti-stacking du dîner) — l'étape d'attente prend le relais.
       !advice.unreliableTooFresh;
     const canDose = guardsOk && baseFloor.min >= NIGHT_FLOOR;
-    if (guardsOk && !canDose && baseSummary.max > NIGHT_CEILING) {
+    if (hasTail && guardsOk && !canDose && baseSummary.max > NIGHT_CEILING) {
       // Le plan ne reste pas muet : sans dose le pic dépasse 130 (courbe
       // normale) mais le point bas (courbe sécurité) passe déjà sous 80.
+      // Seulement s'il y a une queue de bolus de repas (le texte l'accuse).
       // Recontrôle à +90 min.
       const r = Math.round;
       steps.push({

@@ -249,6 +249,46 @@ test("nuit : dose proposée → plus de collation préventive contradictoire", (
   withDose.steps.forEach((s, i) => assert.equal(s.order, i + 1));
 });
 
+test("nuit : même collation préventive, AVEC bolus de repas de 9 U → collation + ligne bloquée, pas de dose", () => {
+  // Fixture d'origine (bolus du repas présent) : la queue du bolus passe la
+  // courbe sécurité sous 80 → aucune dose, mais le plan ne reste pas muet.
+  const plan = computeNightPlan(
+    oct27({
+      currentGlucose: 88,
+      trendArrow: 2,
+      glucoseAgeMin: 5,
+      events: [
+        { minutesAgo: 120, units: 0.5 },
+        { minutesAgo: 150, units: 9, carbsGrams: 250, carbSensitivity: 10, observedRemainingG: 120, lateCarbMgPerG: 1.5 },
+      ],
+      observedCarbs: { remainingG: 120, enteredG: 250, uncertain: false },
+    }),
+  );
+  assert.ok(plan.steps.some((s) => s.kind === "eat-now"), "collation préventive attendue");
+  const step = correctionStep(plan);
+  assert.ok(step);
+  assert.equal(step.headline, "Pas de correction possible sans risque d'hypo");
+  assert.equal(step.action, undefined, "aucune dose proposée");
+  assert.equal(plan.steps.find((s) => s.action?.kind === "log-correction"), undefined);
+});
+
+test("nuit : pas de repas observé avec bolus → jamais la ligne bloquée (le texte accuse la queue du bolus)", () => {
+  // Glucides lus SANS bolus propre + correction de 2 U il y a 30 min : la
+  // courbe (normale = sécurité) passe sous 80 et monte au-dessus de 130.
+  const inp = oct27({
+    currentGlucose: 90,
+    trendArrow: 3,
+    events: [
+      { minutesAgo: 150, carbsGrams: 140, carbSensitivity: 10, observedRemainingG: 140, lateCarbMgPerG: 1.5 },
+      { minutesAgo: 30, units: 2 },
+    ],
+    observedCarbs: { remainingG: 140, enteredG: 140, uncertain: false },
+  });
+  const s = summarizeCurve(computeBedtimeAdvice(inp).curve!, OCT27);
+  assert.ok(s.min < 80 && s.max > 130, `scénario : bas ${s.min}, pic ${s.max}`);
+  assert.equal(correctionStep(computeNightPlan(inp)), undefined);
+});
+
 test("nuit : 200 au coucher sans rien d'autre → une dose est proposée", () => {
   const plan = computeNightPlan(
     input({ currentGlucose: 200, trendArrow: 3, nowMs: OCT27, glucoseAgeMin: 3, events: [] }),
@@ -560,9 +600,12 @@ test("plancher T+150 : dîner bien dosé 60 g / 6 U, plat à 180 → aucune dose
   assert.ok(floorMin(inp, 1, true) < 80, `courbe sécurité avec 1 U : ${floorMin(inp, 1, true)}`);
   const step = correctionStep(plan);
   assert.equal(step?.action, undefined, "aucune dose proposée");
-  // Si une étape cite un point bas, c'est celui de la courbe sécurité.
-  const quoted = step ? /descendre à ~(\d+)/.exec(step.detail)?.[1] : undefined;
-  if (quoted !== undefined) assert.equal(Number(quoted), Math.round(floorMin(inp, 1, true)));
+  // Compromis 0 U : le bas cité (1 U de plus) est celui de la courbe sécurité.
+  assert.ok(step, "la ligne de décision est attendue");
+  assert.equal(step.headline, "Pas de correction possible sans risque d'hypo");
+  const quoted = /descendre à ~(\d+)/.exec(step.detail)?.[1];
+  assert.ok(quoted !== undefined, step.detail);
+  assert.equal(Number(quoted), Math.round(floorMin(inp, 1, true)));
 });
 
 test("plancher : gros reliquat observé + petit bolus → dose entière, bas sécurité ≥ 80", () => {
@@ -580,6 +623,17 @@ test("plancher : gros reliquat observé + petit bolus → dose entière, bas sé
   assert.ok(Number.isInteger(u) && u >= 1, `dose entière : ${u}`);
   const safeMin = floorMin(inp, u, true);
   assert.ok(safeMin >= 80, `bas sécurité avec ${u} U : ${safeMin}`);
-  const quoted = /point bas ~(\d+)/.exec(step.detail)?.[1];
-  if (quoted !== undefined) assert.equal(Number(quoted), Math.round(safeMin));
+  if (step.headline.startsWith(`Fais ${u}U pour rester sous`)) {
+    // « fits » : le point bas cité = bas sécurité avec la dose.
+    const quoted = /point bas ~(\d+)/.exec(step.detail)?.[1];
+    assert.ok(quoted !== undefined, step.detail);
+    assert.equal(Number(quoted), Math.round(safeMin));
+  } else {
+    // « compromise » : le bas cité = bas sécurité avec 1 U de plus.
+    assert.equal(step.headline, `Fais ${u}U : impossible de rester sous 130 sans risque d'hypo`);
+    const quoted = /descendre à ~(\d+)/.exec(step.detail)?.[1];
+    assert.ok(quoted !== undefined, step.detail);
+    assert.equal(Number(quoted), Math.round(floorMin(inp, u + 1, true)));
+    assert.ok(floorMin(inp, u + 1, true) < 80);
+  }
 });
