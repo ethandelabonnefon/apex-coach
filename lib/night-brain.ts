@@ -341,6 +341,8 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
   // ── ÉTAPE C — Dose du coucher / attente (jamais si on est déjà bas) ──
   let doseStepEmitted = false;
   let doseActionEmitted = false;
+  /** La recherche a conclu que 0 U tient déjà la nuit (pic ≤ 130, bas ≥ 80). */
+  let doseNone = false;
   if (input.events && baseSummary) {
     // Mode events : dose entière « pic ≤ 130 à partir de T+2h, plancher 80 »
     // sur la courbe simulée (lib/bedtime-dose.ts). Pas d'arrondi 0,5 U ni
@@ -348,7 +350,13 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
     const glucoseFresh =
       input.glucoseAgeMin !== undefined && input.glucoseAgeMin <= MAX_GLUCOSE_AGE_FOR_DOSE_MIN;
     const canDose =
-      !liveLow && input.trendArrow !== 1 && glucoseFresh && baseSummary.min >= NIGHT_FLOOR;
+      !liveLow &&
+      input.trendArrow !== 1 &&
+      glucoseFresh &&
+      // Repas frais + IOB élevé : la courbe n'est pas fiable, on ne dose pas
+      // dessus (anti-stacking du dîner) — l'étape d'attente prend le relais.
+      !advice.unreliableTooFresh &&
+      baseSummary.min >= NIGHT_FLOOR;
     if (canDose) {
       const events = input.events;
       const simulate = (u: number): CurveSummary =>
@@ -360,6 +368,7 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
               nowMs,
             );
       const dose = findBedtimeDose(simulate);
+      doseNone = dose.kind === "none";
       const warning = input.observedCarbs?.uncertain
         ? `Quantité incertaine : cette dose part des ${Math.round(input.observedCarbs.enteredG)} g que tu as saisis. Si tu as moins mangé, elle peut te faire descendre.`
         : undefined;
@@ -404,8 +413,12 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
         doseStepEmitted = true;
       }
     }
-    // « Attends l'IOB » seulement si aucune étape de dose n'a été produite.
-    if (!doseStepEmitted && !liveLow && advice.recommendation.type === "wait-iob") {
+    // « Attends » seulement si aucune étape de dose n'a été produite : IOB à
+    // laisser agir (wait-iob) ou repas trop récent pour prédire (monitor).
+    const waitReco =
+      advice.recommendation.type === "wait-iob" ||
+      (advice.unreliableTooFresh && advice.recommendation.type === "monitor");
+    if (!doseStepEmitted && !liveLow && waitReco) {
       steps.push({
         id: "wait",
         order: order++,
@@ -486,7 +499,9 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
   }
 
   // ── Rien à faire ────────────────────────────────────────────────────
-  if (steps.length === 0 && !coverageStep && !digestingStep) {
+  // L'étape « à digérer » n'est qu'un contexte : si la recherche de dose a
+  // conclu que 0 U tient la nuit, il faut quand même la ligne de décision.
+  if (steps.length === 0 && !coverageStep && (!digestingStep || doseNone)) {
     steps.push({
       id: "all-good",
       order: order++,

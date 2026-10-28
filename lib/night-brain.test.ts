@@ -323,3 +323,44 @@ test("nuit : glucides observés + excès d'insuline → l'alerte excès reste", 
   );
   assert.ok(coverageStep(plan), "l'alerte d'excès survit aux glucides observés");
 });
+
+test("nuit : dîner il y a 30 min (courbe peu fiable) → aucune dose, on attend", () => {
+  const plan = computeNightPlan(
+    input({
+      currentGlucose: 180,
+      trendArrow: 3,
+      nowMs: OCT27,
+      glucoseAgeMin: 5,
+      events: [{ minutesAgo: 30, units: 9, carbsGrams: 100, carbSensitivity: 10 }],
+    }),
+  );
+  assert.equal(correctionStep(plan)?.action, undefined, "pas de dose sur un repas frais");
+  assert.ok(plan.steps.some((s) => s.kind === "wait"), "une étape d'attente est attendue");
+  assert.equal(plan.steps.find((s) => s.kind === "all-good"), undefined);
+});
+
+test("nuit : glucides observés mais 0 U tient déjà → « Va te coucher » reste affiché", () => {
+  const plan = computeNightPlan(
+    oct27({
+      // 90 + 5 g × 1,5 + dawn : pic ≤ 130, bas ≥ 80 → 0 U tient.
+      currentGlucose: 90,
+      events: [
+        { minutesAgo: 150, units: 9, carbsGrams: 140, carbSensitivity: 10, observedRemainingG: 5, lateCarbMgPerG: 1.5 },
+      ],
+      observedCarbs: { remainingG: 5, enteredG: 140, uncertain: false },
+    }),
+  );
+  assert.ok(plan.steps.some((s) => s.kind === "digesting"));
+  assert.equal(correctionStep(plan), undefined);
+  const ok = plan.steps.find((s) => s.kind === "all-good");
+  assert.ok(ok, "la ligne de décision est attendue");
+  assert.equal(ok.headline, "Va te coucher, rien à ajuster");
+});
+
+test("nuit 27/10 : compromis 0 U → « Pas de correction possible sans risque d'hypo »", () => {
+  const step = correctionStep(computeNightPlan(oct27()));
+  assert.ok(step);
+  assert.equal(step.headline, "Pas de correction possible sans risque d'hypo");
+  assert.equal(step.action, undefined);
+  assert.match(step.detail, /^Pic prévu ~\d+ vers \d\d:\d\d ; 1U te ferait descendre à ~\d+ vers \d\d:\d\d\.$/);
+});
