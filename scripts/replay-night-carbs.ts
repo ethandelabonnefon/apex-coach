@@ -3,6 +3,10 @@
  * observés) contre « après » (bilan de masse + facteur appris hors de la
  * nuit rejouée), à T+2h30, comparées à la montée réelle sur 5 h.
  *
+ * Calibration en leave-one-out (PAS walk-forward) : le facteur appris et la
+ * dérive/aube excluent la nuit rejouée mais peuvent utiliser des nuits
+ * postérieures. `reel` = max de la glycémie sur les 5 h après T+150.
+ *
  * Hors CI, non importé par l'app. Données de santé : lues par chemin, jamais
  * copiées dans le dépôt.
  *
@@ -169,6 +173,7 @@ for (const log of dinners) {
     nightDriftPerHour: drift.sampleNights >= 4 ? drift.driftPerHour : undefined,
     dawnCurveByHour:
       dawn.sampleDays >= 4 && Object.keys(dawn.curve).length > 0 ? dawn.curve : undefined,
+    wakeupBias: 0, // état post-déploiement : seuls les logs v2 comptent, le biais repart à 0
     isfMgPerU: isf,
     mgPerGramCarb: cfg.ratios.dinner > 0 ? isf / cfg.ratios.dinner : undefined,
     insulinActiveMinutes: cfg.insulinActiveDuration,
@@ -266,3 +271,13 @@ console.log(
     ? `Ligne 27/10 : ${oct27.carbs} g, ${oct27.units} U, BG@T+150 ${r(oct27.bg)}, pic ancien ${r(oct27.oldPeak)}, nouveau ${r(oct27.newPeak)}, reel ${r(oct27.realPeak)}, restant observe ${r(oct27.observedG)} g, dose ${oct27.dose ?? "aucune"}, min avec dose ${r(oct27.minWithDose)}`
     : "Ligne 27/10 : introuvable (diner non rejoue)",
 );
+const diff = rows.filter((x) => Math.abs(x.newPeak - x.oldPeak) > 0.5);
+const maeOn = (rs: Row[], f: (x: Row) => number) =>
+  rs.reduce((s, x) => s + Math.abs(f(x) - x.realPeak), 0) / (rs.length || 1);
+console.log(
+  `Lignes ou ancien et nouveau different : ${diff.length} sur ${rows.length} ; erreur moyenne sur ces lignes : ancien ${maeOn(diff, (x) => x.oldPeak).toFixed(1)}, nouveau ${maeOn(diff, (x) => x.newPeak).toFixed(1)}`,
+);
+console.log(
+  `Facteur appris : ${rows.filter((x) => !x.isDefaultFactor).length} lignes ; defaut ${LATE_CARB_DEFAULT} : ${rows.filter((x) => x.isDefaultFactor).length} lignes`,
+);
+console.log("biais de réveil = 0 (état post-déploiement)");
