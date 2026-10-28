@@ -627,6 +627,29 @@ export interface GlucosePrediction {
   unreliableTooFresh: boolean;
 }
 
+/**
+ * Poids (0–1) de la queue d'IOB du bolus PROPRE d'un événement observé.
+ *
+ * Sur un gros dîner, le reliquat de glucides masque la queue du bolus : le
+ * facteur appris est net de ce bolus (27/10 : 57 g × 1,6 = 91 ≥ queue de
+ * 0,85 U × 100 = 85 → poids 0, courbe inchangée). Sur un petit dîner déjà
+ * presque absorbé (60 g / 6 U, 5 g restants), le reliquat ne la masque plus
+ * et la queue doit compter (sinon une dose au coucher passe sur une courbe
+ * qui ignore ~57 mg/dL de baisse à venir).
+ *
+ *   poids = max(0, 1 − reliquat × facteur / (unités × ISF × IOB restant))
+ *
+ * Queue nulle (pas d'unités ou IOB épuisé) → poids 0 (rien à retirer).
+ * Une seule courbe sert au pic ET au plancher.
+ */
+function ownTailWeight(ev: PredictionEvent, isf: number, dia: number, peak: number): number {
+  const units = ev.units ?? 0;
+  const tail = units * isf * iobRemainingFraction(ev.minutesAgo, dia, peak);
+  if (!(tail > 0)) return 0;
+  const masked = (ev.observedRemainingG ?? 0) * (ev.lateCarbMgPerG ?? 1.5);
+  return Math.max(0, 1 - masked / tail);
+}
+
 /** Décomposition d'un point (utile transparence UI / debug). */
 function effectsAt(
   minutesAhead: number,
@@ -651,10 +674,12 @@ function effectsAt(
     // Montée glucides (annulée par le bolus si bien dosé)
     if (ev.observedRemainingG !== undefined) {
       // Part observée : reliquat étalé linéairement (plateau au-delà).
-      // Le facteur (1,5 par défaut) a été ajusté sur la montée NETTE réelle,
-      // bolus restant de ce repas compris : l'IOB propre de cet événement
-      // est donc déjà dedans et n'est PAS retiré plus bas (sinon double
-      // comptage → creux fictif juste après le coucher, cf. nuit du 27/10).
+      // Le facteur a été ajusté sur la montée NETTE réelle, bolus restant de
+      // ce repas compris : l'IOB propre de cet événement n'est retiré plus
+      // bas que pondéré (`ownTailWeight`), cf. nuit du 27/10.
+      // Repli `?? 1.5` jamais atteint (withObservedCarbs fixe toujours le
+      // facteur) ; la valeur de référence est LATE_CARB_DEFAULT
+      // (lib/night-calibration.ts, 1,6) — pas d'import ici (import circulaire).
       glucose +=
         ev.observedRemainingG *
         (ev.lateCarbMgPerG ?? 1.5) *
@@ -673,10 +698,15 @@ function effectsAt(
       minutesAhead,
       csf,
     );
-    // Baisse IOB du bolus de cet événement — sauf part observée (cf. plus
-    // haut). Les autres bolus (corrections, dose simulée) s'appliquent.
-    if (ev.units && ev.units > 0 && ev.observedRemainingG === undefined) {
-      insulinDrop += iobGlucoseDrop([{ units: ev.units, minutesAgo: ev.minutesAgo }], minutesAhead, isf, dia, peak);
+    // Baisse IOB du bolus de cet événement. Part observée : pondérée par
+    // `ownTailWeight`. Les autres bolus (corrections, dose simulée)
+    // s'appliquent en plein.
+    if (ev.units && ev.units > 0) {
+      const w = ev.observedRemainingG === undefined ? 1 : ownTailWeight(ev, isf, dia, peak);
+      if (w > 0) {
+        insulinDrop +=
+          w * iobGlucoseDrop([{ units: ev.units, minutesAgo: ev.minutesAgo }], minutesAhead, isf, dia, peak);
+      }
     }
   }
 

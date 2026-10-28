@@ -386,10 +386,11 @@ test("nuit : dîner il y a 30 min (courbe peu fiable) → aucune dose, on attend
 test("nuit : glucides observés mais 0 U tient déjà → « Va te coucher » reste affiché", () => {
   const plan = computeNightPlan(
     oct27({
-      // 90 + 5 g × 1,5 + dawn : pic ≤ 130, bas ≥ 80 → 0 U tient.
+      // 90 + 5 g × 1,5 + dawn : pic ≤ 130, bas ≥ 80 → 0 U tient. Repas à
+      // T+200 : bolus épuisé (DIA 195), pas de queue propre à pondérer.
       currentGlucose: 90,
       events: [
-        { minutesAgo: 150, units: 9, carbsGrams: 140, carbSensitivity: 10, observedRemainingG: 5, lateCarbMgPerG: 1.5 },
+        { minutesAgo: 200, units: 9, carbsGrams: 140, carbSensitivity: 10, observedRemainingG: 5, lateCarbMgPerG: 1.5 },
       ],
       observedCarbs: { remainingG: 5, enteredG: 140, uncertain: false },
     }),
@@ -592,15 +593,22 @@ function floorMin(inp: NightBrainInput, extraU = 0) {
   return summarizeCurve(computeBedtimeAdvice({ ...inp, events: all }).curve!, OCT27).min;
 }
 
-test("plancher T+150 : dîner bien dosé 60 g / 6 U, plat à 180 → toute dose proposée garde le bas normal ≥ 80", () => {
-  const { built, plan, inp } = wellDosedDinner(150, 0, 180);
+test("plancher T+150 : dîner bien dosé 60 g / 6 U, plat à 180 → aucune dose (la queue du bolus compte)", () => {
+  // ~6 g lus seulement : le reliquat ne masque plus la queue du bolus de 6 U
+  // (≈ 57 mg/dL) → elle est presque entièrement appliquée (ownTailWeight) et
+  // 1 U ferait passer sous 80. Sans cette pondération, 1 U était proposé sur
+  // une courbe à ~89 qui ignorait la queue (réaliste ~33).
+  const { built, obs, plan, inp } = wellDosedDinner(150, 0, 180);
   assert.ok(built, "lecture observée attendue à T+150");
+  assert.ok(obs && obs.remainingG < 10, `reliquat ${obs?.remainingG}`);
+  assert.ok(floorMin(inp, 0) >= 80, `bas sans dose : ${floorMin(inp, 0)}`);
+  assert.ok(floorMin(inp, 1) < 80, `bas avec 1 U : ${floorMin(inp, 1)}`);
   const step = correctionStep(plan);
-  if (step?.action) {
-    const u = step.action.quantity;
-    assert.ok(Number.isInteger(u) && u >= 1);
-    assert.ok(floorMin(inp, u) >= 80, `bas avec ${u} U : ${floorMin(inp, u)}`);
-  }
+  assert.ok(step, "la ligne de décision est attendue");
+  assert.equal(step.action, undefined, "aucune dose proposée");
+  assert.equal(step.headline, "Pas de correction possible sans risque d'hypo");
+  assert.equal(Number(/descendre à ~(\d+)/.exec(step.detail)?.[1]), Math.round(floorMin(inp, 1)));
+  assert.equal(plan.steps.find((s) => s.action?.kind === "log-correction"), undefined);
 });
 
 test("plancher : gros reliquat observé + petit bolus → dose entière, bas normal ≥ 80", () => {
