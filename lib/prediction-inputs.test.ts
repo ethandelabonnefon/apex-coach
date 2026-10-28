@@ -82,7 +82,7 @@ test("buildPredictionEvents : 0 g confirmé est une valeur, pas un absent", () =
 test("buildPredictionEvents renseigne sourceId", () => {
   const now = Date.now();
   const evs = buildPredictionEvents({
-    insulinLogs: [log({ id: "L9", injectedAt: new Date(now - 30 * 60_000).toISOString() } as Partial<InsulinLog>)],
+    insulinLogs: [log({ id: "L9", injectedAt: new Date(now - 30 * 60_000) })],
     carbEntries: [{ id: "C7", carbsGrams: 20, eatenAt: new Date(now - 10 * 60_000).toISOString() } as any],
     isf: 100,
     ratios: RATIOS,
