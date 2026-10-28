@@ -387,6 +387,7 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
     if (guardsOk && !canDose && baseSummary.max > NIGHT_CEILING) {
       // Le plan ne reste pas muet : sans dose le pic dépasse 130 (courbe
       // normale) mais le point bas (courbe sécurité) passe déjà sous 80.
+      // Recontrôle à +90 min.
       const r = Math.round;
       steps.push({
         id: "correction",
@@ -394,7 +395,9 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
         kind: "correction",
         tone: "info",
         headline: "Pas de correction possible sans risque d'hypo",
-        detail: `Pic prévu ~${r(baseSummary.max)} vers ${hourLabel(baseSummary.maxAtMs)} ; sans dose, le point bas pourrait déjà descendre vers ~${r(baseFloor.min)} vers ${hourLabel(baseFloor.minAtMs)}.`,
+        // La courbe sécurité est un pire cas pour doser, pas une prédiction :
+        // on ne cite pas son point bas, on dit quand recontrôler.
+        detail: `Pic prévu ~${r(baseSummary.max)} vers ${hourLabel(baseSummary.maxAtMs)}. La fin de ton bolus du repas agit encore : une dose maintenant risquerait de te faire passer sous 80 avant que le repas ne remonte. Recontrôle vers ${hourLabel(nowMs + 90 * 60_000)}.`,
       });
       doseStepEmitted = true;
     }

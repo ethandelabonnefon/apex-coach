@@ -381,12 +381,15 @@ test("nuit 27/10 : bas sécurité sans dose < 80, pic > 130 → « Pas de correc
   assert.equal(step.headline, "Pas de correction possible sans risque d'hypo");
   assert.equal(step.action, undefined);
   assert.equal(step.tone, "info");
+  const hh = (ms: number) => new Date(ms).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
   assert.match(
     step.detail,
-    /^Pic prévu ~\d+ vers \d\d:\d\d ; sans dose, le point bas pourrait déjà descendre vers ~\d+ vers \d\d:\d\d\.$/,
+    /^Pic prévu ~\d+ vers \d\d:\d\d\. La fin de ton bolus du repas agit encore : une dose maintenant risquerait de te faire passer sous 80 avant que le repas ne remonte\. Recontrôle vers \d\d:\d\d\.$/,
   );
   assert.equal(Number(/^Pic prévu ~(\d+)/.exec(step.detail)?.[1]), Math.round(normalMax));
-  assert.equal(Number(/descendre vers ~(\d+)/.exec(step.detail)?.[1]), Math.round(safeMin));
+  assert.ok(step.detail.endsWith(`Recontrôle vers ${hh(OCT27 + 90 * 60_000)}.`), step.detail);
+  // Le pire cas n'est pas cité comme une prédiction.
+  assert.ok(!step.detail.includes(`~${Math.round(safeMin)}`), step.detail);
   assert.ok(plan.steps.find((s) => s.kind === "digesting"));
   assert.equal(plan.steps.find((s) => s.kind === "wait"), undefined);
 });
