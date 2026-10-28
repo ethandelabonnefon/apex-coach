@@ -222,3 +222,72 @@ test("confirmedBedtimeFor : un clic d'une autre nuit -> undefined", () => {
   assert.equal(confirmedBedtimeFor([clog(ms(27, 23), 115)], ms(28, 22)), undefined);
   assert.equal(confirmedBedtimeFor([], ms(28, 22)), undefined);
 });
+
+// ─── Décision du clic + expiration du plan figé ───────────────────────
+
+import {
+  bedtimeDecision,
+  isBedtimePlanDisplayable,
+  BEDTIME_MAX_READING_AGE_MIN,
+  BEDTIME_PLAN_DISPLAY_MIN,
+} from "./night-review";
+
+test("bedtimeDecision : lecture fraîche -> plan + enregistrement officiel", () => {
+  assert.deepEqual(bedtimeDecision({ liveValue: 132, liveAgeMin: 3 }), {
+    ok: true,
+    saveOfficial: true,
+  });
+  // Pile 15 min : encore acceptée.
+  assert.equal(bedtimeDecision({ liveValue: 132, liveAgeMin: 15 }).saveOfficial, true);
+});
+
+test("bedtimeDecision : lecture > 15 min -> plan indicatif, non enregistré", () => {
+  const d = bedtimeDecision({ liveValue: 132, liveAgeMin: 22.4 });
+  assert.equal(d.ok, true);
+  assert.equal(d.saveOfficial, false);
+  assert.equal(
+    d.message,
+    "Lecture capteur trop ancienne (22 min) : plan indicatif, non enregistré pour la nuit.",
+  );
+});
+
+test("bedtimeDecision : lecture absente ou invalide -> pas de plan", () => {
+  for (const input of [
+    { liveValue: undefined, liveAgeMin: 2 },
+    { liveValue: 0, liveAgeMin: 2 },
+    { liveValue: NaN, liveAgeMin: 2 },
+    { liveValue: 120, liveAgeMin: undefined },
+    { liveValue: 120, liveAgeMin: NaN },
+  ]) {
+    const d = bedtimeDecision(input);
+    assert.equal(d.ok, false);
+    assert.equal(d.saveOfficial, false);
+    assert.match(d.message ?? "", /^Pas de lecture capteur/);
+  }
+});
+
+test("isBedtimePlanDisplayable : au plus 20 min après le clic", () => {
+  const click = ms(28, 22, 0);
+  assert.equal(BEDTIME_PLAN_DISPLAY_MIN, 20);
+  assert.equal(isBedtimePlanDisplayable(click, 0, click), true);
+  // Lecture du clic à 0 min : la limite des 15 min tombe avant les 20 min.
+  assert.equal(isBedtimePlanDisplayable(click, 0, click + 15 * 60_000), true);
+  assert.equal(isBedtimePlanDisplayable(click, 0, click + 16 * 60_000), false);
+  // Le plafond de 20 min ne mord qu'en cas d'horloge décalée (âge négatif).
+  assert.equal(isBedtimePlanDisplayable(click, -10, click + 20 * 60_000), true);
+  assert.equal(isBedtimePlanDisplayable(click, -10, click + 21 * 60_000), false);
+  // Horloge antérieure au clic : rien.
+  assert.equal(isBedtimePlanDisplayable(click, 0, click - 60_000), false);
+});
+
+test("isBedtimePlanDisplayable : jusqu'à ce que la lecture ait > 15 min", () => {
+  const click = ms(28, 22, 0);
+  assert.equal(BEDTIME_MAX_READING_AGE_MIN, 15);
+  // Lecture de 10 min au clic : expire 5 min plus tard (avant les 20 min).
+  assert.equal(isBedtimePlanDisplayable(click, 10, click + 5 * 60_000), true);
+  assert.equal(isBedtimePlanDisplayable(click, 10, click + 6 * 60_000), false);
+  // Lecture déjà trop ancienne au clic : jamais affiché comme plan figé.
+  assert.equal(isBedtimePlanDisplayable(click, 16, click), false);
+  // Âge invalide : jamais.
+  assert.equal(isBedtimePlanDisplayable(click, NaN, click), false);
+});

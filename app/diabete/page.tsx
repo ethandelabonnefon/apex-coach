@@ -86,6 +86,9 @@ import {
   nightKeyFor,
   shouldWriteNightLog,
   confirmedBedtimeFor,
+  bedtimeDecision,
+  isBedtimePlanDisplayable,
+  BEDTIME_PLAN_DISPLAY_MIN,
   NIGHT_LOG_VERSION,
 } from "@/lib/night-review";
 import { isLearnable } from "@/lib/insulin-log-values";
@@ -1928,7 +1931,17 @@ export default function DiabetePage() {
     { clickMs: number; id: string; phase: "reading" | "ready" } | null
   >(null);
   const [bedtimeResult, setBedtimeResult] = useState<
-    { id: string; calculatedAtMs: number; plan: NightPlan } | null
+    {
+      id: string;
+      calculatedAtMs: number;
+      plan: NightPlan;
+      /** Âge (min) de la lecture au moment du clic. */
+      readingAgeMin: number;
+      /** Enregistrée comme prédiction officielle (lecture ≤ 15 min). */
+      saveOfficial: boolean;
+      /** Plan indicatif : pourquoi il n'est pas enregistré. */
+      notice?: string;
+    } | null
   >(null);
   const [bedtimeError, setBedtimeError] = useState<string | null>(null);
 
@@ -1949,30 +1962,44 @@ export default function DiabetePage() {
   // Calcul au rendu (état dérivé d'une demande « ready ») : ce rendu
   // contient la lecture fraîche. Glycémie et âge viennent UNIQUEMENT de
   // `liveGlucose` — jamais du champ du calculateur (`currentGlucose`).
+  // Décisions (pas de plan / indicatif / officiel) : `bedtimeDecision`.
   if (bedtimeRequest?.phase === "ready") {
     const { clickMs, id } = bedtimeRequest;
     const readMs = liveGlucose ? new Date(liveGlucose.date).getTime() : NaN;
+    const readingAgeMin = (clickMs - readMs) / 60_000;
+    const decision = bedtimeDecision({
+      liveValue: liveGlucose?.value,
+      liveAgeMin: Number.isFinite(readingAgeMin) ? readingAgeMin : undefined,
+    });
     setBedtimeRequest(null);
-    if (!liveGlucose || !(liveGlucose.value > 0) || !Number.isFinite(readMs)) {
-      setBedtimeError(
-        "Pas de lecture capteur : impossible de calculer ton plan. Vérifie ton capteur et réessaie.",
-      );
+    if (!decision.ok || !liveGlucose) {
+      // Échec : on retire aussi le plan figé d'un clic précédent.
+      setBedtimeResult(null);
+      setBedtimeError(decision.message ?? null);
     } else {
       const plan = computeNightPlan({
         ...nightBrainInput,
         currentGlucose: liveGlucose.value,
         trendArrow: trendStringToNumber(liveGlucose.trend),
-        glucoseAgeMin: Math.max(0, (clickMs - readMs) / 60_000),
+        glucoseAgeMin: Math.max(0, readingAgeMin),
         nowMs: clickMs,
       });
-      setBedtimeResult({ id, calculatedAtMs: clickMs, plan });
+      setBedtimeResult({
+        id,
+        calculatedAtMs: clickMs,
+        plan,
+        readingAgeMin,
+        saveOfficial: decision.saveOfficial,
+        notice: decision.message,
+      });
     }
   }
 
-  // Enregistrement de la prédiction officielle (effet : écriture du store).
+  // Enregistrement de la prédiction officielle (effet : écriture du store),
+  // uniquement si la lecture du clic a ≤ 15 min.
   // `id` stable par clic → un double passage (StrictMode) remplace la même.
   useEffect(() => {
-    if (!bedtimeResult) return;
+    if (!bedtimeResult || !bedtimeResult.saveOfficial) return;
     const wake = bedtimeResult.plan.predictions[bedtimeResult.plan.predictions.length - 1];
     if (!wake || !Number.isFinite(wake.glucose)) return;
     upsertNightPredictionLog({
@@ -1985,7 +2012,8 @@ export default function DiabetePage() {
     });
   }, [bedtimeResult, upsertNightPredictionLog]);
 
-  // Coucher déjà enregistré pour la nuit en cours (après rechargement).
+  // Coucher déjà enregistré pour la nuit en cours (après rechargement ou
+  // après expiration du plan figé).
   const confirmedBedtime = useMemo(() => {
     const log = confirmedBedtimeFor(nightPredictionLogs, nowTick);
     return log
@@ -1993,10 +2021,24 @@ export default function DiabetePage() {
       : null;
   }, [nightPredictionLogs, nowTick]);
 
-  // Le plan figé d'un clic ne vaut que pour sa nuit.
-  const bedtimeResultTonight =
-    bedtimeResult && nightKeyFor(bedtimeResult.calculatedAtMs) === nightKeyFor(nowTick)
-      ? bedtimeResult
+  // Plan figé affiché au plus 20 min, ou tant que sa lecture a ≤ 15 min ;
+  // ensuite la carte repasse au plan en direct (le log reste).
+  const bedtimeDisplayed =
+    bedtimeResult &&
+    isBedtimePlanDisplayable(bedtimeResult.calculatedAtMs, bedtimeResult.readingAgeMin, nowTick)
+      ? {
+          calculatedAtMs: bedtimeResult.calculatedAtMs,
+          plan: bedtimeResult.plan,
+          readingAgeMin: Math.max(0, Math.round(bedtimeResult.readingAgeMin)),
+          // « enregistrée » seulement si l'écriture a vraiment eu lieu.
+          saved: nightPredictionLogs.some((l) => l.id === bedtimeResult.id),
+        }
+      : null;
+  // Avertissement « plan indicatif » : visible 20 min après le clic.
+  const bedtimeNotice =
+    bedtimeResult?.notice &&
+    nowTick - bedtimeResult.calculatedAtMs <= BEDTIME_PLAN_DISPLAY_MIN * 60_000
+      ? bedtimeResult.notice
       : null;
 
   // Repas loggé récent (calculateur de bolus) à reprendre dans la carte
@@ -2335,8 +2377,8 @@ export default function DiabetePage() {
             bedtime={{
               onConfirm: handleGoingToBed,
               reading: bedtimeRequest !== null,
-              result: bedtimeResultTonight,
-              error: bedtimeError,
+              result: bedtimeDisplayed,
+              error: bedtimeError ?? bedtimeNotice,
               confirmed: confirmedBedtime,
             }}
             onLogHypoCarbs={handleNightHypoCarbs}

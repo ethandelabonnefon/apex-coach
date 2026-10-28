@@ -127,6 +127,73 @@ export function confirmedBedtimeFor(
   );
 }
 
+/** Âge max (min) d'une lecture pour une prédiction officielle de la nuit. */
+export const BEDTIME_MAX_READING_AGE_MIN = 15;
+/** Durée max (min) d'affichage du plan figé au clic. */
+export const BEDTIME_PLAN_DISPLAY_MIN = 20;
+
+export interface BedtimeDecision {
+  /** Un plan peut être calculé (lecture capteur présente). */
+  ok: boolean;
+  /** La prédiction devient l'officielle de la nuit (`bedtimeConfirmed`). */
+  saveOfficial: boolean;
+  /** Message à afficher (erreur ou plan indicatif). */
+  message?: string;
+}
+
+/**
+ * Décision au clic « Je vais me coucher », d'après la lecture capteur
+ * obtenue après le rafraîchissement (jamais le champ du calculateur).
+ * - absente / invalide → pas de plan ;
+ * - > 15 min → plan indicatif (les garde-fous retirent la dose), NON
+ *   enregistré comme prédiction officielle ;
+ * - sinon → plan + enregistrement officiel.
+ */
+export function bedtimeDecision(args: {
+  liveValue: number | undefined;
+  liveAgeMin: number | undefined;
+}): BedtimeDecision {
+  const { liveValue, liveAgeMin } = args;
+  if (
+    liveValue === undefined ||
+    !Number.isFinite(liveValue) ||
+    !(liveValue > 0) ||
+    liveAgeMin === undefined ||
+    !Number.isFinite(liveAgeMin)
+  ) {
+    return {
+      ok: false,
+      saveOfficial: false,
+      message:
+        "Pas de lecture capteur : impossible de calculer ton plan. Vérifie ton capteur et réessaie.",
+    };
+  }
+  if (liveAgeMin > BEDTIME_MAX_READING_AGE_MIN) {
+    return {
+      ok: true,
+      saveOfficial: false,
+      message: `Lecture capteur trop ancienne (${Math.round(liveAgeMin)} min) : plan indicatif, non enregistré pour la nuit.`,
+    };
+  }
+  return { ok: true, saveOfficial: true };
+}
+
+/**
+ * Le plan figé au clic s'affiche au plus 20 min après le clic, ou jusqu'à
+ * ce que sa lecture ait plus de 15 min (le premier des deux). Ensuite la
+ * carte repasse au plan en direct ; le log enregistré n'est pas touché.
+ */
+export function isBedtimePlanDisplayable(
+  clickMs: number,
+  readingAgeAtClickMin: number,
+  nowMs: number,
+): boolean {
+  if (!Number.isFinite(readingAgeAtClickMin)) return false;
+  const elapsedMin = (nowMs - clickMs) / 60_000;
+  if (!(elapsedMin >= 0) || elapsedMin > BEDTIME_PLAN_DISPLAY_MIN) return false;
+  return readingAgeAtClickMin + elapsedMin <= BEDTIME_MAX_READING_AGE_MIN;
+}
+
 /**
  * Nuit à faire valider le matin : de 5h à 12h (heure locale), la nuit qui
  * vient de finir (`nightKeyFor(now − 12 h)`) si Ethan ne l'a pas encore

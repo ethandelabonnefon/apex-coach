@@ -81,9 +81,17 @@ export interface BedtimeProps {
   onConfirm: () => void;
   /** Lecture en cours : bouton désactivé (anti double-clic). */
   reading: boolean;
-  /** Plan calculé au clic, dans cette session. */
-  result?: { calculatedAtMs: number; plan: NightPlan } | null;
-  /** Échec du calcul (pas de lecture capteur). */
+  /**
+   * Plan figé au clic, encore affichable (≤ 20 min et lecture ≤ 15 min).
+   * `saved` : la prédiction a réellement été enregistrée pour la nuit.
+   */
+  result?: {
+    calculatedAtMs: number;
+    plan: NightPlan;
+    readingAgeMin: number;
+    saved: boolean;
+  } | null;
+  /** Échec du calcul (pas de lecture) ou plan indicatif non enregistré. */
   error?: string | null;
   /** Coucher déjà enregistré pour la nuit en cours (après rechargement). */
   confirmed?: { atMs: number; wakeGlucose: number } | null;
@@ -411,7 +419,8 @@ function BedtimeBlock({
       )}
       {result ? (
         <p className="label mt-3">
-          Ton plan pour la nuit · calculé à <span className="num">{hhmm(result.calculatedAtMs)}</span>
+          Ton plan pour la nuit · calculé à <span className="num">{hhmm(result.calculatedAtMs)}</span>{" "}
+          · lecture d&apos;il y a <span className="num">{result.readingAgeMin}</span> min
         </p>
       ) : confirmed ? (
         <p className="text-[11px] text-text-secondary mt-2">
@@ -419,7 +428,7 @@ function BedtimeBlock({
           <span className="num">{confirmed.wakeGlucose}</span>
         </p>
       ) : null}
-      {result && wakeGlucose !== undefined && (
+      {result?.saved && wakeGlucose !== undefined && (
         <p className="text-[11px] text-text-tertiary mt-1">
           Prédiction de réveil enregistrée : ~<span className="num">{wakeGlucose}</span> mg/dL.
         </p>
