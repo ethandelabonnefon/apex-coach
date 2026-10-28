@@ -4,6 +4,7 @@ import { STORE_KEY, wouldWipeInsulinLogs } from '@/lib/store-backup/payload';
 import { USER_PROFILE, DIABETES_CONFIG, DIABETES_PROFILES_DEFAULT } from './constants';
 import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile, SplitDoseReminder, HypoEvent, CarbEntry, DeclaredSportSession } from '@/types';
 import type { NightPredictionRecord } from '@/lib/night-calibration';
+import { upsertNightLog, type NightReview } from '@/lib/night-review';
 import type { TrainingLog } from '@/lib/training/schedule';
 import { computeRatioStamps, hasNewRatioStamps } from '@/lib/dose-validation';
 import { syncInsulinRatios } from '@/lib/ratio-sync';
@@ -86,6 +87,9 @@ interface AppState {
   nightPredictionLogs: NightPredictionRecord[];
   addNightPredictionLog: (record: NightPredictionRecord) => void;
   setNightPredictionLogs: (records: NightPredictionRecord[]) => void;
+  upsertNightPredictionLog: (record: NightPredictionRecord) => void;
+  nightReviews: NightReview[];
+  setNightReview: (night: string, counted: boolean) => void;
 
   // Nutrition
   meals: Meal[];
@@ -461,6 +465,13 @@ export const useStore = create<AppState>()(
       addNightPredictionLog: (record) =>
         set((s) => ({ nightPredictionLogs: [record, ...s.nightPredictionLogs].slice(0, 60) })),
       setNightPredictionLogs: (records) => set({ nightPredictionLogs: records }),
+      upsertNightPredictionLog: (record) =>
+        set((s) => ({ nightPredictionLogs: upsertNightLog(s.nightPredictionLogs, record) })),
+      nightReviews: [],
+      setNightReview: (night, counted) =>
+        set((s) => ({
+          nightReviews: [{ night, counted }, ...s.nightReviews.filter((r) => r.night !== night)],
+        })),
       removeHypoEvent: (id) => set((s) => ({
         hypoEvents: s.hypoEvents.filter((e) => e.id !== id),
       })),

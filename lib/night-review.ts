@@ -6,6 +6,8 @@
  * au lendemain midi (J+1) et porte la clé « YYYY-MM-DD » du soir.
  */
 
+import type { NightPredictionRecord } from "./night-calibration";
+
 export interface NightReview {
   /** « YYYY-MM-DD » du soir. */
   night: string;
@@ -42,4 +44,26 @@ export function filterExcludedNightPoints<T extends { t: number }>(
     const inNightHours = h >= 18 || h < 12;
     return !(inNightHours && excluded.has(nightKeyFor(p.t)));
   });
+}
+
+/** Version du format du log de réveil (2 = réécrit jusqu'au coucher). */
+export const NIGHT_LOG_VERSION = 2;
+
+const NIGHT_LOG_CAP = 60;
+
+/**
+ * Insère un enregistrement de prédiction : pour une même nuit, le log non
+ * résolu est remplacé (le dernier calcul avant le coucher fait foi) ; un log
+ * déjà résolu n'est jamais écrasé. Plafond à 60 entrées.
+ */
+export function upsertNightLog(
+  logs: NightPredictionRecord[],
+  rec: NightPredictionRecord,
+): NightPredictionRecord[] {
+  const key = nightKeyFor(new Date(rec.createdAt).getTime());
+  const kept = logs.filter((l) => {
+    if (l.actualWakeupGlucose !== undefined) return true;
+    return nightKeyFor(new Date(l.createdAt).getTime()) !== key;
+  });
+  return [rec, ...kept].slice(0, NIGHT_LOG_CAP);
 }

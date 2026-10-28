@@ -241,6 +241,8 @@ export interface NightPredictionRecord {
   actualWakeupGlucose?: number;
   /** actual - predicted (signé). Positif = on a sous-estimé. */
   errorMgDl?: number;
+  /** Version du format du log (2 = réécrit jusqu'au coucher). */
+  version?: number;
 }
 
 /**

@@ -55,3 +55,54 @@ test("filterExcludedNightPoints : aucune exclusion = identique", () => {
   const pts = [{ t: ms(27, 22, 0) }];
   assert.deepEqual(filterExcludedNightPoints(pts, new Set()), pts);
 });
+
+import { upsertNightLog, NIGHT_LOG_VERSION } from "./night-review";
+import type { NightPredictionRecord } from "./night-calibration";
+
+// ── upsertNightLog ──
+
+function rec(id: string, createdAt: Date, extra: Partial<NightPredictionRecord> = {}): NightPredictionRecord {
+  return {
+    id,
+    createdAt: createdAt.toISOString(),
+    predictedWakeupGlucose: 110,
+    wakeupAtMs: createdAt.getTime() + 8 * 3600_000,
+    ...extra,
+  };
+}
+
+test("même nuit non résolue : remplacée, une seule entrée", () => {
+  const a = rec("a", new Date(2026, 9, 27, 21, 0));
+  const b = rec("b", new Date(2026, 9, 27, 23, 30), { version: NIGHT_LOG_VERSION });
+  const out = upsertNightLog([a], b);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].id, "b");
+});
+
+test("nuit différente : ajoutée en tête", () => {
+  const a = rec("a", new Date(2026, 9, 26, 23, 0));
+  const b = rec("b", new Date(2026, 9, 27, 23, 0));
+  const out = upsertNightLog([a], b);
+  assert.deepEqual(out.map((r) => r.id), ["b", "a"]);
+});
+
+test("entrée résolue jamais écrasée", () => {
+  const a = rec("a", new Date(2026, 9, 27, 21, 0), { actualWakeupGlucose: 100, errorMgDl: -10 });
+  const b = rec("b", new Date(2026, 9, 27, 23, 30));
+  const out = upsertNightLog([a], b);
+  assert.equal(out.length, 2);
+  assert.equal(out.find((r) => r.id === "a")?.actualWakeupGlucose, 100);
+});
+
+test("passé minuit : même nuit que le soir", () => {
+  const a = rec("a", new Date(2026, 9, 27, 22, 0));
+  const b = rec("b", new Date(2026, 9, 28, 0, 30));
+  assert.equal(upsertNightLog([a], b).length, 1);
+});
+
+test("plafond à 60", () => {
+  const logs = Array.from({ length: 60 }, (_, i) => rec(`n${i}`, new Date(2026, 7, 1 + i, 23, 0)));
+  const out = upsertNightLog(logs, rec("new", new Date(2026, 11, 1, 23, 0)));
+  assert.equal(out.length, 60);
+  assert.equal(out[0].id, "new");
+});

@@ -40,6 +40,7 @@ export const BACKED_UP_KEYS = [
   "meals",
   "splitDoseReminders",
   "nightPredictionLogs",
+  "nightReviews",
   "manualDigestion",
   "completedWorkouts",
   "trainingLogs",
