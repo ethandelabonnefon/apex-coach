@@ -100,6 +100,8 @@ interface Row {
   realPeak: number;
   dose: number | null;
   minWithDose: number | null;
+  /** Contrefactuel contre la RÉALITÉ : min sur 0–300 min de réel(t) − dose × ISF × (1 − IOB restant(t)). */
+  realMinWithDose: number | null;
   observedG: number | null;
   factor: number;
   isDefaultFactor: boolean;
@@ -215,6 +217,20 @@ for (const log of dinners) {
       }).curve ?? [];
     minWithDose = Math.min(...c.filter((p) => p.minute > 0 && p.minute <= 7 * 60).map((p) => p.value));
   }
+  // « min réel avec dose » : la glycémie RÉELLE de la nuit, moins l'effet que
+  // la dose proposée aurait eu (même courbe IOB que l'app). Attention : le réel
+  // contient les corrections qu'Ethan a faites lui-même après T+150 ; le
+  // contrefactuel les empile avec la dose proposée.
+  const realMinWithDose =
+    dose && dose > 0
+      ? Math.min(
+          ...future.map(
+            (p) =>
+              p.value -
+              dose * isf * (1 - iobRemainingFraction((p.t - nowMs) / MIN, cfg.insulinActiveDuration, 75)),
+          ),
+        )
+      : null;
 
   rows.push({
     date: new Date(t0).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }),
@@ -227,6 +243,7 @@ for (const log of dinners) {
     realPeak,
     dose,
     minWithDose,
+    realMinWithDose,
     observedG: obs ? obs.remainingG : null,
     factor: lateCarb.mgPerGram,
     isDefaultFactor: lateCarb.isDefault,
@@ -235,11 +252,12 @@ for (const log of dinners) {
 
 const r = (n: number | null) => (n == null ? "-" : String(Math.round(n)));
 const pad = (s: string, n: number) => s.padStart(n);
+const W = [6, 6, 6, 6, 7, 8, 5, 6, 9, 5, 9, 13];
 console.log(
   [
-    "date ", "g glu", "U rep", "BG150", "ancien", "nouveau", "reel", "restG", "facteur", "dose", "min/dose",
+    "date ", "g glu", "U rep", "BG150", "ancien", "nouveau", "reel", "restG", "facteur", "dose", "min/dose", "minReel/dose",
   ]
-    .map((h, i) => pad(h, [6, 6, 6, 6, 7, 8, 5, 6, 9, 5, 9][i]))
+    .map((h, i) => pad(h, W[i]))
     .join(" "),
 );
 for (const x of rows) {
@@ -250,8 +268,9 @@ for (const x of rows) {
       x.factor.toFixed(2) + (x.isDefaultFactor ? "*" : " "),
       x.dose == null ? "-" : String(x.dose),
       r(x.minWithDose),
+      r(x.realMinWithDose),
     ]
-      .map((c, i) => pad(c, [6, 6, 6, 6, 7, 8, 5, 6, 9, 5, 9][i]))
+      .map((c, i) => pad(c, W[i]))
       .join(" "),
   );
 }
@@ -266,10 +285,20 @@ console.log(
   `Erreur absolue moyenne sur le pic : ancien ${mae((x) => x.oldPeak).toFixed(1)} mg/dL, nouveau ${mae((x) => x.newPeak).toFixed(1)} mg/dL`,
 );
 console.log(`Doses dont le min predit < ${NIGHT_FLOOR} : ${unsafe}`);
+const violations = rows.filter((x) => x.realMinWithDose != null && x.realMinWithDose < NIGHT_FLOOR);
+console.log(
+  `Violations (min reel avec dose < ${NIGHT_FLOOR}) : ${violations.length}` +
+    (violations.length
+      ? ` (${violations.map((x) => `${x.date} ${x.dose} U -> ${r(x.realMinWithDose)}`).join(", ")})`
+      : ""),
+);
+console.log(
+  `Doses proposees : ${rows.filter((x) => x.dose).map((x) => `${x.date} ${x.dose} U`).join(", ") || "aucune"}`,
+);
 const oct27 = rows.find((x) => x.injectedAt.startsWith("2026-10-27T10:54:31"));
 console.log(
   oct27
-    ? `Ligne 27/10 : ${oct27.carbs} g, ${oct27.units} U, BG@T+150 ${r(oct27.bg)}, pic ancien ${r(oct27.oldPeak)}, nouveau ${r(oct27.newPeak)}, reel ${r(oct27.realPeak)}, restant observe ${r(oct27.observedG)} g, dose ${oct27.dose ?? "aucune"}, min avec dose ${r(oct27.minWithDose)}`
+    ? `Ligne 27/10 : ${oct27.carbs} g, ${oct27.units} U, BG@T+150 ${r(oct27.bg)}, pic ancien ${r(oct27.oldPeak)}, nouveau ${r(oct27.newPeak)}, reel ${r(oct27.realPeak)}, restant observe ${r(oct27.observedG)} g, dose ${oct27.dose ?? "aucune"}, min avec dose ${r(oct27.minWithDose)}, min reel avec dose ${r(oct27.realMinWithDose)}`
     : "Ligne 27/10 : introuvable (diner non rejoue)",
 );
 const diff = rows.filter((x) => Math.abs(x.newPeak - x.oldPeak) > 0.5);
