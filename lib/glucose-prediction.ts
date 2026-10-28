@@ -15,6 +15,10 @@
  *    calibrée terrain (~10 itérations) : glucides en absorption linéaire +
  *    montée FPU avec le MÊME facteur 6 que le calculateur de dose
  *    (insulin-calculator.ts) et le bedtime-advisor. Cohérence dose↔prédiction.
+ *    Variante OBSERVÉE : si un événement porte `observedRemainingG` (glucides
+ *    restants déduits de la glycémie mesurée), la montée glucides future n'est
+ *    plus la courbe fixe de 195 min mais ce reliquat étalé linéairement sur
+ *    OBS_SPREAD_MIN. FPU et IOB restent inchangés.
  *  • ISF : aucune valeur en dur. Le vrai ISF d'Ethan (100 mg/dL/U) est passé
  *    par l'appelant depuis DiabetesConfig — surtout PAS le 35 de la spec.
  *  • Basale : aucun terme soustrait ici (le modèle basal de la spec est faux
@@ -396,6 +400,9 @@ function defaultDawnBump(hourOfDay: number): number {
   return 0;
 }
 
+/** Étalement linéaire (min) des glucides restants observés. */
+export const OBS_SPREAD_MIN = 180;
+
 /** Un événement insuline+repas (typiquement un InsulinLog) en cours d'effet. */
 export interface PredictionEvent {
   /** Minutes écoulées depuis l'injection / le début du repas. */
@@ -413,6 +420,12 @@ export interface PredictionEvent {
    * Garantit qu'un bolus bien dosé annule la montée. Défaut : ISF/10.
    */
   carbSensitivity?: number;
+  /** Id de la source (InsulinLog / CarbEntry) — pour y rattacher une observation. */
+  sourceId?: string;
+  /** Glucides restants observés (g) : remplace la montée glucides future. */
+  observedRemainingG?: number;
+  /** Facteur appris (mg/dL/g) pour les glucides observés. Défaut 1.5. */
+  lateCarbMgPerG?: number;
 }
 
 /** 2e dose (split FPU) encore à venir, couplée à la montée FPU pour la nette. */
@@ -635,7 +648,15 @@ function effectsAt(
   for (const ev of input.events) {
     const csf = ev.carbSensitivity ?? carbSensitivity(isf, 10);
     // Montée glucides (annulée par le bolus si bien dosé)
-    glucose += carbGlucoseRise(ev.carbsGrams ?? 0, ev.minutesAgo, minutesAhead, csf);
+    if (ev.observedRemainingG !== undefined) {
+      // Part observée : reliquat étalé linéairement (plateau au-delà)
+      glucose +=
+        ev.observedRemainingG *
+        (ev.lateCarbMgPerG ?? 1.5) *
+        Math.min(1, Math.max(0, minutesAhead) / OBS_SPREAD_MIN);
+    } else {
+      glucose += carbGlucoseRise(ev.carbsGrams ?? 0, ev.minutesAgo, minutesAhead, csf);
+    }
     // Montée FPU (cumulée pour nette éventuelle avec le split)
     fpuRiseTotal += fpuGlucoseRise(
       ev.fatGrams ?? 0,

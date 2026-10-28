@@ -571,3 +571,25 @@ test("effort à venir : le prélèvement est modulé par l'insuline active au d�
   assert.equal(impactOf("running", 30, 0), -30);
   assert.equal(impactOf("muscu", 60, 0), 40, "la muscu monte, insuline ou pas");
 });
+
+// ── Part glucides observée (glucides-restants-nuit, tâche 2) ──────────
+{
+  const OBS_BASE = 100;
+  const obsEv = { minutesAgo: 150, carbsGrams: 140, observedRemainingG: 57, lateCarbMgPerG: 1.5 };
+  const at = (events: any[], m: number) =>
+    predictGlucoseCurve({ currentGlucose: OBS_BASE, trendArrow: 3, events, isf: 100, nowMs: 0, horizonMinutes: 480 })
+      .curve.find((p) => p.minute === m)!.value;
+
+  test("observedRemainingG remplace carbGlucoseRise (montée linéaire + plateau)", () => {
+    assert.ok(Math.abs(at([obsEv], 180) - (OBS_BASE + 85.5)) <= 1);
+    assert.ok(Math.abs(at([obsEv], 90) - (OBS_BASE + 42.75)) <= 1);
+    assert.ok(Math.abs(at([obsEv], 360) - (OBS_BASE + 85.5)) <= 1);
+  });
+
+  test("sans observedRemainingG, rien ne change", () => {
+    const ev = { minutesAgo: 150, carbsGrams: 140 };
+    const ref = at([ev], 180);
+    assert.equal(at([{ ...ev, lateCarbMgPerG: 3 }], 180), ref);
+    assert.notEqual(at([obsEv], 180), ref);
+  });
+}

@@ -64,6 +64,7 @@ export function buildPredictionEvents(opts: {
     const minutesAgo = (now - toMs(log.injectedAt)) / 60_000;
     if (!Number.isFinite(minutesAgo) || minutesAgo < -5 || minutesAgo > windowMin) continue;
     events.push({
+      sourceId: log.id,
       minutesAgo: Math.max(0, minutesAgo),
       units: log.units > 0 ? log.units : undefined,
       // Confirmé ?? estimé : sans ça, le patient confirme 140 g au lieu de
@@ -81,6 +82,7 @@ export function buildPredictionEvents(opts: {
     const minutesAgo = (now - toMs(c.eatenAt)) / 60_000;
     if (!Number.isFinite(minutesAgo) || minutesAgo < -5 || minutesAgo > windowMin) continue;
     events.push({
+      sourceId: c.id,
       minutesAgo: Math.max(0, minutesAgo),
       units: c.insulinUnits && c.insulinUnits > 0 ? c.insulinUnits : undefined,
       carbsGrams: c.carbsGrams || 0,
@@ -92,4 +94,21 @@ export function buildPredictionEvents(opts: {
   }
 
   return events;
+}
+
+/**
+ * Rattache une part de glucides observée à l'événement `sourceId`.
+ * Pure : ne modifie ni le tableau ni les événements d'entrée.
+ */
+export function withObservedCarbs(
+  events: PredictionEvent[],
+  sourceId: string,
+  remainingG: number,
+  mgPerG: number,
+): PredictionEvent[] {
+  return events.map((e) =>
+    e.sourceId === sourceId
+      ? { ...e, observedRemainingG: remainingG, lateCarbMgPerG: mgPerG }
+      : e,
+  );
 }
