@@ -15,6 +15,7 @@ import {
   excludedNightKeys,
   filterExcludedNightPoints,
   pendingMorningReview,
+  shouldWriteNightLog,
 } from "./night-review";
 
 const ms = (d: number, h: number, m = 0) => new Date(2026, 9, d, h, m).getTime();
@@ -122,4 +123,43 @@ test("pendingMorningReview : 5h-12h, nuit de la veille sans avis", () => {
     pendingMorningReview(ms(28, 8, 0), [{ night: "2026-10-26", counted: true }]),
     "2026-10-27",
   );
+});
+
+// ─── shouldWriteNightLog (throttle du log de réveil) ──────────────────
+
+const wlog = (createdMs: number, predicted: number, actual?: number) => ({
+  id: `r${createdMs}`,
+  createdAt: new Date(createdMs).toISOString(),
+  predictedWakeupGlucose: predicted,
+  wakeupAtMs: createdMs + 7 * 3_600_000,
+  version: 2,
+  ...(actual !== undefined ? { actualWakeupGlucose: actual } : {}),
+});
+
+test("shouldWriteNightLog : aucun log pour la nuit en cours -> écrire", () => {
+  assert.equal(shouldWriteNightLog([], 120, ms(28, 22)), true);
+  // Log non résolu d'une AUTRE nuit : ne compte pas.
+  assert.equal(shouldWriteNightLog([wlog(ms(27, 22), 120)], 120, ms(28, 22)), true);
+  // Log de cette nuit déjà résolu : ne compte pas non plus.
+  assert.equal(shouldWriteNightLog([wlog(ms(28, 21, 55), 120, 118)], 120, ms(28, 22)), true);
+});
+
+test("shouldWriteNightLog : dernière écriture ≥ 15 min -> écrire", () => {
+  assert.equal(shouldWriteNightLog([wlog(ms(28, 21, 45), 120)], 120, ms(28, 22)), true);
+  assert.equal(shouldWriteNightLog([wlog(ms(28, 21, 46), 120)], 120, ms(28, 22)), false);
+});
+
+test("shouldWriteNightLog : prédiction bougée de ≥ 5 mg/dL -> écrire, sinon non", () => {
+  const logs = [wlog(ms(28, 21, 55), 120)];
+  assert.equal(shouldWriteNightLog(logs, 125, ms(28, 22)), true);
+  assert.equal(shouldWriteNightLog(logs, 115, ms(28, 22)), true);
+  assert.equal(shouldWriteNightLog(logs, 124, ms(28, 22)), false);
+  assert.equal(shouldWriteNightLog(logs, 116, ms(28, 22)), false);
+  assert.equal(shouldWriteNightLog(logs, 120, ms(28, 22)), false);
+});
+
+test("shouldWriteNightLog : prédiction non finie -> jamais", () => {
+  assert.equal(shouldWriteNightLog([], NaN, ms(28, 22)), false);
+  assert.equal(shouldWriteNightLog([], Infinity, ms(28, 22)), false);
+  assert.equal(shouldWriteNightLog([wlog(ms(28, 21), 120)], NaN, ms(28, 22)), false);
 });

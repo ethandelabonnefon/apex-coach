@@ -84,6 +84,7 @@ import {
   excludedNightKeys,
   filterExcludedNightPoints,
   nightKeyFor,
+  shouldWriteNightLog,
   NIGHT_LOG_VERSION,
 } from "@/lib/night-review";
 import { isLearnable } from "@/lib/insulin-log-values";
@@ -1670,7 +1671,14 @@ export default function DiabetePage() {
         carbSensitivity: carbSensitivity(isf, ratioForMeal(diabetesConfig.ratios, l.mealType)),
         sampleable: isLearnable(l),
       }));
-    const lateCarb = estimateLateCarbFactor(pts, lateCarbMeals, injections, isf, excludedNights);
+    const lateCarb = estimateLateCarbFactor(
+      pts,
+      lateCarbMeals,
+      injections,
+      isf,
+      excludedNights,
+      carbEntries ?? [],
+    );
     return {
       drift,
       dawn,
@@ -1689,6 +1697,7 @@ export default function DiabetePage() {
     excludedNights,
     diabetesConfig.insulinSensitivityFactor,
     diabetesConfig.ratios,
+    carbEntries,
   ]);
 
   // Persiste la résolution des prédictions passées (backtest) dès que
@@ -1880,7 +1889,8 @@ export default function DiabetePage() {
   // Backtest : UNE prédiction de réveil par nuit, réécrite tant que la
   // soirée dure (le dernier calcul avant le coucher fait foi), pour la
   // comparer à la glycémie réelle le lendemain et apprendre. On ne réécrit
-  // que si la valeur prédite a changé ou si la dernière écriture a ≥ 15 min.
+  // que si la valeur prédite a bougé de ≥ 5 mg/dL ou si la dernière
+  // écriture a ≥ 15 min (`shouldWriteNightLog`).
   // Lecture capteur exigée : une prédiction partie du champ par défaut du
   // calculateur (120) fausserait le biais appris.
   useEffect(() => {
@@ -1890,19 +1900,7 @@ export default function DiabetePage() {
     const wake = plan.predictions[plan.predictions.length - 1];
     if (!wake) return;
     const now = Date.now();
-    const tonight = nightKeyFor(now);
-    const current = nightPredictionLogs.find(
-      (l) =>
-        l.actualWakeupGlucose === undefined &&
-        nightKeyFor(new Date(l.createdAt).getTime()) === tonight,
-    );
-    if (
-      current &&
-      current.predictedWakeupGlucose === wake.glucose &&
-      now - new Date(current.createdAt).getTime() < 15 * 60_000
-    ) {
-      return;
-    }
+    if (!shouldWriteNightLog(nightPredictionLogs, wake.glucose, now)) return;
     upsertNightPredictionLog({
       id: crypto.randomUUID(),
       createdAt: new Date(now).toISOString(),

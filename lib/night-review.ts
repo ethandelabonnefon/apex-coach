@@ -68,6 +68,35 @@ export function upsertNightLog(
   return [rec, ...kept].slice(0, NIGHT_LOG_CAP);
 }
 
+/** Délai mini entre deux réécritures du log de réveil d'une même nuit. */
+export const NIGHT_LOG_REWRITE_MIN = 15;
+/** Écart de prédiction (mg/dL) qui justifie une réécriture immédiate. */
+export const NIGHT_LOG_REWRITE_DELTA = 5;
+
+/**
+ * Faut-il (ré)écrire le log de réveil de la nuit en cours ? Oui s'il n'y a
+ * pas encore de log non résolu pour cette nuit, si la dernière écriture a
+ * ≥ 15 min, ou si la prédiction a bougé d'au moins 5 mg/dL. Jamais pour une
+ * prédiction non finie.
+ */
+export function shouldWriteNightLog(
+  logs: NightPredictionRecord[],
+  predicted: number,
+  nowMs: number,
+): boolean {
+  if (!Number.isFinite(predicted)) return false;
+  const tonight = nightKeyFor(nowMs);
+  const current = logs.find(
+    (l) =>
+      l.actualWakeupGlucose === undefined &&
+      nightKeyFor(new Date(l.createdAt).getTime()) === tonight,
+  );
+  if (!current) return true;
+  const ageMs = nowMs - new Date(current.createdAt).getTime();
+  if (!(ageMs < NIGHT_LOG_REWRITE_MIN * 60_000)) return true;
+  return Math.abs(predicted - current.predictedWakeupGlucose) >= NIGHT_LOG_REWRITE_DELTA;
+}
+
 /**
  * Nuit à faire valider le matin : de 5h à 12h (heure locale), la nuit qui
  * vient de finir (`nightKeyFor(now − 12 h)`) si Ethan ne l'a pas encore

@@ -371,8 +371,14 @@ export function estimateLateCarbFactor(
   injections: NightInjection[],
   isf: number,
   excluded: Set<string>,
+  /** Glucides libres (en-cas, re-sucrages) : tout apport dans
+   *  [repas − 240, lecture + 300] fausse la montée → nuit écartée. */
+  carbEntries: { eatenAt: string }[] = [],
 ): LateCarbFactorResult {
   const MIN = 60_000;
+  const carbMs = carbEntries
+    .map((c) => new Date(c.eatenAt).getTime())
+    .filter((t) => Number.isFinite(t));
   const tolMs = OBS_MEAL_POINT_TOLERANCE_MIN * MIN;
   const sorted = [...points].sort((a, b) => a.t - b.t);
   const injMs = injections.map((i) => ({
@@ -394,6 +400,8 @@ export function estimateLateCarbFactor(
     const readingMs = meal.t + 150 * MIN;
     // Une injection après la lecture fausse la montée observée.
     if (injMs.some((i) => i.t > readingMs && i.t <= readingMs + 300 * MIN)) continue;
+    // Un en-cas ou un re-sucrage autour du repas ou pendant la nuit aussi.
+    if (carbMs.some((t) => t >= meal.t - 240 * MIN && t <= readingMs + 300 * MIN)) continue;
 
     const atMeal = nearestPoint(sorted, meal.t, tolMs);
     const atReading = nearestPoint(sorted, readingMs, tolMs);

@@ -114,6 +114,22 @@ test("estimateLateCarbFactor : injection dans les 5 h après la lecture -> nuit 
   assert.ok(Math.abs(res.mgPerGram - 2) < 0.05, `obtenu ${res.mgPerGram}`);
 });
 
+test("estimateLateCarbFactor : en-cas ou re-sucrage autour de la nuit -> nuit ignorée", () => {
+  const nights: NightOpts[] = REMAININGS.slice(0, 5).map((r, i) => ({ day: 1 + i, remaining: r }));
+  nights.push({ day: 6, remaining: 50, weirdRise: 600 });
+  const d = build(nights);
+  const readingMs = new Date(2026, 9, 6, 20, 0).getTime() + 150 * MIN;
+  const snack = [{ eatenAt: new Date(readingMs + 60 * MIN).toISOString() }];
+  const res = estimateLateCarbFactor(d.points, d.meals, d.injections, ISF, new Set(), snack);
+  assert.equal(res.sampleNights, 5);
+  assert.ok(Math.abs(res.mgPerGram - 2) < 0.05, `obtenu ${res.mgPerGram}`);
+  // Bornes : 240 min avant le repas compte, au-delà de lecture + 300 non.
+  const before = [{ eatenAt: new Date(readingMs - 150 * MIN - 240 * MIN).toISOString() }];
+  assert.equal(estimateLateCarbFactor(d.points, d.meals, d.injections, ISF, new Set(), before).sampleNights, 5);
+  const after = [{ eatenAt: new Date(readingMs + 301 * MIN).toISOString() }];
+  assert.equal(estimateLateCarbFactor(d.points, d.meals, d.injections, ISF, new Set(), after).sampleNights, 6);
+});
+
 test("estimateLateCarbFactor : nuit exclue -> ignorée", () => {
   const nights: NightOpts[] = REMAININGS.slice(0, 5).map((r, i) => ({ day: 1 + i, remaining: r }));
   nights.push({ day: 6, remaining: 50, weirdRise: 600 });

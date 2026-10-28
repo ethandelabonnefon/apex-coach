@@ -129,7 +129,7 @@ for (const log of dinners) {
   const calPts = filterExcludedNightPoints(points, excluded);
   const drift = estimateNightDrift(calPts, injections);
   const dawn = estimateDawnCurve(calPts);
-  const lateCarb = estimateLateCarbFactor(calPts, lateMeals, injections, isf, excluded);
+  const lateCarb = estimateLateCarbFactor(calPts, lateMeals, injections, isf, excluded, carbEntries ?? []);
 
   const baseEvents = buildPredictionEvents({
     insulinLogs,
