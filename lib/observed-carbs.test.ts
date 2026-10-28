@@ -184,6 +184,30 @@ test("build : re-sucrage et glucides libres ≥ 20 g dans la fenêtre", () => {
   assert.equal(snack?.input.boluses.length, 2);
 });
 
+test("build : n'importe quel glucide libre dans [repas − 240, maintenant] bloque la lecture (cas 18/10)", () => {
+  // 13 g « Resucrage » saisis à la main (bouton rapide, sans hypoEventId)
+  // 40 min avant la lecture : ni ≥ 20 g ni lié à une hypo, mais il fausse le
+  // bilan de masse (+91 au modèle le 18/10) → pas de lecture observée.
+  const manual = buildObservedCarbsInput({
+    ...baseOpts,
+    carbEntries: [{ id: "m", label: "Resucrage", carbsGrams: 13, insulinUnits: 0, eatenAt: minAgo(40).toISOString() }],
+  });
+  assert.equal(manual?.input.rescueInWindow, true);
+  assert.equal(observedCarbsRemaining(manual!.input), null);
+  // Petit en-cas sans libellé, juste après le début de fenêtre (repas − 240).
+  const early = buildObservedCarbsInput({
+    ...baseOpts,
+    carbEntries: [{ id: "e", carbsGrams: 5, eatenAt: minAgo(150 + 230).toISOString() }],
+  });
+  assert.equal(early?.input.rescueInWindow, true);
+  // Hors fenêtre (avant repas − 240) : sans effet.
+  const before = buildObservedCarbsInput({
+    ...baseOpts,
+    carbEntries: [{ id: "b", carbsGrams: 5, eatenAt: minAgo(150 + 250).toISOString() }],
+  });
+  assert.equal(before?.input.rescueInWindow, false);
+});
+
 test("build : quantité incertaine remontée", () => {
   const b = buildObservedCarbsInput({ ...baseOpts, insulinLogs: [meal({ carbsUncertain: true })] });
   assert.equal(b?.uncertain, true);

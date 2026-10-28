@@ -318,7 +318,13 @@ export function estimateWakeupBias(
 // 5. Facteur « glucides tardifs » appris (mg/dL de montée par g restant)
 // ───────────────────────────────────────────────────────────────────────
 
-export const LATE_CARB_DEFAULT = 1.5;
+/**
+ * Défaut tant qu'il y a moins de 5 nuits utilisables.
+ * 28/10/2026 : plus petite valeur où le rejeu (leave-one-out, contrefactuel
+ * juste) donne ≥ 1 U au 27/10 et 0 violation (balayage 1,5 → 2,0 au pas de
+ * 0,1 ; 1,5 ne dosait pas le 27/10).
+ */
+export const LATE_CARB_DEFAULT = 1.6;
 export const LATE_CARB_MIN = 0.5;
 export const LATE_CARB_MAX = 4;
 export const LATE_CARB_MIN_NIGHTS = 5;

@@ -100,7 +100,7 @@ import {
   estimateWakeupBias,
   estimateLateCarbFactor,
 } from "@/lib/night-calibration";
-import { computeNightPlan } from "@/lib/night-brain";
+import { computeNightPlan, earliestRecentCarbEntryMs } from "@/lib/night-brain";
 import HypoLogger from "@/components/diabete/HypoLogger";
 import HypoFeedback from "@/components/diabete/HypoFeedback";
 import { useHypoTracker } from "@/hooks/useHypoTracker";
@@ -1843,6 +1843,8 @@ export default function DiabetePage() {
       // Âge de la lecture capteur (depuis `liveGlucose.date` uniquement) :
       // absent ou > 15 min = aucune dose proposée par le plan de nuit.
       glucoseAgeMin: liveGlucoseAgeMin,
+      // Re-sucrage ou collation dans les 4 h : aucune dose ce soir.
+      recentCarbEntryAt: earliestRecentCarbEntryMs(carbEntries, nowTick),
       nowMs: nowTick,
     };
   }, [

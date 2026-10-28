@@ -179,14 +179,16 @@ export function buildObservedCarbsInput(opts: {
     }
   }
 
-  // Perturbateurs : autres repas ≥ 20 g et re-sucrages dans la fenêtre.
+  // Perturbateurs : autres repas ≥ 20 g et tout glucide libre dans la fenêtre.
   const otherLogMeals = meals.filter((m) => m !== target && inWindow(m.t)).length;
   const otherCarbMeals = (opts.carbEntries ?? []).filter(
     (c) => !c.hypoEventId && (c.carbsGrams ?? 0) >= OBS_MIN_MEAL_CARBS && inWindow(toMs(c.eatenAt)),
   ).length;
-  const rescueInWindow = (opts.carbEntries ?? []).some(
-    (c) => !!c.hypoEventId && inWindow(toMs(c.eatenAt)),
-  );
+  // N'importe quel glucide libre dans [repas − 240, maintenant] — quelle que
+  // soit sa taille, son libellé, avec ou sans hypoEventId — fausse le bilan
+  // de masse : pas de lecture observée (mêmes conditions que les nuits
+  // d'apprentissage du facteur). Cas du 18/10 : 13 g « Resucrage » manuels.
+  const rescueInWindow = (opts.carbEntries ?? []).some((c) => inWindow(toMs(c.eatenAt)));
 
   // Glycémie au repas : capteur SEULEMENT — historique 8h, sinon archive
   // (±20 min). Jamais `log.glucoseBefore` : il peut contenir le 120 par

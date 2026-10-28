@@ -35,7 +35,6 @@ import {
   NIGHT_FLOOR,
   type CurveSummary,
 } from "./bedtime-dose";
-import { withMealBolusTail } from "./prediction-inputs";
 
 // ───────────────────────────────────────────────────────────────────────
 
@@ -85,6 +84,35 @@ export interface NightBrainInput extends BedtimeAdvisorInput {
    * proposée : on ne dose jamais sur une valeur par défaut de champ.
    */
   glucoseAgeMin?: number;
+
+  /**
+   * ms du PLUS ANCIEN glucide libre (`CarbEntry` : re-sucrage ou collation,
+   * toute taille, avec ou sans libellé) pris dans [maintenant − 240 min,
+   * maintenant]. Présent → aucune dose ce soir : on ne répond jamais par de
+   * l'insuline à des glucides de re-sucrage, et ils faussent la prévision.
+   */
+  recentCarbEntryAt?: number;
+}
+
+/** Fenêtre (min) pendant laquelle un glucide libre bloque toute dose du coucher. */
+export const RECENT_CARBS_NO_DOSE_MIN = 240;
+
+/**
+ * ms du plus ancien `CarbEntry` pris dans [maintenant − 240 min, maintenant]
+ * (toute taille, tout libellé, avec ou sans hypoEventId), sinon undefined.
+ * Source unique pour `recentCarbEntryAt` (page /diabete et rejeu).
+ */
+export function earliestRecentCarbEntryMs(
+  carbEntries: { eatenAt: string | Date }[] | undefined,
+  nowMs: number,
+): number | undefined {
+  let earliest: number | undefined;
+  for (const c of carbEntries ?? []) {
+    const t = c.eatenAt instanceof Date ? c.eatenAt.getTime() : new Date(c.eatenAt).getTime();
+    if (!Number.isFinite(t) || t > nowMs || nowMs - t > RECENT_CARBS_NO_DOSE_MIN * 60_000) continue;
+    if (earliest === undefined || t < earliest) earliest = t;
+  }
+  return earliest;
 }
 
 export type NightStepKind =
@@ -354,25 +382,35 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
   let doseActionEmitted = false;
   /** La recherche a conclu que 0 U tient déjà la nuit (pic ≤ 130, bas ≥ 80). */
   let doseNone = false;
-  if (input.events && baseSummary) {
+  const recentCarbsAt =
+    input.recentCarbEntryAt !== undefined &&
+    Number.isFinite(input.recentCarbEntryAt) &&
+    input.recentCarbEntryAt <= nowMs &&
+    nowMs - input.recentCarbEntryAt <= RECENT_CARBS_NO_DOSE_MIN * 60_000
+      ? input.recentCarbEntryAt
+      : undefined;
+  if (recentCarbsAt !== undefined) {
+    // Glucides libres récents : jamais de dose, quel que soit le mode. Si la
+    // glycémie est basse, les étapes hypo prennent le relais (pas de ligne).
+    if (!liveLow) {
+      steps.push({
+        id: "correction",
+        order: order++,
+        kind: "correction",
+        tone: "info",
+        headline: "Pas de dose ce soir : tu as pris des glucides récemment",
+        detail: `Les glucides pris depuis ${hourLabel(recentCarbsAt)} (resucrage ou collation) faussent la prévision. Recontrôle vers ${hourLabel(nowMs + 90 * 60_000)}.`,
+      });
+      doseStepEmitted = true;
+    }
+  } else if (input.events && baseSummary) {
     // Mode events : dose entière « pic ≤ 130 à partir de T+2h, plancher 80 »
     // sur la courbe simulée (lib/bedtime-dose.ts). Pas d'arrondi 0,5 U ni
     // de plafond 2 U : c'est la courbe qui borne la dose.
-    // Plancher : la part observée ignore la queue d'IOB du bolus de son
-    // repas (facteur ajusté sur la montée nette du PIC). Pour le point bas
-    // on la remet (withMealBolusTail) : pic = courbe normale, bas = courbe
-    // « sécurité ». Sans part observée avec bolus, les deux sont identiques.
-    const safetyEvents = withMealBolusTail(input.events);
-    const hasTail = safetyEvents.length !== input.events.length;
-    const withFloor = (normal: CurveSummary, events: typeof safetyEvents): CurveSummary => {
-      if (!hasTail) return normal;
-      const curve = computeBedtimeAdvice({ ...input, events }).curve ?? [];
-      // Courbe sécurité inexploitable → on bloque la dose (fail-closed).
-      if (curve.length < 2) return { ...normal, min: -Infinity, minAtMs: normal.minAtMs };
-      const safety = summarizeCurve(curve, nowMs);
-      return { ...normal, min: safety.min, minAtMs: safety.minAtMs };
-    };
-    const baseFloor = withFloor(baseSummary, safetyEvents);
+    // Plancher = courbe NORMALE (oct. 2026) : la courbe « sécurité » qui
+    // remettait toute la queue d'IOB du bolus du repas après T+150 est
+    // contredite par les nuits réelles d'Ethan (dérive moyenne −2 mg/dL sur
+    // 2 h, −22 au pire) ; elle bloquait toute dose le 27/10.
     const glucoseFresh =
       input.glucoseAgeMin !== undefined && input.glucoseAgeMin <= MAX_GLUCOSE_AGE_FOR_DOSE_MIN;
     // Garde-fous muets : glycémie basse, ↓↓, lecture absente ou vieille,
@@ -384,37 +422,16 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
       // Repas frais + IOB élevé : la courbe n'est pas fiable, on ne dose pas
       // dessus (anti-stacking du dîner) — l'étape d'attente prend le relais.
       !advice.unreliableTooFresh;
-    const canDose = guardsOk && baseFloor.min >= NIGHT_FLOOR;
-    if (hasTail && guardsOk && !canDose && baseSummary.max > NIGHT_CEILING) {
-      // Le plan ne reste pas muet : sans dose le pic dépasse 130 (courbe
-      // normale) mais le point bas (courbe sécurité) passe déjà sous 80.
-      // Seulement s'il y a une queue de bolus de repas (le texte l'accuse).
-      // Recontrôle à +90 min.
-      const r = Math.round;
-      steps.push({
-        id: "correction",
-        order: order++,
-        kind: "correction",
-        tone: "info",
-        headline: "Pas de correction possible sans risque d'hypo",
-        // La courbe sécurité est un pire cas pour doser, pas une prédiction :
-        // on ne cite pas son point bas, on dit quand recontrôler.
-        detail: `Pic prévu ~${r(baseSummary.max)} vers ${hourLabel(baseSummary.maxAtMs)}. La fin de ton bolus du repas agit encore : une dose maintenant risquerait de te faire passer sous 80 avant que le repas ne remonte. Recontrôle vers ${hourLabel(nowMs + 90 * 60_000)}.`,
-      });
-      doseStepEmitted = true;
-    }
+    const canDose = guardsOk && baseSummary.min >= NIGHT_FLOOR;
     if (canDose) {
       const events = input.events;
       const simulate = (u: number): CurveSummary =>
         u === 0
-          ? baseFloor
-          : withFloor(
-              summarizeCurve(
-                computeBedtimeAdvice({ ...input, events: [...events, { units: u, minutesAgo: 0 }] })
-                  .curve ?? [],
-                nowMs,
-              ),
-              [...safetyEvents, { units: u, minutesAgo: 0 }],
+          ? baseSummary
+          : summarizeCurve(
+              computeBedtimeAdvice({ ...input, events: [...events, { units: u, minutesAgo: 0 }] })
+                .curve ?? [],
+              nowMs,
             );
       const dose = findBedtimeDose(simulate);
       doseNone = dose.kind === "none";

@@ -16,9 +16,9 @@
  * viennent du fuseau de la machine (celui des données).
  */
 import { readFileSync } from "node:fs";
-import { computeNightPlan, type NightBrainInput } from "../lib/night-brain";
+import { computeNightPlan, earliestRecentCarbEntryMs, type NightBrainInput } from "../lib/night-brain";
 import { computeBedtimeAdvice } from "../lib/bedtime-advisor";
-import { buildPredictionEvents, ratioForMeal, withMealBolusTail, withObservedCarbs } from "../lib/prediction-inputs";
+import { buildPredictionEvents, ratioForMeal, withObservedCarbs } from "../lib/prediction-inputs";
 import { buildObservedCarbsInput, observedCarbsRemaining } from "../lib/observed-carbs";
 import {
   estimateDawnCurve,
@@ -100,8 +100,16 @@ interface Row {
   realPeak: number;
   dose: number | null;
   minWithDose: number | null;
-  /** Contrefactuel contre la RÉALITÉ : min sur 0–300 min de réel(t) − dose × ISF × (1 − IOB restant(t)). */
+  /** Contrefactuel brut : min sur 0–300 min de réel(t) − dose × ISF × (1 − IOB restant(t)). */
   realMinWithDose: number | null;
+  /**
+   * Contrefactuel équitable (critère bloquant) : idem, en rajoutant au réel
+   * l'effet des injections qu'Ethan a faites lui-même après la lecture (si
+   * l'app avait dosé, il ne les aurait pas faites).
+   */
+  fairMinWithDose: number | null;
+  /** Injections réelles après la lecture (0–300 min), ex. « 2U@+28 ». */
+  laterInjections: string;
   observedG: number | null;
   factor: number;
   isDefaultFactor: boolean;
@@ -190,6 +198,7 @@ for (const log of dinners) {
         ? { remainingG: obs.remainingG, enteredG: obsBuilt.enteredG, uncertain: obsBuilt.uncertain }
         : undefined,
     glucoseAgeMin: 0,
+    recentCarbEntryAt: earliestRecentCarbEntryMs(carbEntries, nowMs),
     nowMs,
   });
 
@@ -203,8 +212,8 @@ for (const log of dinners) {
   const oldPeak = peak5h(oldInput);
   const newPeak = peak5h(newInput);
 
-  // Dose proposée par le plan (version « nouvelle ») et point bas avec elle,
-  // sur la courbe « sécurité » du plan (queue d'IOB du bolus du repas).
+  // Dose proposée par le plan (version « nouvelle ») et point bas avec elle
+  // sur la courbe normale (celle qui décide la dose).
   const plan = computeNightPlan(newInput);
   const act = plan.steps.find((s) => s.action?.kind === "log-correction")?.action;
   const dose = act ? act.quantity : null;
@@ -213,7 +222,7 @@ for (const log of dinners) {
     const c =
       computeBedtimeAdvice({
         ...newInput,
-        events: [...withMealBolusTail(newEvents), { units: dose, minutesAgo: 0 }],
+        events: [...newEvents, { units: dose, minutesAgo: 0 }],
       }).curve ?? [];
     minWithDose = Math.min(...c.filter((p) => p.minute > 0 && p.minute <= 7 * 60).map((p) => p.value));
   }
@@ -231,6 +240,25 @@ for (const log of dinners) {
           ),
         )
       : null;
+  // Injections réelles d'Ethan après la lecture : bolus loggés + insuline des
+  // glucides libres.
+  const later = [
+    ...insulinLogs.map((l) => ({ t: new Date(l.injectedAt).getTime(), units: l.units })),
+    ...(carbEntries ?? []).map((c) => ({ t: new Date(c.eatenAt).getTime(), units: c.insulinUnits ?? 0 })),
+  ].filter((i) => i.units > 0 && i.t > nowMs && i.t <= nowMs + 300 * MIN);
+  const iobUsed = (minutes: number) =>
+    1 - iobRemainingFraction(minutes, cfg.insulinActiveDuration, 75);
+  const fairMinWithDose =
+    dose && dose > 0
+      ? Math.min(
+          ...future.map((p) => {
+            const addBack = later
+              .filter((i) => p.t > i.t)
+              .reduce((s, i) => s + i.units * isf * iobUsed((p.t - i.t) / MIN), 0);
+            return p.value + addBack - dose * isf * iobUsed((p.t - nowMs) / MIN);
+          }),
+        )
+      : null;
 
   rows.push({
     date: new Date(t0).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }),
@@ -244,6 +272,8 @@ for (const log of dinners) {
     dose,
     minWithDose,
     realMinWithDose,
+    fairMinWithDose,
+    laterInjections: later.map((i) => `${i.units}U@+${Math.round((i.t - nowMs) / MIN)}`).join(","),
     observedG: obs ? obs.remainingG : null,
     factor: lateCarb.mgPerGram,
     isDefaultFactor: lateCarb.isDefault,
@@ -252,10 +282,10 @@ for (const log of dinners) {
 
 const r = (n: number | null) => (n == null ? "-" : String(Math.round(n)));
 const pad = (s: string, n: number) => s.padStart(n);
-const W = [6, 6, 6, 6, 7, 8, 5, 6, 9, 5, 9, 13];
+const W = [6, 6, 6, 6, 7, 8, 5, 6, 9, 5, 9, 13, 14, 16];
 console.log(
   [
-    "date ", "g glu", "U rep", "BG150", "ancien", "nouveau", "reel", "restG", "facteur", "dose", "min/dose", "minReel/dose",
+    "date ", "g glu", "U rep", "BG150", "ancien", "nouveau", "reel", "restG", "facteur", "dose", "min/dose", "minReel/dose", "minEquit/dose", "inj apres",
   ]
     .map((h, i) => pad(h, W[i]))
     .join(" "),
@@ -269,6 +299,8 @@ for (const x of rows) {
       x.dose == null ? "-" : String(x.dose),
       r(x.minWithDose),
       r(x.realMinWithDose),
+      r(x.fairMinWithDose),
+      x.laterInjections || "-",
     ]
       .map((c, i) => pad(c, W[i]))
       .join(" "),
@@ -284,13 +316,18 @@ console.log(`Diners rejoues : ${rows.length} (ignores faute de donnees : ${skipp
 console.log(
   `Erreur absolue moyenne sur le pic : ancien ${mae((x) => x.oldPeak).toFixed(1)} mg/dL, nouveau ${mae((x) => x.newPeak).toFixed(1)} mg/dL`,
 );
-console.log(`Doses dont le min predit < ${NIGHT_FLOOR} : ${unsafe}`);
-const violations = rows.filter((x) => x.realMinWithDose != null && x.realMinWithDose < NIGHT_FLOOR);
-console.log(
-  `Violations (min reel avec dose < ${NIGHT_FLOOR}) : ${violations.length}` +
-    (violations.length
-      ? ` (${violations.map((x) => `${x.date} ${x.dose} U -> ${r(x.realMinWithDose)}`).join(", ")})`
-      : ""),
+console.log(`Doses dont le min predit (courbe normale) < ${NIGHT_FLOOR} : ${unsafe}`);
+const listViolations = (label: string, f: (x: Row) => number | null) => {
+  const v = rows.filter((x) => f(x) != null && f(x)! < NIGHT_FLOOR);
+  console.log(
+    `${label} : ${v.length}` +
+      (v.length ? ` (${v.map((x) => `${x.date} ${x.dose} U -> ${r(f(x))}`).join(", ")})` : ""),
+  );
+};
+listViolations(`Violations brutes (min reel avec dose < ${NIGHT_FLOOR}, indicatif)`, (x) => x.realMinWithDose);
+listViolations(
+  `VIOLATIONS (min equitable avec dose < ${NIGHT_FLOOR}, critere bloquant)`,
+  (x) => x.fairMinWithDose,
 );
 console.log(
   `Doses proposees : ${rows.filter((x) => x.dose).map((x) => `${x.date} ${x.dose} U`).join(", ") || "aucune"}`,
@@ -298,7 +335,7 @@ console.log(
 const oct27 = rows.find((x) => x.injectedAt.startsWith("2026-10-27T10:54:31"));
 console.log(
   oct27
-    ? `Ligne 27/10 : ${oct27.carbs} g, ${oct27.units} U, BG@T+150 ${r(oct27.bg)}, pic ancien ${r(oct27.oldPeak)}, nouveau ${r(oct27.newPeak)}, reel ${r(oct27.realPeak)}, restant observe ${r(oct27.observedG)} g, dose ${oct27.dose ?? "aucune"}, min avec dose ${r(oct27.minWithDose)}, min reel avec dose ${r(oct27.realMinWithDose)}`
+    ? `Ligne 27/10 : ${oct27.carbs} g, ${oct27.units} U, BG@T+150 ${r(oct27.bg)}, pic ancien ${r(oct27.oldPeak)}, nouveau ${r(oct27.newPeak)}, reel ${r(oct27.realPeak)}, restant observe ${r(oct27.observedG)} g, dose ${oct27.dose ?? "aucune"}, min avec dose ${r(oct27.minWithDose)}, min reel avec dose ${r(oct27.realMinWithDose)}, min equitable ${r(oct27.fairMinWithDose)}`
     : "Ligne 27/10 : introuvable (diner non rejoue)",
 );
 const diff = rows.filter((x) => Math.abs(x.newPeak - x.oldPeak) > 0.5);
