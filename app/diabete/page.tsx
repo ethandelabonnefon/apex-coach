@@ -1658,15 +1658,17 @@ export default function DiabetePage() {
     const dawn = estimateDawnCurve(pts);
     const resolved = resolveNightLogs(logsSinceChange, pts, nowTick);
     const bias = estimateWakeupBias(resolved);
-    // Facteur glucides tardifs : dîners à quantité fiable seulement ; les
-    // repas incertains ne servent ni de cible ni de perturbateur.
+    // Facteur glucides tardifs : seuls les dîners à quantité fiable servent
+    // d'échantillon ; un repas incertain reste un perturbateur (il disqualifie
+    // le dîner voisin) via `sampleable: false`.
     const isf = diabetesConfig.insulinSensitivityFactor;
     const lateCarbMeals = logsSinceBasal
-      .filter((l) => l.mealType !== "correction" && !l.isSplitDose && isLearnable(l))
+      .filter((l) => l.mealType !== "correction" && !l.isSplitDose)
       .map((l) => ({
         injectedAt: new Date(l.injectedAt).toISOString(),
         carbsGrams: resolveCarbs(l),
         carbSensitivity: carbSensitivity(isf, ratioForMeal(diabetesConfig.ratios, l.mealType)),
+        sampleable: isLearnable(l),
       }));
     const lateCarb = estimateLateCarbFactor(pts, lateCarbMeals, injections, isf, excludedNights);
     return {

@@ -87,15 +87,16 @@ const live = { value: 90, date: minAgo(3).toISOString() };
 const baseOpts = {
   insulinLogs: [meal()],
   carbEntries: [] as CarbEntry[],
-  history: [],
-  archive: [],
+  // Point capteur au moment du repas (la saisie du calculateur n'est jamais lue).
+  history: [{ value: 76, date: minAgo(150).toISOString() }],
+  archive: [] as { t: number; value: number }[],
   live,
   nowMs: NOW,
   isf: 100,
   ratios: { morning: 6.67, lunch: 10, snack: 8.33, dinner: 10 },
 };
 
-test("build : dîner à T+150, saisie au repas, lecture live 3 min", () => {
+test("build : dîner à T+150, point capteur au repas, lecture live 3 min", () => {
   const b = buildObservedCarbsInput(baseOpts);
   assert.ok(b);
   assert.equal(b.sourceId, "dinner");
@@ -142,10 +143,8 @@ test("build : jamais de lecture inventée — sans capteur, glucoseNow et âge n
 });
 
 test("build : glycémie au repas depuis l'historique puis l'archive à ±20 min", () => {
-  const noBefore = [meal({ glucoseBefore: 0 })];
   const fromHistory = buildObservedCarbsInput({
     ...baseOpts,
-    insulinLogs: noBefore,
     history: [
       { value: 150, date: minAgo(180).toISOString() },
       { value: 82, date: minAgo(140).toISOString() },
@@ -154,13 +153,13 @@ test("build : glycémie au repas depuis l'historique puis l'archive à ±20 min"
   assert.equal(fromHistory?.input.glucoseAtMeal, 82);
   const fromArchive = buildObservedCarbsInput({
     ...baseOpts,
-    insulinLogs: noBefore,
+    history: [],
     archive: [{ t: NOW - 165 * 60_000, value: 77 }],
   });
   assert.equal(fromArchive?.input.glucoseAtMeal, 77);
   const tooFar = buildObservedCarbsInput({
     ...baseOpts,
-    insulinLogs: noBefore,
+    history: [],
     archive: [{ t: NOW - 180 * 60_000, value: 77 }],
   });
   assert.equal(tooFar?.input.glucoseAtMeal, null);
@@ -189,4 +188,22 @@ test("build : le confirmé prime sur l'estimé", () => {
   const b = buildObservedCarbsInput({ ...baseOpts, insulinLogs: [meal({ carbsConfirmedGrams: 120 })] });
   assert.equal(b?.enteredG, 120);
   assert.equal(b?.input.carbsGrams, 120);
+});
+
+test("build : saisie du calculateur sans point capteur → pas de lecture observée", () => {
+  // glucoseBefore = 120 (défaut possible du champ) : jamais utilisé.
+  const b = buildObservedCarbsInput({
+    ...baseOpts,
+    insulinLogs: [meal({ glucoseBefore: 120 })],
+    history: [],
+    archive: [],
+  });
+  assert.ok(b);
+  assert.equal(b.input.glucoseAtMeal, null);
+  assert.equal(observedCarbsRemaining(b.input), null);
+});
+
+test("build : le point capteur prime sur la saisie du calculateur", () => {
+  const b = buildObservedCarbsInput({ ...baseOpts, insulinLogs: [meal({ glucoseBefore: 120 })] });
+  assert.equal(b?.input.glucoseAtMeal, 76);
 });

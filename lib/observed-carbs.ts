@@ -122,9 +122,8 @@ export interface BuiltObservedCarbs {
  * Choisit le repas à lire sur la courbe et assemble `ObservedCarbsInput`.
  *
  * Repas visé : le dernier `InsulinLog` hors correction/split avec ≥ 20 g,
- * à condition qu'il ait entre 90 et 240 min. Glycémie au repas : la saisie
- * du calculateur si > 0, sinon le point d'historique 8h puis d'archive à
- * ±20 min. Glycémie actuelle : UNIQUEMENT la lecture capteur `live` (son
+ * à condition qu'il ait entre 90 et 240 min. Glycémie au repas : capteur
+ * seulement (point d'historique 8h, sinon d'archive, à ±20 min). Glycémie actuelle : UNIQUEMENT la lecture capteur `live` (son
  * âge vient de `live.date`) — jamais un champ de formulaire par défaut.
  * Renvoie null quand aucun repas n'est dans la fenêtre.
  */
@@ -184,15 +183,15 @@ export function buildObservedCarbsInput(opts: {
     (c) => !!c.hypoEventId && inWindow(toMs(c.eatenAt)),
   );
 
-  // Glycémie au repas : saisie > 0, sinon historique 8h, sinon archive (±20 min).
+  // Glycémie au repas : capteur SEULEMENT — historique 8h, sinon archive
+  // (±20 min). Jamais `log.glucoseBefore` : il peut contenir le 120 par
+  // défaut du champ du calculateur. Pas de point capteur → null → pas de
+  // lecture observée (retour au modèle par défaut).
   const log = target.log;
-  let glucoseAtMeal: number | null = log.glucoseBefore > 0 ? log.glucoseBefore : null;
-  if (glucoseAtMeal == null) {
-    glucoseAtMeal = nearestValue(
-      (opts.history ?? []).map((p) => ({ t: toMs(p.date), value: p.value })),
-      target.t,
-    );
-  }
+  let glucoseAtMeal = nearestValue(
+    (opts.history ?? []).map((p) => ({ t: toMs(p.date), value: p.value })),
+    target.t,
+  );
   if (glucoseAtMeal == null) glucoseAtMeal = nearestValue(opts.archive ?? [], target.t);
 
   // Glycémie actuelle : capteur seulement.

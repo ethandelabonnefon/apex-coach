@@ -129,3 +129,24 @@ test("estimateLateCarbFactor : variance nulle des restants -> défaut", () => {
   assert.equal(res.mgPerGram, LATE_CARB_DEFAULT);
   assert.equal(res.isDefault, true);
 });
+
+test("estimateLateCarbFactor : repas incertain (sampleable false) -> pas un échantillon", () => {
+  const d = build(REMAININGS.map((r, i) => ({ day: 1 + i, remaining: r })));
+  d.meals[5] = { ...d.meals[5], sampleable: false };
+  const res = estimateLateCarbFactor(d.points, d.meals, d.injections, ISF, new Set());
+  assert.equal(res.sampleNights, 5);
+});
+
+test("estimateLateCarbFactor : repas incertain voisin -> disqualifie quand même le dîner", () => {
+  const d = build(REMAININGS.map((r, i) => ({ day: 1 + i, remaining: r })));
+  // Goûter incertain 30 g, 1 h avant le dîner du 6 : perturbateur.
+  const dinnerMs = new Date(2026, 9, 6, 20, 0).getTime();
+  d.meals.push({
+    injectedAt: new Date(dinnerMs - 60 * MIN).toISOString(),
+    carbsGrams: 30,
+    carbSensitivity: CSF,
+    sampleable: false,
+  });
+  const res = estimateLateCarbFactor(d.points, d.meals, d.injections, ISF, new Set());
+  assert.equal(res.sampleNights, 5);
+});

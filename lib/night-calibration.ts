@@ -327,6 +327,12 @@ export interface LateCarbMeal {
   injectedAt: string;
   carbsGrams: number;
   carbSensitivity: number;
+  /**
+   * false = quantité incertaine : le repas n'est jamais un échantillon du
+   * facteur, mais compte toujours comme perturbateur d'un dîner voisin.
+   * Défaut true.
+   */
+  sampleable?: boolean;
 }
 
 export interface LateCarbFactorResult {
@@ -379,6 +385,7 @@ export function estimateLateCarbFactor(
   const ys: number[] = []; // montée réelle (mg/dL)
 
   for (const meal of mealsMs) {
+    if (meal.sampleable === false) continue;
     if (!(meal.carbsGrams >= 60)) continue;
     const hour = new Date(meal.t).getHours();
     if (hour < 18 || hour > 23) continue;
