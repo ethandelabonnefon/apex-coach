@@ -51,16 +51,34 @@ export const NIGHT_LOG_VERSION = 2;
 
 const NIGHT_LOG_CAP = 60;
 
+/** Log non résolu de la nuit `key`, s'il existe. */
+function unresolvedFor(
+  logs: NightPredictionRecord[],
+  key: string,
+): NightPredictionRecord | undefined {
+  return logs.find(
+    (l) =>
+      l.actualWakeupGlucose === undefined &&
+      nightKeyFor(new Date(l.createdAt).getTime()) === key,
+  );
+}
+
 /**
  * Insère un enregistrement de prédiction : pour une même nuit, le log non
  * résolu est remplacé (le dernier calcul avant le coucher fait foi) ; un log
  * déjà résolu n'est jamais écrasé. Plafond à 60 entrées.
+ *
+ * Coucher confirmé (« Je vais me coucher ») : un clic remplace le log
+ * automatique comme le clic précédent (dernier clic gagne), mais un log
+ * automatique ne remplace JAMAIS un clic — la liste est alors rendue telle
+ * quelle.
  */
 export function upsertNightLog(
   logs: NightPredictionRecord[],
   rec: NightPredictionRecord,
 ): NightPredictionRecord[] {
   const key = nightKeyFor(new Date(rec.createdAt).getTime());
+  if (!rec.bedtimeConfirmed && unresolvedFor(logs, key)?.bedtimeConfirmed) return logs;
   const kept = logs.filter((l) => {
     if (l.actualWakeupGlucose !== undefined) return true;
     return nightKeyFor(new Date(l.createdAt).getTime()) !== key;
@@ -77,7 +95,7 @@ export const NIGHT_LOG_REWRITE_DELTA = 5;
  * Faut-il (ré)écrire le log de réveil de la nuit en cours ? Oui s'il n'y a
  * pas encore de log non résolu pour cette nuit, si la dernière écriture a
  * ≥ 15 min, ou si la prédiction a bougé d'au moins 5 mg/dL. Jamais pour une
- * prédiction non finie.
+ * prédiction non finie, ni quand la nuit a un coucher confirmé.
  */
 export function shouldWriteNightLog(
   logs: NightPredictionRecord[],
@@ -85,16 +103,28 @@ export function shouldWriteNightLog(
   nowMs: number,
 ): boolean {
   if (!Number.isFinite(predicted)) return false;
-  const tonight = nightKeyFor(nowMs);
-  const current = logs.find(
-    (l) =>
-      l.actualWakeupGlucose === undefined &&
-      nightKeyFor(new Date(l.createdAt).getTime()) === tonight,
-  );
+  const current = unresolvedFor(logs, nightKeyFor(nowMs));
   if (!current) return true;
+  // Le coucher confirmé fait foi : l'automatique ne le réécrit plus.
+  if (current.bedtimeConfirmed) return false;
   const ageMs = nowMs - new Date(current.createdAt).getTime();
   if (!(ageMs < NIGHT_LOG_REWRITE_MIN * 60_000)) return true;
   return Math.abs(predicted - current.predictedWakeupGlucose) >= NIGHT_LOG_REWRITE_DELTA;
+}
+
+/**
+ * Coucher confirmé de la nuit en cours (clic « Je vais me coucher »), ou
+ * `undefined`. Un log déjà résolu compte aussi : c'est toujours le coucher
+ * de cette nuit.
+ */
+export function confirmedBedtimeFor(
+  logs: NightPredictionRecord[],
+  nowMs: number,
+): NightPredictionRecord | undefined {
+  const tonight = nightKeyFor(nowMs);
+  return logs.find(
+    (l) => l.bedtimeConfirmed === true && nightKeyFor(new Date(l.createdAt).getTime()) === tonight,
+  );
 }
 
 /**

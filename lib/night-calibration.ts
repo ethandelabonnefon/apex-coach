@@ -243,6 +243,11 @@ export interface NightPredictionRecord {
   errorMgDl?: number;
   /** Version du format du log (2 = réécrit jusqu'au coucher). */
   version?: number;
+  /**
+   * Prédiction OFFICIELLE de la nuit : calculée au clic « Je vais me
+   * coucher ». L'enregistrement automatique ne l'écrase plus.
+   */
+  bedtimeConfirmed?: boolean;
 }
 
 /**

@@ -163,3 +163,62 @@ test("shouldWriteNightLog : prédiction non finie -> jamais", () => {
   assert.equal(shouldWriteNightLog([], Infinity, ms(28, 22)), false);
   assert.equal(shouldWriteNightLog([wlog(ms(28, 21), 120)], NaN, ms(28, 22)), false);
 });
+
+// ─── Coucher confirmé (« Je vais me coucher ») ─────────────────────────
+
+import { confirmedBedtimeFor } from "./night-review";
+
+const clog = (createdMs: number, predicted: number, extra: Partial<NightPredictionRecord> = {}) => ({
+  ...wlog(createdMs, predicted),
+  bedtimeConfirmed: true,
+  ...extra,
+});
+
+test("shouldWriteNightLog : log confirmé de la nuit -> jamais réécrit par l'automatique", () => {
+  // Même à +60 min et avec 50 mg/dL d'écart.
+  assert.equal(shouldWriteNightLog([clog(ms(28, 22), 120)], 170, ms(28, 23)), false);
+  // Passé minuit : toujours la même nuit.
+  assert.equal(shouldWriteNightLog([clog(ms(28, 23), 120)], 70, ms(29, 0, 30)), false);
+  // Confirmé d'une AUTRE nuit : ne bloque pas.
+  assert.equal(shouldWriteNightLog([clog(ms(27, 23), 120)], 120, ms(28, 22)), true);
+  // Confirmé déjà résolu : ne bloque pas non plus.
+  assert.equal(
+    shouldWriteNightLog([clog(ms(28, 21), 120, { actualWakeupGlucose: 110 })], 120, ms(28, 22)),
+    true,
+  );
+});
+
+test("upsertNightLog : un clic remplace le log automatique de la nuit", () => {
+  const auto = rec("auto", new Date(2026, 9, 27, 21, 0));
+  const click = rec("click", new Date(2026, 9, 27, 22, 30), { bedtimeConfirmed: true });
+  const out = upsertNightLog([auto], click);
+  assert.deepEqual(out.map((r) => r.id), ["click"]);
+});
+
+test("upsertNightLog : un nouveau clic remplace le précédent (dernier clic gagne)", () => {
+  const c1 = rec("c1", new Date(2026, 9, 27, 22, 30), { bedtimeConfirmed: true });
+  const c2 = rec("c2", new Date(2026, 9, 28, 0, 15), { bedtimeConfirmed: true });
+  const out = upsertNightLog([c1], c2);
+  assert.deepEqual(out.map((r) => r.id), ["c2"]);
+});
+
+test("upsertNightLog : l'automatique ne remplace jamais un clic", () => {
+  const c1 = rec("c1", new Date(2026, 9, 27, 22, 30), { bedtimeConfirmed: true });
+  const auto = rec("auto", new Date(2026, 9, 27, 23, 0));
+  const other = rec("other", new Date(2026, 9, 26, 23, 0));
+  const out = upsertNightLog([c1, other], auto);
+  assert.deepEqual(out.map((r) => r.id), ["c1", "other"]);
+});
+
+test("confirmedBedtimeFor : le clic de la nuit en cours, y compris après minuit", () => {
+  const c = clog(ms(28, 22, 40), 115);
+  assert.equal(confirmedBedtimeFor([c], ms(28, 23))?.id, c.id);
+  assert.equal(confirmedBedtimeFor([c], ms(29, 1, 30))?.id, c.id);
+  // Log automatique de la nuit : pas un coucher confirmé.
+  assert.equal(confirmedBedtimeFor([wlog(ms(28, 22), 115)], ms(28, 23)), undefined);
+});
+
+test("confirmedBedtimeFor : un clic d'une autre nuit -> undefined", () => {
+  assert.equal(confirmedBedtimeFor([clog(ms(27, 23), 115)], ms(28, 22)), undefined);
+  assert.equal(confirmedBedtimeFor([], ms(28, 22)), undefined);
+});
