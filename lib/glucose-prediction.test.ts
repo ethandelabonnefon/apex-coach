@@ -20,6 +20,7 @@ import {
   carbSensitivity,
   predictGlucoseCurve,
   buildPredictionAdvice,
+  type PredictionEvent,
 } from "./glucose-prediction";
 
 // Midi (12:00 local) → l'horizon 8h reste hors fenêtre dawn (4h-8h).
@@ -571,3 +572,85 @@ test("effort à venir : le prélèvement est modulé par l'insuline active au d�
   assert.equal(impactOf("running", 30, 0), -30);
   assert.equal(impactOf("muscu", 60, 0), 40, "la muscu monte, insuline ou pas");
 });
+
+// ── Part glucides observée (glucides-restants-nuit, tâche 2) ──────────
+{
+  const OBS_BASE = 100;
+  const obsEv = { minutesAgo: 150, carbsGrams: 140, observedRemainingG: 57, lateCarbMgPerG: 1.5 };
+  const at = (events: any[], m: number) =>
+    predictGlucoseCurve({ currentGlucose: OBS_BASE, trendArrow: 3, events, isf: 100, nowMs: 0, horizonMinutes: 480 })
+      .curve.find((p) => p.minute === m)!.value;
+
+  test("observedRemainingG remplace carbGlucoseRise (montée linéaire + plateau)", () => {
+    assert.ok(Math.abs(at([obsEv], 180) - (OBS_BASE + 85.5)) <= 1);
+    assert.ok(Math.abs(at([obsEv], 90) - (OBS_BASE + 42.75)) <= 1);
+    assert.ok(Math.abs(at([obsEv], 360) - (OBS_BASE + 85.5)) <= 1);
+  });
+
+  test("observedRemainingG : l'IOB du bolus propre de l'événement est ignoré, un autre bolus agit", () => {
+    // 9 U il y a 150 min sur le repas observé : son IOB est déjà dans le facteur net.
+    const withOwnBolus = { ...obsEv, units: 9 };
+    for (const m of [30, 90, 180, 360]) {
+      assert.equal(at([withOwnBolus], m), at([obsEv], m), `minute ${m}`);
+    }
+    // Un bolus séparé (correction / dose du coucher) fait toujours baisser.
+    const correction = { minutesAgo: 0, units: 1 };
+    assert.ok(at([withOwnBolus, correction], 180) < at([withOwnBolus], 180) - 50);
+  });
+
+  test("observedRemainingG : pas de montée FPU propre (déjà dans la montée nette), le split garde sa baisse", () => {
+    const fatty = { ...obsEv, fatGrams: 40, proteinGrams: 30 };
+    for (const m of [30, 90, 180, 360, 480]) {
+      assert.equal(at([fatty], m), at([obsEv], m), `minute ${m}`);
+    }
+    // Sans part observée, les lipides font toujours monter.
+    const plain = { minutesAgo: 150, carbsGrams: 140 };
+    assert.ok(at([{ ...plain, fatGrams: 40 }], 360) > at([plain], 360));
+    // Un split en attente fait toujours baisser la part observée.
+    const withSplit = predictGlucoseCurve({
+      currentGlucose: OBS_BASE, trendArrow: 3, events: [fatty], isf: 100, nowMs: 0, horizonMinutes: 480,
+      pendingSplit: { units: 2, minutesUntil: 30 },
+    }).curve.find((p) => p.minute === 360)!.value;
+    assert.ok(withSplit < at([fatty], 360) - 50, `split ${withSplit}`);
+  });
+
+  test("queue du bolus propre pondérée : gros reliquat (27/10, 57 g × 1,6 ≥ queue) → poids 0, courbe inchangée", () => {
+    // 9 U il y a 150 min : queue restante ≈ 0,85 U × 100 ≈ 85 mg/dL ≤ 57 × 1,6 = 91.
+    const big = { ...obsEv, lateCarbMgPerG: 1.6 };
+    const tail = 9 * 100 * iobRemainingFraction(150, 195, 75);
+    assert.ok(57 * 1.6 >= tail, `scénario : queue ${tail}`);
+    for (const m of [30, 90, 180, 360]) {
+      assert.equal(at([{ ...big, units: 9 }], m), at([big], m), `minute ${m}`);
+    }
+  });
+
+  test("queue du bolus propre pondérée : petit dîner presque absorbé → la queue agit (poids 1 − reliquat/queue)", () => {
+    // 60 g / 6 U il y a 150 min, 5 g lus : queue ≈ 0,57 U × 100 ≈ 57, reliquat 5 × 1,6 = 8.
+    // Départ à 200 : la courbe reste au-dessus de la contre-régulation (étape 7).
+    const at = (events: PredictionEvent[], m: number) =>
+      predictGlucoseCurve({ currentGlucose: 200, trendArrow: 3, events, isf: 100, nowMs: 0, horizonMinutes: 480 })
+        .curve.find((p) => p.minute === m)!.value;
+    const small = { minutesAgo: 150, carbsGrams: 60, observedRemainingG: 5, lateCarbMgPerG: 1.6 };
+    const tail = 6 * 100 * iobRemainingFraction(150, 195, 75);
+    const w = 1 - (5 * 1.6) / tail;
+    const ownDrop = (m: number) =>
+      6 * 100 * (iobRemainingFraction(150, 195, 75) - iobRemainingFraction(150 + m, 195, 75));
+    for (const m of [30, 90, 180, 360]) {
+      const expected = at([small], m) - w * ownDrop(m);
+      assert.ok(Math.abs(at([{ ...small, units: 6 }], m) - expected) <= 1, `minute ${m}`);
+    }
+    // Reliquat nul : toute la queue (poids 1).
+    const none = { ...small, observedRemainingG: 0 };
+    assert.ok(Math.abs(at([{ ...none, units: 6 }], 360) - (at([none], 360) - tail)) <= 1);
+    // Bolus sans queue restante (vieux de 200 min) : poids 0, aucune division par zéro.
+    const old = { ...small, minutesAgo: 200 };
+    assert.equal(at([{ ...old, units: 6 }], 180), at([old], 180));
+  });
+
+  test("sans observedRemainingG, rien ne change", () => {
+    const ev = { minutesAgo: 150, carbsGrams: 140 };
+    const ref = at([ev], 180);
+    assert.equal(at([{ ...ev, lateCarbMgPerG: 3 }], 180), ref);
+    assert.notEqual(at([obsEv], 180), ref);
+  });
+}

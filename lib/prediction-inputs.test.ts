@@ -14,7 +14,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildPredictionEvents } from "./prediction-inputs";
+import { buildPredictionEvents, withObservedCarbs } from "./prediction-inputs";
 import type { InsulinLog } from "@/types";
 
 const RATIOS = { morning: 6.7, lunch: 10, snack: 8.3, dinner: 10 };
@@ -77,4 +77,28 @@ test("buildPredictionEvents : 0 g confirmé est une valeur, pas un absent", () =
     ratios: RATIOS,
   });
   assert.equal(evt.carbsGrams, 0);
+});
+
+test("buildPredictionEvents renseigne sourceId", () => {
+  const now = Date.now();
+  const evs = buildPredictionEvents({
+    insulinLogs: [log({ id: "L9", injectedAt: new Date(now - 30 * 60_000) })],
+    carbEntries: [{ id: "C7", carbsGrams: 20, eatenAt: new Date(now - 10 * 60_000).toISOString() } as any],
+    isf: 100,
+    ratios: RATIOS,
+    nowMs: now,
+  });
+  assert.deepEqual(evs.map((e) => e.sourceId).sort(), ["C7", "L9"]);
+});
+
+test("withObservedCarbs ne modifie que l'événement ciblé, sans muter", () => {
+  const a = { sourceId: "a", minutesAgo: 10, carbsGrams: 50 };
+  const b = { sourceId: "b", minutesAgo: 20, carbsGrams: 60 };
+  const input = [a, b];
+  const out = withObservedCarbs(input, "b", 30, 2);
+  assert.equal(out[0], a);
+  assert.equal(out[1].observedRemainingG, 30);
+  assert.equal(out[1].lateCarbMgPerG, 2);
+  assert.equal((b as any).observedRemainingG, undefined);
+  assert.notEqual(out, input);
 });

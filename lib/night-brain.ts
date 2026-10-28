@@ -28,8 +28,18 @@ import {
   type BedtimeAdvice,
   type BedtimePrediction,
 } from "./bedtime-advisor";
+import {
+  findBedtimeDose,
+  summarizeCurve,
+  NIGHT_CEILING,
+  NIGHT_FLOOR,
+  type CurveSummary,
+} from "./bedtime-dose";
 
 // ───────────────────────────────────────────────────────────────────────
+
+/** Glucides observés minimum (g) pour afficher l'étape « à digérer ». */
+export const DIGESTING_MIN_G = 10;
 
 export interface NightBrainInput extends BedtimeAdvisorInput {
   /**
@@ -61,9 +71,52 @@ export interface NightBrainInput extends BedtimeAdvisorInput {
      */
     uncertain: boolean;
   };
+
+  /**
+   * Glucides du repas encore à digérer, LUS sur la courbe (bilan de masse,
+   * lib/observed-carbs.ts). Présent → étape « à digérer » à la place de
+   * l'alerte déficit de `mealCoverage` (la courbe a déjà tranché).
+   */
+  observedCarbs?: { remainingG: number; enteredG: number; uncertain: boolean };
+
+  /**
+   * Âge (min) de la lecture `currentGlucose`. Absent ou > 15 → aucune dose
+   * proposée : on ne dose jamais sur une valeur par défaut de champ.
+   */
+  glucoseAgeMin?: number;
+
+  /**
+   * ms du PLUS ANCIEN glucide libre (`CarbEntry` : re-sucrage ou collation,
+   * toute taille, avec ou sans libellé) pris dans [maintenant − 240 min,
+   * maintenant]. Présent → aucune dose ce soir : on ne répond jamais par de
+   * l'insuline à des glucides de re-sucrage, et ils faussent la prévision.
+   */
+  recentCarbEntryAt?: number;
+}
+
+/** Fenêtre (min) pendant laquelle un glucide libre bloque toute dose du coucher. */
+export const RECENT_CARBS_NO_DOSE_MIN = 240;
+
+/**
+ * ms du plus ancien `CarbEntry` pris dans [maintenant − 240 min, maintenant]
+ * (toute taille, tout libellé, avec ou sans hypoEventId), sinon undefined.
+ * Source unique pour `recentCarbEntryAt` (page /diabete et rejeu).
+ */
+export function earliestRecentCarbEntryMs(
+  carbEntries: { eatenAt: string | Date }[] | undefined,
+  nowMs: number,
+): number | undefined {
+  let earliest: number | undefined;
+  for (const c of carbEntries ?? []) {
+    const t = c.eatenAt instanceof Date ? c.eatenAt.getTime() : new Date(c.eatenAt).getTime();
+    if (!Number.isFinite(t) || t > nowMs || nowMs - t > RECENT_CARBS_NO_DOSE_MIN * 60_000) continue;
+    if (earliest === undefined || t < earliest) earliest = t;
+  }
+  return earliest;
 }
 
 export type NightStepKind =
+  | "digesting"
   | "coverage"
   | "eat-now"
   | "split-keep"
@@ -90,6 +143,8 @@ export interface NightStep {
   tone: "success" | "warning" | "error" | "info";
   headline: string;
   detail: string;
+  /** Mise en garde affichée au-dessus du titre (ex. quantité incertaine). */
+  warning?: string;
   action?: NightStepAction;
 }
 
@@ -110,8 +165,10 @@ export interface NightPlan {
 const EVENING_HYPO_TARGET = 95;
 /** Cible d'une collation préventive (hypo prédite, pas encore arrivée). */
 const PREVENTIVE_TARGET = 100;
-/** Cible d'atterrissage au réveil pour une correction du soir (buffer anti-hypo). */
-const EVENING_TARGET = 120;
+/** Cible d'atterrissage au réveil — mode legacy (sans `events`) uniquement. */
+const LEGACY_EVENING_TARGET = 120;
+/** Âge max (min) d'une lecture pour proposer une dose. */
+const MAX_GLUCOSE_AGE_FOR_DOSE_MIN = 15;
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -176,7 +233,9 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
     const grams = Math.round(carbsRemainingG);
     // Quantité incertaine → muet sur la dose (pas de branche déficit),
     // jamais silencieux sur l'hypo (la branche excès reste émise).
-    if (status === "deficit" && !uncertain) {
+    // Glucides observés sur la courbe → l'étape « à digérer » remplace
+    // l'alerte déficit (même sujet, chiffre plus fiable).
+    if (status === "deficit" && !uncertain && !input.observedCarbs) {
       coverageStep = {
         id: "coverage",
         order: 0,
@@ -195,6 +254,35 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
         detail: `Surplus ~${balanceU.toFixed(1).replace(".", ",")}U pour les ~${grams}g qu'il te reste à digérer → risque de baisse. Garde du sucre à portée et surveille.`,
       };
     }
+  }
+
+  // ── Glucides du repas lus sur la courbe ──────────────────────────────
+  const baseSummary: CurveSummary | undefined =
+    advice.curve && advice.curve.length > 1 ? summarizeCurve(advice.curve, nowMs) : undefined;
+  let digestingStep: NightStep | undefined;
+  // Sous 10 g, rien d'utile à dire. Le pic cité = max de TOUTE la courbe
+  // future (minute > 0), pas le pic « plafond » de `summarizeCurve` qui ne
+  // regarde qu'à partir de T+2h.
+  const futureCurve = advice.curve?.filter((p) => p.minute > 0) ?? [];
+  if (input.observedCarbs && input.observedCarbs.remainingG >= DIGESTING_MIN_G) {
+    const g = Math.round(input.observedCarbs.remainingG);
+    const peak = futureCurve.length > 0
+      ? (() => {
+          const p = futureCurve.reduce((a, b) => (b.value > a.value ? b : a));
+          return { value: p.value, atMs: p.at ?? nowMs + p.minute * 60_000 };
+        })()
+      : (() => {
+          const p = predictions.reduce((a, b) => (b.glucose > a.glucose ? b : a));
+          return { value: p.glucose, atMs: nowMs + p.offsetHours * 3600_000 };
+        })();
+    digestingStep = {
+      id: "digesting",
+      order: 0,
+      kind: "digesting",
+      tone: "info",
+      headline: `Il reste ~${g} g de ton repas à digérer`,
+      detail: `Ça va monter jusqu'à ~${Math.round(peak.value)} mg/dL vers ${hourLabel(peak.atMs)} si tu ne fais rien.`,
+    };
   }
 
   const liveLow = input.currentGlucose < 80;
@@ -289,8 +377,125 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
     }
   }
 
-  // ── ÉTAPE C — Correction / attente (jamais si on est déjà bas) ───────
-  if (!liveLow) {
+  // ── ÉTAPE C — Dose du coucher / attente (jamais si on est déjà bas) ──
+  let doseStepEmitted = false;
+  let doseActionEmitted = false;
+  /** La recherche a conclu que 0 U tient déjà la nuit (pic ≤ 130, bas ≥ 80). */
+  let doseNone = false;
+  const recentCarbsAt =
+    input.recentCarbEntryAt !== undefined &&
+    Number.isFinite(input.recentCarbEntryAt) &&
+    input.recentCarbEntryAt <= nowMs &&
+    nowMs - input.recentCarbEntryAt <= RECENT_CARBS_NO_DOSE_MIN * 60_000
+      ? input.recentCarbEntryAt
+      : undefined;
+  if (recentCarbsAt !== undefined) {
+    // Glucides libres récents : jamais de dose, quel que soit le mode. Si la
+    // glycémie est basse, les étapes hypo prennent le relais (pas de ligne).
+    if (!liveLow) {
+      steps.push({
+        id: "correction",
+        order: order++,
+        kind: "correction",
+        tone: "info",
+        headline: "Pas de dose ce soir : tu as pris des glucides récemment",
+        detail: `Les glucides pris depuis ${hourLabel(recentCarbsAt)} (resucrage ou collation) faussent la prévision. Recontrôle vers ${hourLabel(nowMs + 90 * 60_000)}.`,
+      });
+      doseStepEmitted = true;
+    }
+  } else if (input.events && baseSummary) {
+    // Mode events : dose entière « pic ≤ 130 à partir de T+2h, plancher 80 »
+    // sur la courbe simulée (lib/bedtime-dose.ts). Pas d'arrondi 0,5 U ni
+    // de plafond 2 U : c'est la courbe qui borne la dose.
+    // Plancher = courbe NORMALE (oct. 2026) : la courbe « sécurité » qui
+    // remettait toute la queue d'IOB du bolus du repas après T+150 est
+    // contredite par les nuits réelles d'Ethan (dérive moyenne −2 mg/dL sur
+    // 2 h, −22 au pire) ; elle bloquait toute dose le 27/10.
+    const glucoseFresh =
+      input.glucoseAgeMin !== undefined && input.glucoseAgeMin <= MAX_GLUCOSE_AGE_FOR_DOSE_MIN;
+    // Garde-fous muets : glycémie basse, ↓↓, lecture absente ou vieille,
+    // repas trop frais (l'étape d'attente prend le relais).
+    const guardsOk =
+      !liveLow &&
+      input.trendArrow !== 1 &&
+      glucoseFresh &&
+      // Repas frais + IOB élevé : la courbe n'est pas fiable, on ne dose pas
+      // dessus (anti-stacking du dîner) — l'étape d'attente prend le relais.
+      !advice.unreliableTooFresh;
+    const canDose = guardsOk && baseSummary.min >= NIGHT_FLOOR;
+    if (canDose) {
+      const events = input.events;
+      const simulate = (u: number): CurveSummary =>
+        u === 0
+          ? baseSummary
+          : summarizeCurve(
+              computeBedtimeAdvice({ ...input, events: [...events, { units: u, minutesAgo: 0 }] })
+                .curve ?? [],
+              nowMs,
+            );
+      const dose = findBedtimeDose(simulate);
+      doseNone = dose.kind === "none";
+      const warning = input.observedCarbs?.uncertain
+        ? `Quantité incertaine : cette dose part des ${Math.round(input.observedCarbs.enteredG)} g que tu as saisis. Si tu as moins mangé, elle peut te faire descendre.`
+        : undefined;
+      const r = Math.round;
+      if (dose.kind === "fits") {
+        const u = dose.units;
+        steps.push({
+          id: "correction",
+          order: order++,
+          kind: "correction",
+          tone: "error",
+          headline: `Fais ${u}U pour rester sous ${NIGHT_CEILING} cette nuit`,
+          detail: `Sans rien, pic prévu ~${r(dose.base.max)} mg/dL vers ${hourLabel(dose.base.maxAtMs)}. Avec ${u}U : pic ~${r(dose.withDose.max)}, point bas ~${r(dose.withDose.min)}.`,
+          warning,
+          action: { kind: "log-correction", label: `${u}U`, quantity: u, unit: "U" },
+        });
+        doseStepEmitted = true;
+        doseActionEmitted = true;
+      } else if (dose.kind === "compromise" && dose.units >= 1) {
+        const u = dose.units;
+        steps.push({
+          id: "correction",
+          order: order++,
+          kind: "correction",
+          tone: "error",
+          headline: `Fais ${u}U : impossible de rester sous ${NIGHT_CEILING} sans risque d'hypo`,
+          detail: `Avec ${u}U tu montes à ~${r(dose.withDose.max)} ; ${u + 1}U te ferait descendre à ~${r(dose.nextUp.min)} vers ${hourLabel(dose.nextUp.minAtMs)}.`,
+          warning,
+          action: { kind: "log-correction", label: `${u}U`, quantity: u, unit: "U" },
+        });
+        doseStepEmitted = true;
+        doseActionEmitted = true;
+      } else if (dose.kind === "compromise") {
+        steps.push({
+          id: "correction",
+          order: order++,
+          kind: "correction",
+          tone: "info",
+          headline: "Pas de correction possible sans risque d'hypo",
+          detail: `Pic prévu ~${r(dose.base.max)} vers ${hourLabel(dose.base.maxAtMs)} ; 1U te ferait descendre à ~${r(dose.nextUp.min)} vers ${hourLabel(dose.nextUp.minAtMs)}.`,
+        });
+        doseStepEmitted = true;
+      }
+    }
+    // « Attends » seulement si aucune étape de dose n'a été produite : IOB à
+    // laisser agir (wait-iob) ou repas trop récent pour prédire (monitor).
+    const waitReco =
+      advice.recommendation.type === "wait-iob" ||
+      (advice.unreliableTooFresh && advice.recommendation.type === "monitor");
+    if (!doseStepEmitted && !liveLow && waitReco) {
+      steps.push({
+        id: "wait",
+        order: order++,
+        kind: "wait",
+        tone: "info",
+        headline: advice.recommendation.headline,
+        detail: advice.recommendation.detail,
+      });
+    }
+  } else if (!liveLow) {
+    // Mode legacy (sans `events`) : étape C historique, inchangée.
     if (
       advice.recommendation.type === "correction-bolus" &&
       advice.recommendation.action
@@ -299,7 +504,7 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
       // DESSOUS (0,5U près) — la nuit on préfère finir un peu haut qu'en hypo.
       // Plafonnée 2U (garde-fou nocturne).
       const isf = input.isfMgPerU || 100;
-      const rawU = (wakeup.glucose - EVENING_TARGET) / isf;
+      const rawU = (wakeup.glucose - LEGACY_EVENING_TARGET) / isf;
       const units = clamp(Math.floor(rawU * 2) / 2, 0.5, 2);
       const landing = Math.round(wakeup.glucose - units * isf);
       steps.push({
@@ -307,7 +512,7 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
         order: order++,
         kind: "correction",
         tone: "error",
-        headline: `Pour viser ~${EVENING_TARGET} au réveil : fais ${fmt(units)}U`,
+        headline: `Pour viser ~${LEGACY_EVENING_TARGET} au réveil : fais ${fmt(units)}U`,
         detail: `Sans rien, réveil prévu ~${wakeup.glucose} mg/dL. ${fmt(units)}U te ramènent vers ~${landing} mg/dL (arrondi prudent, plafonné 2U la nuit).${freshCaveat ? " Repas récent : reste prudent." : ""}`,
         action: {
           kind: "log-correction",
@@ -325,6 +530,18 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
         headline: advice.recommendation.headline,
         detail: advice.recommendation.detail,
       });
+    }
+  }
+
+  // Une dose proposée garde déjà la courbe ≥ 80 (simulation) : la collation
+  // PRÉVENTIVE (hypo prédite sans la dose) la contredirait → on la retire.
+  // L'hypo réelle (liveLow) bloque la dose, elle n'est jamais concernée.
+  if (doseActionEmitted && !acute) {
+    const i = steps.findIndex((s) => s.kind === "eat-now");
+    if (i >= 0) {
+      steps.splice(i, 1);
+      steps.forEach((s, j) => (s.order = j + 1));
+      order = steps.length + 1;
     }
   }
 
@@ -348,7 +565,9 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
   }
 
   // ── Rien à faire ────────────────────────────────────────────────────
-  if (steps.length === 0 && !coverageStep) {
+  // L'étape « à digérer » n'est qu'un contexte : si la recherche de dose a
+  // conclu que 0 U tient la nuit, il faut quand même la ligne de décision.
+  if (steps.length === 0 && !coverageStep && (!digestingStep || doseNone)) {
     steps.push({
       id: "all-good",
       order: order++,
@@ -362,8 +581,9 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
   }
 
   // L'alerte couverture passe en tête (contexte avant les actions).
-  if (coverageStep) {
-    steps.unshift(coverageStep);
+  const contextSteps = [digestingStep, coverageStep].filter((s): s is NightStep => !!s);
+  if (contextSteps.length > 0) {
+    steps.unshift(...contextSteps);
     steps.forEach((s, i) => (s.order = i + 1));
   }
 

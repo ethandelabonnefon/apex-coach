@@ -15,6 +15,11 @@
  *    calibrée terrain (~10 itérations) : glucides en absorption linéaire +
  *    montée FPU avec le MÊME facteur 6 que le calculateur de dose
  *    (insulin-calculator.ts) et le bedtime-advisor. Cohérence dose↔prédiction.
+ *    Variante OBSERVÉE : si un événement porte `observedRemainingG` (glucides
+ *    restants déduits de la glycémie mesurée), la montée glucides future n'est
+ *    plus la courbe fixe de 195 min mais ce reliquat étalé linéairement sur
+ *    OBS_SPREAD_MIN. FPU inchangé ; l'IOB propre de cet événement n'est plus
+ *    retiré (le facteur observé est net de ce bolus) — les autres bolus oui.
  *  • ISF : aucune valeur en dur. Le vrai ISF d'Ethan (100 mg/dL/U) est passé
  *    par l'appelant depuis DiabetesConfig — surtout PAS le 35 de la spec.
  *  • Basale : aucun terme soustrait ici (le modèle basal de la spec est faux
@@ -396,6 +401,9 @@ function defaultDawnBump(hourOfDay: number): number {
   return 0;
 }
 
+/** Étalement linéaire (min) des glucides restants observés. */
+export const OBS_SPREAD_MIN = 180;
+
 /** Un événement insuline+repas (typiquement un InsulinLog) en cours d'effet. */
 export interface PredictionEvent {
   /** Minutes écoulées depuis l'injection / le début du repas. */
@@ -413,6 +421,12 @@ export interface PredictionEvent {
    * Garantit qu'un bolus bien dosé annule la montée. Défaut : ISF/10.
    */
   carbSensitivity?: number;
+  /** Id de la source (InsulinLog / CarbEntry) — pour y rattacher une observation. */
+  sourceId?: string;
+  /** Glucides restants observés (g) : remplace la montée glucides future. */
+  observedRemainingG?: number;
+  /** Facteur appris (mg/dL/g) pour les glucides observés. Défaut 1.5. */
+  lateCarbMgPerG?: number;
 }
 
 /** 2e dose (split FPU) encore à venir, couplée à la montée FPU pour la nette. */
@@ -613,6 +627,29 @@ export interface GlucosePrediction {
   unreliableTooFresh: boolean;
 }
 
+/**
+ * Poids (0–1) de la queue d'IOB du bolus PROPRE d'un événement observé.
+ *
+ * Sur un gros dîner, le reliquat de glucides masque la queue du bolus : le
+ * facteur appris est net de ce bolus (27/10 : 57 g × 1,6 = 91 ≥ queue de
+ * 0,85 U × 100 = 85 → poids 0, courbe inchangée). Sur un petit dîner déjà
+ * presque absorbé (60 g / 6 U, 5 g restants), le reliquat ne la masque plus
+ * et la queue doit compter (sinon une dose au coucher passe sur une courbe
+ * qui ignore ~57 mg/dL de baisse à venir).
+ *
+ *   poids = max(0, 1 − reliquat × facteur / (unités × ISF × IOB restant))
+ *
+ * Queue nulle (pas d'unités ou IOB épuisé) → poids 0 (rien à retirer).
+ * Une seule courbe sert au pic ET au plancher.
+ */
+function ownTailWeight(ev: PredictionEvent, isf: number, dia: number, peak: number): number {
+  const units = ev.units ?? 0;
+  const tail = units * isf * iobRemainingFraction(ev.minutesAgo, dia, peak);
+  if (!(tail > 0)) return 0;
+  const masked = (ev.observedRemainingG ?? 0) * (ev.lateCarbMgPerG ?? 1.5);
+  return Math.max(0, 1 - masked / tail);
+}
+
 /** Décomposition d'un point (utile transparence UI / debug). */
 function effectsAt(
   minutesAhead: number,
@@ -635,18 +672,41 @@ function effectsAt(
   for (const ev of input.events) {
     const csf = ev.carbSensitivity ?? carbSensitivity(isf, 10);
     // Montée glucides (annulée par le bolus si bien dosé)
-    glucose += carbGlucoseRise(ev.carbsGrams ?? 0, ev.minutesAgo, minutesAhead, csf);
-    // Montée FPU (cumulée pour nette éventuelle avec le split)
-    fpuRiseTotal += fpuGlucoseRise(
+    if (ev.observedRemainingG !== undefined) {
+      // Part observée : reliquat étalé linéairement (plateau au-delà).
+      // Le facteur a été ajusté sur la montée NETTE réelle, bolus restant de
+      // ce repas compris : l'IOB propre de cet événement n'est retiré plus
+      // bas que pondéré (`ownTailWeight`), cf. nuit du 27/10.
+      // Repli `?? 1.5` jamais atteint (withObservedCarbs fixe toujours le
+      // facteur) ; la valeur de référence est LATE_CARB_DEFAULT
+      // (lib/night-calibration.ts, 1,6) — pas d'import ici (import circulaire).
+      glucose +=
+        ev.observedRemainingG *
+        (ev.lateCarbMgPerG ?? 1.5) *
+        Math.min(1, Math.max(0, minutesAhead) / OBS_SPREAD_MIN);
+    } else {
+      glucose += carbGlucoseRise(ev.carbsGrams ?? 0, ev.minutesAgo, minutesAhead, csf);
+    }
+    // Montée FPU (cumulée pour nette éventuelle avec le split) — sauf part
+    // observée : l'effet des lipides de ce repas est déjà dans la montée
+    // nette sur laquelle le facteur a été ajusté (sinon double comptage).
+    // Le split en attente garde sa baisse (étape 3).
+    if (ev.observedRemainingG === undefined) fpuRiseTotal += fpuGlucoseRise(
       ev.fatGrams ?? 0,
       ev.proteinGrams ?? 0,
       ev.minutesAgo,
       minutesAhead,
       csf,
     );
-    // Baisse IOB du bolus de cet événement
+    // Baisse IOB du bolus de cet événement. Part observée : pondérée par
+    // `ownTailWeight`. Les autres bolus (corrections, dose simulée)
+    // s'appliquent en plein.
     if (ev.units && ev.units > 0) {
-      insulinDrop += iobGlucoseDrop([{ units: ev.units, minutesAgo: ev.minutesAgo }], minutesAhead, isf, dia, peak);
+      const w = ev.observedRemainingG === undefined ? 1 : ownTailWeight(ev, isf, dia, peak);
+      if (w > 0) {
+        insulinDrop +=
+          w * iobGlucoseDrop([{ units: ev.units, minutesAgo: ev.minutesAgo }], minutesAhead, isf, dia, peak);
+      }
     }
   }
 

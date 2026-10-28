@@ -10,7 +10,7 @@ import {
   MAX_PLANNED_DURATION_MIN,
   inferMealTimeFromClock,
 } from "@/lib/insulin-calculator";
-import { activeIOB } from "@/lib/glucose-prediction";
+import { activeIOB, carbSensitivity } from "@/lib/glucose-prediction";
 import {
   computeCarbsOnBoard,
   suggestTopUp,
@@ -78,7 +78,21 @@ import {
   POST_SESSION_WHOOP_GRACE_MIN,
 } from "@/lib/post-session-insulin";
 import { reconcileWithWhoop, unconfirmedSessions } from "@/lib/whoop-reconcile";
-import { buildPredictionEvents, ratioForMeal } from "@/lib/prediction-inputs";
+import { buildPredictionEvents, ratioForMeal, withObservedCarbs } from "@/lib/prediction-inputs";
+import { buildObservedCarbsInput, observedCarbsRemaining } from "@/lib/observed-carbs";
+import {
+  excludedNightKeys,
+  filterExcludedNightPoints,
+  nightKeyFor,
+  shouldWriteNightLog,
+  confirmedBedtimeFor,
+  bedtimeDecision,
+  isBedtimePlanDisplayable,
+  BEDTIME_PLAN_DISPLAY_MIN,
+  NIGHT_LOG_VERSION,
+} from "@/lib/night-review";
+import { isLearnable } from "@/lib/insulin-log-values";
+import NightReviewCard from "@/components/diabete/NightReviewCard";
 import { capDoseByPrediction } from "@/lib/dose-capping";
 import { useWhoop } from "@/hooks/useWhoop";
 import NightBrain from "@/components/diabete/NightBrain";
@@ -88,8 +102,9 @@ import {
   estimateDawnCurve,
   resolveNightLogs,
   estimateWakeupBias,
+  estimateLateCarbFactor,
 } from "@/lib/night-calibration";
-import { computeNightPlan } from "@/lib/night-brain";
+import { computeNightPlan, earliestRecentCarbEntryMs, type NightPlan } from "@/lib/night-brain";
 import HypoLogger from "@/components/diabete/HypoLogger";
 import HypoFeedback from "@/components/diabete/HypoFeedback";
 import { useHypoTracker } from "@/hooks/useHypoTracker";
@@ -330,7 +345,10 @@ export default function DiabetePage() {
   const cancelDeclaredSportSession = useStore((s) => s.cancelDeclaredSportSession);
   // Boucle d'auto-apprentissage de la prédiction nuit (prédit vs réel)
   const nightPredictionLogs = useStore((s) => s.nightPredictionLogs);
-  const addNightPredictionLog = useStore((s) => s.addNightPredictionLog);
+  const upsertNightPredictionLog = useStore((s) => s.upsertNightPredictionLog);
+  // Avis du matin : nuits exclues de l'apprentissage (alcool, maladie…)
+  const nightReviews = useStore((s) => s.nightReviews);
+  const setNightReview = useStore((s) => s.setNightReview);
   const setNightPredictionLogs = useStore((s) => s.setNightPredictionLogs);
 
   // Phase H — Auto-enrichissement des checkpoints des hypos en cours.
@@ -579,7 +597,18 @@ export default function DiabetePage() {
   // Déclaré ici (et non plus bas) : le plafonnement prédictif (cappedDose,
   // ci-dessous) a besoin de `liveGlucose?.value` avant sa propre déclaration
   // dans l'ordre du fichier — jamais de `currentGlucose` (état par défaut).
-  const { current: liveGlucose, refetch: refetchGlucose, lastFetchedAt: lastLiveFetch } = useGlucose({ mode: "current" });
+  //
+  // Mode « history » (oct. 2026) : le plan de nuit lit l'historique 8h pour
+  // retrouver la glycémie au repas. Aucune requête Abbott en plus : la
+  // courbe 8h (GlucoseChart, toujours montée) tire déjà ce même endpoint,
+  // et le hook partage un seul fetch en vol par endpoint — la page ne tire
+  // donc plus son propre `/api/glucose/current` à chaque intervalle.
+  const {
+    current: liveGlucose,
+    history: liveHistory,
+    refetch: refetchGlucose,
+    lastFetchedAt: lastLiveFetch,
+  } = useGlucose({ mode: "history" });
   const liveValueForBolus = liveGlucose?.value;
   const liveTrend = trendStringToNumber(liveGlucose?.trend);
 
@@ -1600,33 +1629,80 @@ export default function DiabetePage() {
   const basalChangeMs = profile.basalDoseChangedAt
     ? new Date(profile.basalDoseChangedAt).getTime()
     : null;
+  // Nuits « non comptées » par Ethan (avis du matin) : leurs points de 18h à
+  // 12h et leur log de réveil sortent de TOUTES les calibrations.
+  const excludedNights = useMemo(() => excludedNightKeys(nightReviews), [nightReviews]);
   const nightCalibration = useMemo(() => {
     const allPts = archivePoints as ArchivedPoint[];
-    const pts = basalChangeMs ? allPts.filter((p) => p.t >= basalChangeMs) : allPts;
-    const injections = insulinLogs
-      .filter((l) => !basalChangeMs || new Date(l.injectedAt).getTime() >= basalChangeMs)
-      .map((l) => ({
-        injectedAt: new Date(l.injectedAt).toISOString(),
-        units: l.units,
-      }));
+    const pts = filterExcludedNightPoints(
+      basalChangeMs ? allPts.filter((p) => p.t >= basalChangeMs) : allPts,
+      excludedNights,
+    );
+    const logsSinceBasal = insulinLogs.filter(
+      (l) => !basalChangeMs || new Date(l.injectedAt).getTime() >= basalChangeMs,
+    );
+    const injections = logsSinceBasal.map((l) => ({
+      injectedAt: new Date(l.injectedAt).toISOString(),
+      units: l.units,
+    }));
+    // Logs de réveil : format v2 (réécrit jusqu'au coucher) et nuit comptée.
+    // Les logs v1 (figés au premier passage du soir) ne disent rien de
+    // l'heure du coucher : on ne les apprend plus.
     const logsSinceChange = filterLearnableNightLogs(
-      basalChangeMs
+      (basalChangeMs
         ? nightPredictionLogs.filter((l) => new Date(l.createdAt).getTime() >= basalChangeMs)
-        : nightPredictionLogs,
+        : nightPredictionLogs
+      ).filter(
+        (l) =>
+          l.version === NIGHT_LOG_VERSION &&
+          !excludedNights.has(nightKeyFor(new Date(l.createdAt).getTime())),
+      ),
       insulinLogs,
     );
     const drift = estimateNightDrift(pts, injections);
     const dawn = estimateDawnCurve(pts);
     const resolved = resolveNightLogs(logsSinceChange, pts, nowTick);
     const bias = estimateWakeupBias(resolved);
+    // Facteur glucides tardifs : seuls les dîners à quantité fiable servent
+    // d'échantillon ; un repas incertain reste un perturbateur (il disqualifie
+    // le dîner voisin) via `sampleable: false`.
+    const isf = diabetesConfig.insulinSensitivityFactor;
+    const lateCarbMeals = logsSinceBasal
+      .filter((l) => l.mealType !== "correction" && !l.isSplitDose)
+      .map((l) => ({
+        injectedAt: new Date(l.injectedAt).toISOString(),
+        carbsGrams: resolveCarbs(l),
+        carbSensitivity: carbSensitivity(isf, ratioForMeal(diabetesConfig.ratios, l.mealType)),
+        sampleable: isLearnable(l),
+      }));
+    const lateCarb = estimateLateCarbFactor(
+      pts,
+      lateCarbMeals,
+      injections,
+      isf,
+      excludedNights,
+      carbEntries ?? [],
+    );
     return {
       drift,
       dawn,
       bias,
+      lateCarb,
       verifiedNights: resolved.filter((r) => r.errorMgDl !== undefined).length,
       recalibratingSince: basalChangeMs ? profile.basalDoseChangedAt : undefined,
     };
-  }, [archivePoints, insulinLogs, nightPredictionLogs, nowTick, basalChangeMs, profile.basalDoseChangedAt]);
+  }, [
+    archivePoints,
+    insulinLogs,
+    nightPredictionLogs,
+    nowTick,
+    basalChangeMs,
+    profile.basalDoseChangedAt,
+    excludedNights,
+    diabetesConfig.insulinSensitivityFactor,
+    diabetesConfig.ratios,
+    carbEntries,
+  ]);
 
   // Persiste la résolution des prédictions passées (backtest) dès que
   // l'archive permet de remplir de nouvelles nuits.
@@ -1670,13 +1746,41 @@ export default function DiabetePage() {
 
     // Moteur unifié : mêmes événements que la prédiction 8h (bolus + glucides
     // sans insuline) → le plan nuit voit exactement le même contexte.
-    const events = buildPredictionEvents({
+    const baseEvents = buildPredictionEvents({
       insulinLogs,
       carbEntries,
       isf: diabetesConfig.insulinSensitivityFactor,
       ratios: diabetesConfig.ratios,
       nowMs: nowTick,
     });
+    // Glucides restants LUS sur la courbe (90-240 min après le repas) plutôt
+    // que supposés : bilan de masse glycémie / insuline. Lecture actuelle =
+    // capteur seul (`liveGlucose`), jamais le champ du calculateur.
+    const obsBuilt = buildObservedCarbsInput({
+      insulinLogs,
+      carbEntries,
+      history: liveHistory,
+      archive: archivePoints as ArchivedPoint[],
+      live: liveGlucose,
+      nowMs: nowTick,
+      isf: diabetesConfig.insulinSensitivityFactor,
+      ratios: diabetesConfig.ratios,
+      dia: diabetesConfig.insulinActiveDuration,
+    });
+    const obs = obsBuilt ? observedCarbsRemaining(obsBuilt.input) : null;
+    const events =
+      obsBuilt && obs
+        ? withObservedCarbs(
+            baseEvents,
+            obsBuilt.sourceId,
+            obs.remainingG,
+            nightCalibration.lateCarb.mgPerGram,
+          )
+        : baseEvents;
+    const observedCarbs =
+      obsBuilt && obs
+        ? { remainingG: obs.remainingG, enteredG: obsBuilt.enteredG, uncertain: obsBuilt.uncertain }
+        : undefined;
     // Split en attente
     const upcomingSplit = splitDoseReminders
       .filter((r) => r.status === "pending")
@@ -1739,10 +1843,19 @@ export default function DiabetePage() {
               }),
               uncertain: cob.uncertain,
             },
+      observedCarbs,
+      // Âge de la lecture capteur (depuis `liveGlucose.date` uniquement) :
+      // absent ou > 15 min = aucune dose proposée par le plan de nuit.
+      glucoseAgeMin: liveGlucoseAgeMin,
+      // Re-sucrage ou collation dans les 4 h : aucune dose ce soir.
+      recentCarbEntryAt: earliestRecentCarbEntryMs(carbEntries, nowTick),
       nowMs: nowTick,
     };
   }, [
     liveGlucose,
+    liveGlucoseAgeMin,
+    liveHistory,
+    archivePoints,
     currentGlucose,
     trendArrow,
     insulinLogs,
@@ -1779,25 +1892,154 @@ export default function DiabetePage() {
     [bedtimeInput, personalGrg],
   );
 
-  // Backtest : logge UNE prédiction de réveil par nuit (dédup 12h) pour
-  // qu'on puisse la comparer à la glycémie réelle le lendemain et apprendre.
+  // Backtest : UNE prédiction de réveil par nuit, réécrite tant que la
+  // soirée dure (le dernier calcul avant le coucher fait foi), pour la
+  // comparer à la glycémie réelle le lendemain et apprendre. On ne réécrit
+  // que si la valeur prédite a bougé de ≥ 5 mg/dL ou si la dernière
+  // écriture a ≥ 15 min (`shouldWriteNightLog`).
+  // Lecture capteur exigée : une prédiction partie du champ par défaut du
+  // calculateur (120) fausserait le biais appris.
   useEffect(() => {
     if (!isEveningHours) return;
-    const glu = liveGlucose?.value ?? currentGlucose;
-    if (!glu || glu <= 0) return;
-    const last = nightPredictionLogs[0];
-    if (last && Date.now() - new Date(last.createdAt).getTime() < 12 * 3_600_000) return;
+    if (!liveGlucose || !(liveGlucose.value > 0)) return;
     const plan = computeNightPlan(nightBrainInput);
     const wake = plan.predictions[plan.predictions.length - 1];
     if (!wake) return;
-    addNightPredictionLog({
+    const now = Date.now();
+    if (!shouldWriteNightLog(nightPredictionLogs, wake.glucose, now)) return;
+    upsertNightPredictionLog({
       id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(now).toISOString(),
       predictedWakeupGlucose: wake.glucose,
-      wakeupAtMs: Date.now() + 7 * 3_600_000,
+      wakeupAtMs: now + 7 * 3_600_000,
+      version: NIGHT_LOG_VERSION,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEveningHours, nightBrainInput]);
+
+  // ─── « Je vais me coucher » ──────────────────────────────────────
+  // Clic → UNE lecture fraîche (refetch du hook partagé, pas de nouvelle
+  // requête) → plan calculé à l'instant du clic → prédiction de réveil
+  // enregistrée comme OFFICIELLE de la nuit (`bedtimeConfirmed`).
+  //
+  // `refetchGlucose()` résout APRÈS avoir posé la nouvelle lecture dans le
+  // state du hook, mais la closure du handler ne voit pas ce nouveau
+  // `liveGlucose`. On passe donc par une demande en attente : le handler
+  // la passe à « ready » après l'await, et le calcul se fait au rendu
+  // suivant, qui contient la lecture fraîche (même lot de mises à jour).
+  const [bedtimeRequest, setBedtimeRequest] = useState<
+    { clickMs: number; id: string; phase: "reading" | "ready" } | null
+  >(null);
+  const [bedtimeResult, setBedtimeResult] = useState<
+    {
+      id: string;
+      calculatedAtMs: number;
+      plan: NightPlan;
+      /** Âge (min) de la lecture au moment du clic. */
+      readingAgeMin: number;
+      /** Enregistrée comme prédiction officielle (lecture ≤ 15 min). */
+      saveOfficial: boolean;
+      /** Plan indicatif : pourquoi il n'est pas enregistré. */
+      notice?: string;
+    } | null
+  >(null);
+  const [bedtimeError, setBedtimeError] = useState<string | null>(null);
+
+  async function handleGoingToBed() {
+    if (bedtimeRequest) return; // anti double-clic
+    const clickMs = Date.now();
+    setBedtimeError(null);
+    setBedtimeRequest({ clickMs, id: crypto.randomUUID(), phase: "reading" });
+    // Tout le contexte (IOB, glucides, événements) recalculé à l'instant du clic.
+    setNowTick(clickMs);
+    try {
+      await refetchGlucose();
+    } finally {
+      setBedtimeRequest((r) => (r ? { ...r, phase: "ready" } : r));
+    }
+  }
+
+  // Calcul au rendu (état dérivé d'une demande « ready ») : ce rendu
+  // contient la lecture fraîche. Glycémie et âge viennent UNIQUEMENT de
+  // `liveGlucose` — jamais du champ du calculateur (`currentGlucose`).
+  // Décisions (pas de plan / indicatif / officiel) : `bedtimeDecision`.
+  if (bedtimeRequest?.phase === "ready") {
+    const { clickMs, id } = bedtimeRequest;
+    const readMs = liveGlucose ? new Date(liveGlucose.date).getTime() : NaN;
+    const readingAgeMin = (clickMs - readMs) / 60_000;
+    const decision = bedtimeDecision({
+      liveValue: liveGlucose?.value,
+      liveAgeMin: Number.isFinite(readingAgeMin) ? readingAgeMin : undefined,
+    });
+    setBedtimeRequest(null);
+    if (!decision.ok || !liveGlucose) {
+      // Échec : on retire aussi le plan figé d'un clic précédent.
+      setBedtimeResult(null);
+      setBedtimeError(decision.message ?? null);
+    } else {
+      const plan = computeNightPlan({
+        ...nightBrainInput,
+        currentGlucose: liveGlucose.value,
+        trendArrow: trendStringToNumber(liveGlucose.trend),
+        glucoseAgeMin: Math.max(0, readingAgeMin),
+        nowMs: clickMs,
+      });
+      setBedtimeResult({
+        id,
+        calculatedAtMs: clickMs,
+        plan,
+        readingAgeMin,
+        saveOfficial: decision.saveOfficial,
+        notice: decision.message,
+      });
+    }
+  }
+
+  // Enregistrement de la prédiction officielle (effet : écriture du store),
+  // uniquement si la lecture du clic a ≤ 15 min.
+  // `id` stable par clic → un double passage (StrictMode) remplace la même.
+  useEffect(() => {
+    if (!bedtimeResult || !bedtimeResult.saveOfficial) return;
+    const wake = bedtimeResult.plan.predictions[bedtimeResult.plan.predictions.length - 1];
+    if (!wake || !Number.isFinite(wake.glucose)) return;
+    upsertNightPredictionLog({
+      id: bedtimeResult.id,
+      createdAt: new Date(bedtimeResult.calculatedAtMs).toISOString(),
+      predictedWakeupGlucose: wake.glucose,
+      wakeupAtMs: bedtimeResult.calculatedAtMs + 7 * 3_600_000,
+      version: NIGHT_LOG_VERSION,
+      bedtimeConfirmed: true,
+    });
+  }, [bedtimeResult, upsertNightPredictionLog]);
+
+  // Coucher déjà enregistré pour la nuit en cours (après rechargement ou
+  // après expiration du plan figé).
+  const confirmedBedtime = useMemo(() => {
+    const log = confirmedBedtimeFor(nightPredictionLogs, nowTick);
+    return log
+      ? { atMs: new Date(log.createdAt).getTime(), wakeGlucose: log.predictedWakeupGlucose }
+      : null;
+  }, [nightPredictionLogs, nowTick]);
+
+  // Plan figé affiché au plus 20 min, ou tant que sa lecture a ≤ 15 min ;
+  // ensuite la carte repasse au plan en direct (le log reste).
+  const bedtimeDisplayed =
+    bedtimeResult &&
+    isBedtimePlanDisplayable(bedtimeResult.calculatedAtMs, bedtimeResult.readingAgeMin, nowTick)
+      ? {
+          calculatedAtMs: bedtimeResult.calculatedAtMs,
+          plan: bedtimeResult.plan,
+          readingAgeMin: Math.max(0, Math.round(bedtimeResult.readingAgeMin)),
+          // « enregistrée » seulement si l'écriture a vraiment eu lieu.
+          saved: nightPredictionLogs.some((l) => l.id === bedtimeResult.id),
+        }
+      : null;
+  // Avertissement « plan indicatif » : visible 20 min après le clic.
+  const bedtimeNotice =
+    bedtimeResult?.notice &&
+    nowTick - bedtimeResult.calculatedAtMs <= BEDTIME_PLAN_DISPLAY_MIN * 60_000
+      ? bedtimeResult.notice
+      : null;
 
   // Repas loggé récent (calculateur de bolus) à reprendre dans la carte
   // "Ce que tu digères" → Ethan n'a qu'à ajouter un en-cas par-dessus.
@@ -2113,6 +2355,8 @@ export default function DiabetePage() {
       {/* ── NIGHT BRAIN (plan nuit unifié — visible en soirée 20h-2h) ──
           Remplace l'empilement HypoLogger + rappel split + BedtimeAdvisor
           par UNE carte : un plan ordonné et cohérent. */}
+      {/* ── AVIS DU MATIN (5h-12h) : compter la nuit dans les calibrations ? ── */}
+      <NightReviewCard nowMs={nowTick} reviews={nightReviews} onAnswer={setNightReview} />
       {isEveningHours && (
         <>
           <NightBrain
@@ -2124,6 +2368,18 @@ export default function DiabetePage() {
               verifiedNights: nightCalibration.verifiedNights,
               bias: nightCalibration.bias.bias,
               recalibratingSince: nightCalibration.recalibratingSince,
+              lateCarbMgPerGram: nightCalibration.lateCarb.mgPerGram,
+              lateCarbNights: nightCalibration.lateCarb.sampleNights,
+              lateCarbIsDefault: nightCalibration.lateCarb.isDefault,
+              excludedNights: [...excludedNights].sort().reverse(),
+            }}
+            onIncludeNight={(night) => setNightReview(night, true)}
+            bedtime={{
+              onConfirm: handleGoingToBed,
+              reading: bedtimeRequest !== null,
+              result: bedtimeDisplayed,
+              error: bedtimeError ?? bedtimeNotice,
+              confirmed: confirmedBedtime,
             }}
             onLogHypoCarbs={handleNightHypoCarbs}
             onLogCorrection={handleBedtimeCorrection}
