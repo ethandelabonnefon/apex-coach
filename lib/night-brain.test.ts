@@ -365,17 +365,41 @@ test("nuit : glucides observés mais 0 U tient déjà → « Va te coucher » re
   assert.equal(ok.headline, "Va te coucher, rien à ajuster");
 });
 
-test("nuit 27/10 : la queue du bolus de 9 U passe sous 80 → aucune étape de dose", () => {
-  // Avant le plancher « sécurité » : compromis 0 U (« Pas de correction
-  // possible »). Avec la queue d'IOB du bolus du repas, la courbe SANS dose
-  // descend déjà sous 80 → pas d'étape de dose du tout ; l'étape « à
-  // digérer » (courbe normale) reste.
+test("nuit 27/10 : bas sécurité sans dose < 80, pic > 130 → « Pas de correction possible », sans action", () => {
+  // Avec la queue d'IOB du bolus de 9 U, la courbe SANS dose descend déjà
+  // sous 80 (courbe sécurité) alors que le pic normal dépasse 130 : le plan
+  // ne reste pas muet, il dit qu'aucune correction n'est possible.
   const inp = oct27();
-  assert.ok(floorMin(inp, 0, true) < 80, `bas sécurité sans dose : ${floorMin(inp, 0, true)}`);
+  const safeMin = floorMin(inp, 0, true);
+  assert.ok(safeMin < 80, `bas sécurité sans dose : ${safeMin}`);
   assert.ok(floorMin(inp, 0, false) >= 80, `bas normal sans dose : ${floorMin(inp, 0, false)}`);
+  const normalMax = summarizeCurve(computeBedtimeAdvice(inp).curve!, OCT27).max;
+  assert.ok(normalMax > 130, `pic normal ${normalMax}`);
   const plan = computeNightPlan(inp);
-  assert.equal(correctionStep(plan), undefined);
+  const step = correctionStep(plan);
+  assert.ok(step, "la ligne de décision est attendue");
+  assert.equal(step.headline, "Pas de correction possible sans risque d'hypo");
+  assert.equal(step.action, undefined);
+  assert.equal(step.tone, "info");
+  assert.match(
+    step.detail,
+    /^Pic prévu ~\d+ vers \d\d:\d\d ; sans dose, le point bas pourrait déjà descendre vers ~\d+ vers \d\d:\d\d\.$/,
+  );
+  assert.equal(Number(/^Pic prévu ~(\d+)/.exec(step.detail)?.[1]), Math.round(normalMax));
+  assert.equal(Number(/descendre vers ~(\d+)/.exec(step.detail)?.[1]), Math.round(safeMin));
   assert.ok(plan.steps.find((s) => s.kind === "digesting"));
+  assert.equal(plan.steps.find((s) => s.kind === "wait"), undefined);
+});
+
+test("nuit 27/10 : les garde-fous restent muets même si le bas sécurité < 80", () => {
+  for (const over of [
+    { currentGlucose: 75 },
+    { trendArrow: 1 },
+    { glucoseAgeMin: undefined },
+    { glucoseAgeMin: 20 },
+  ] as Partial<NightBrainInput>[]) {
+    assert.equal(correctionStep(computeNightPlan(oct27(over))), undefined, JSON.stringify(over));
+  }
 });
 
 test("nuit : compromis 0 U → « Pas de correction possible », bas cité = courbe sécurité", () => {

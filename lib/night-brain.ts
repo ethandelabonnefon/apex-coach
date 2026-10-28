@@ -374,14 +374,30 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
     const baseFloor = withFloor(baseSummary, safetyEvents);
     const glucoseFresh =
       input.glucoseAgeMin !== undefined && input.glucoseAgeMin <= MAX_GLUCOSE_AGE_FOR_DOSE_MIN;
-    const canDose =
+    // Garde-fous muets : glycémie basse, ↓↓, lecture absente ou vieille,
+    // repas trop frais (l'étape d'attente prend le relais).
+    const guardsOk =
       !liveLow &&
       input.trendArrow !== 1 &&
       glucoseFresh &&
       // Repas frais + IOB élevé : la courbe n'est pas fiable, on ne dose pas
       // dessus (anti-stacking du dîner) — l'étape d'attente prend le relais.
-      !advice.unreliableTooFresh &&
-      baseFloor.min >= NIGHT_FLOOR;
+      !advice.unreliableTooFresh;
+    const canDose = guardsOk && baseFloor.min >= NIGHT_FLOOR;
+    if (guardsOk && !canDose && baseSummary.max > NIGHT_CEILING) {
+      // Le plan ne reste pas muet : sans dose le pic dépasse 130 (courbe
+      // normale) mais le point bas (courbe sécurité) passe déjà sous 80.
+      const r = Math.round;
+      steps.push({
+        id: "correction",
+        order: order++,
+        kind: "correction",
+        tone: "info",
+        headline: "Pas de correction possible sans risque d'hypo",
+        detail: `Pic prévu ~${r(baseSummary.max)} vers ${hourLabel(baseSummary.maxAtMs)} ; sans dose, le point bas pourrait déjà descendre vers ~${r(baseFloor.min)} vers ${hourLabel(baseFloor.minAtMs)}.`,
+      });
+      doseStepEmitted = true;
+    }
     if (canDose) {
       const events = input.events;
       const simulate = (u: number): CurveSummary =>
