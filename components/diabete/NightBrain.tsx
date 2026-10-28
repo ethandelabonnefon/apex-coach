@@ -31,6 +31,7 @@ import {
   AlertTriangle,
   X,
   Minus,
+  Hourglass,
 } from "lucide-react";
 import type { ComponentType } from "react";
 
@@ -74,6 +75,7 @@ const TONE: Record<
 };
 
 const STEP_ICON: Record<NightStep["kind"], ComponentType<{ className?: string }>> = {
+  digesting: Hourglass,
   coverage: AlertTriangle,
   "eat-now": Apple,
   "split-keep": Syringe,
@@ -117,7 +119,10 @@ export default function NightBrain({
   const badges = useMemo(() => {
     let n = 0;
     return plan.steps.map((s) =>
-      s.kind === "all-good" || s.kind === "recheck" || s.kind === "coverage"
+      s.kind === "all-good" ||
+      s.kind === "recheck" ||
+      s.kind === "coverage" ||
+      s.kind === "digesting"
         ? ""
         : String(++n),
     );
@@ -211,6 +216,12 @@ export default function NightBrain({
                       <Icon className={`w-3.5 h-3.5 ${tone.text}`} />
                     </div>
                     <div className="min-w-0 flex-1">
+                      {step.warning && (
+                        <div className="alert mb-2" role="alert">
+                          <AlertTriangle />
+                          <p>{step.warning}</p>
+                        </div>
+                      )}
                       <p className={`text-sm font-semibold ${tone.text} leading-snug`}>
                         {step.headline}
                       </p>

@@ -586,6 +586,17 @@ test("effort à venir : le prélèvement est modulé par l'insuline active au d�
     assert.ok(Math.abs(at([obsEv], 360) - (OBS_BASE + 85.5)) <= 1);
   });
 
+  test("observedRemainingG : l'IOB du bolus propre de l'événement est ignoré, un autre bolus agit", () => {
+    // 9 U il y a 150 min sur le repas observé : son IOB est déjà dans le facteur net.
+    const withOwnBolus = { ...obsEv, units: 9 };
+    for (const m of [30, 90, 180, 360]) {
+      assert.equal(at([withOwnBolus], m), at([obsEv], m), `minute ${m}`);
+    }
+    // Un bolus séparé (correction / dose du coucher) fait toujours baisser.
+    const correction = { minutesAgo: 0, units: 1 };
+    assert.ok(at([withOwnBolus, correction], 180) < at([withOwnBolus], 180) - 50);
+  });
+
   test("sans observedRemainingG, rien ne change", () => {
     const ev = { minutesAgo: 150, carbsGrams: 140 };
     const ref = at([ev], 180);

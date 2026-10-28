@@ -18,7 +18,8 @@
  *    Variante OBSERVÉE : si un événement porte `observedRemainingG` (glucides
  *    restants déduits de la glycémie mesurée), la montée glucides future n'est
  *    plus la courbe fixe de 195 min mais ce reliquat étalé linéairement sur
- *    OBS_SPREAD_MIN. FPU et IOB restent inchangés.
+ *    OBS_SPREAD_MIN. FPU inchangé ; l'IOB propre de cet événement n'est plus
+ *    retiré (le facteur observé est net de ce bolus) — les autres bolus oui.
  *  • ISF : aucune valeur en dur. Le vrai ISF d'Ethan (100 mg/dL/U) est passé
  *    par l'appelant depuis DiabetesConfig — surtout PAS le 35 de la spec.
  *  • Basale : aucun terme soustrait ici (le modèle basal de la spec est faux
@@ -649,7 +650,11 @@ function effectsAt(
     const csf = ev.carbSensitivity ?? carbSensitivity(isf, 10);
     // Montée glucides (annulée par le bolus si bien dosé)
     if (ev.observedRemainingG !== undefined) {
-      // Part observée : reliquat étalé linéairement (plateau au-delà)
+      // Part observée : reliquat étalé linéairement (plateau au-delà).
+      // Le facteur (1,5 par défaut) a été ajusté sur la montée NETTE réelle,
+      // bolus restant de ce repas compris : l'IOB propre de cet événement
+      // est donc déjà dedans et n'est PAS retiré plus bas (sinon double
+      // comptage → creux fictif juste après le coucher, cf. nuit du 27/10).
       glucose +=
         ev.observedRemainingG *
         (ev.lateCarbMgPerG ?? 1.5) *
@@ -665,8 +670,9 @@ function effectsAt(
       minutesAhead,
       csf,
     );
-    // Baisse IOB du bolus de cet événement
-    if (ev.units && ev.units > 0) {
+    // Baisse IOB du bolus de cet événement — sauf part observée (cf. plus
+    // haut). Les autres bolus (corrections, dose simulée) s'appliquent.
+    if (ev.units && ev.units > 0 && ev.observedRemainingG === undefined) {
       insulinDrop += iobGlucoseDrop([{ units: ev.units, minutesAgo: ev.minutesAgo }], minutesAhead, isf, dia, peak);
     }
   }

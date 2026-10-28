@@ -171,3 +171,155 @@ test("nuit : creux transitoire ENTRE deux échantillons → déclenche 'mange ma
     "un creux à 89 mg/dL entre +2h et +4h doit déclencher une étape 'mange maintenant', même si les échantillons +2h/+4h/réveil sont tous ≥ 90",
   );
 });
+
+// ───────────────────────────────────────────────────────────────────────
+// Dose du coucher « pic ≤ 130, plancher 80 » (mode events)
+// ───────────────────────────────────────────────────────────────────────
+
+const OCT27 = new Date("2026-10-27T22:30:00").getTime();
+
+/** Soir du 27/10 : 9 U pour 140 g il y a 2h30, ~57 g lus encore à digérer. */
+function oct27(over: Partial<NightBrainInput> = {}): NightBrainInput {
+  return input({
+    currentGlucose: 94,
+    trendArrow: 3,
+    nowMs: OCT27,
+    glucoseAgeMin: 5,
+    events: [
+      {
+        minutesAgo: 150,
+        units: 9,
+        carbsGrams: 140,
+        carbSensitivity: 10,
+        observedRemainingG: 57,
+        lateCarbMgPerG: 1.5,
+      },
+    ],
+    observedCarbs: { remainingG: 57, enteredG: 140, uncertain: false },
+    ...over,
+  });
+}
+
+const correctionStep = (plan: ReturnType<typeof computeNightPlan>) =>
+  plan.steps.find((s) => s.kind === "correction");
+
+test("nuit 27/10 : glucides restants lus → étape « à digérer », pic sans dose > 130, dose entière ≤ 2 U si proposée", () => {
+  const plan = computeNightPlan(oct27());
+  const dig = plan.steps.find((s) => s.kind === "digesting");
+  assert.ok(dig, "étape « à digérer » attendue");
+  assert.match(dig.headline, /~57 g/);
+  const peak = Number(/jusqu'à ~(\d+) mg\/dL/.exec(dig.detail)?.[1]);
+  assert.ok(peak > 130, `pic sans dose ${peak} attendu > 130`);
+  const step = correctionStep(plan);
+  if (step?.action) {
+    assert.equal(step.action.kind, "log-correction");
+    assert.ok(Number.isInteger(step.action.quantity));
+    assert.ok(step.action.quantity <= 2, `quantity ${step.action.quantity}`);
+  }
+});
+
+test("nuit : dose proposée → plus de collation préventive contradictoire", () => {
+  // 88 ↘, correction 0,5 U il y a 2h, gros reliquat observé : la courbe sans
+  // dose frôle 85 (collation préventive) puis monte haut ; 1 U tient ≥ 80.
+  const at = (glucoseAgeMin: number | undefined) =>
+    computeNightPlan(
+      oct27({
+        currentGlucose: 88,
+        trendArrow: 2,
+        glucoseAgeMin,
+        events: [
+          { minutesAgo: 120, units: 0.5 },
+          { minutesAgo: 150, units: 9, carbsGrams: 250, carbSensitivity: 10, observedRemainingG: 120, lateCarbMgPerG: 1.5 },
+        ],
+        observedCarbs: { remainingG: 120, enteredG: 250, uncertain: false },
+      }),
+    );
+  const noDose = at(undefined); // lecture d'âge inconnu → pas de dose
+  assert.ok(noDose.steps.some((s) => s.kind === "eat-now"), "sans dose, la collation préventive est là");
+  const withDose = at(5);
+  assert.ok(correctionStep(withDose)?.action, "une dose est proposée");
+  assert.equal(withDose.steps.find((s) => s.kind === "eat-now"), undefined);
+  withDose.steps.forEach((s, i) => assert.equal(s.order, i + 1));
+});
+
+test("nuit : 200 au coucher sans rien d'autre → une dose est proposée", () => {
+  const plan = computeNightPlan(
+    input({ currentGlucose: 200, trendArrow: 3, nowMs: OCT27, glucoseAgeMin: 3, events: [] }),
+  );
+  const step = correctionStep(plan);
+  assert.ok(step?.action, "une dose est attendue");
+  assert.ok(step.action.quantity >= 1);
+  assert.doesNotMatch(step.headline, /impossible/i);
+});
+
+test("nuit : repas incertain → même dose, avec l'avertissement de quantité", () => {
+  // Scénario indépendant du 27/10 (qui ne produit pas de dose avec le
+  // prédicteur actuel, cf. rapport task 4) : 200 au coucher, repas lu.
+  const at200 = (uncertain: boolean) =>
+    input({
+      currentGlucose: 200,
+      trendArrow: 3,
+      nowMs: OCT27,
+      glucoseAgeMin: 5,
+      events: [],
+      observedCarbs: { remainingG: 20, enteredG: 140, uncertain },
+    });
+  const sure = correctionStep(computeNightPlan(at200(false)));
+  const unsure = correctionStep(computeNightPlan(at200(true)));
+  assert.equal(sure?.warning, undefined);
+  assert.ok(sure?.action && unsure?.action);
+  assert.equal(unsure.action.quantity, sure.action.quantity);
+  assert.equal(
+    unsure.warning,
+    "Quantité incertaine : cette dose part des 140 g que tu as saisis. Si tu as moins mangé, elle peut te faire descendre.",
+  );
+});
+
+test("nuit : garde-fous de dose (bas, chute rapide, lecture absente ou vieille)", () => {
+  assert.equal(correctionStep(computeNightPlan(oct27({ currentGlucose: 75 }))), undefined, "glycémie 75");
+  assert.equal(correctionStep(computeNightPlan(oct27({ trendArrow: 1 }))), undefined, "↓↓");
+  assert.equal(
+    correctionStep(computeNightPlan(oct27({ glucoseAgeMin: undefined }))),
+    undefined,
+    "lecture d'âge inconnu",
+  );
+  assert.equal(correctionStep(computeNightPlan(oct27({ glucoseAgeMin: 20 }))), undefined, "lecture de 20 min");
+});
+
+test("nuit : courbe sans dose déjà sous 80 → aucune étape de dose (même pas « impossible »)", () => {
+  // 95 mg/dL avec 3 U d'insuline encore active et pas de glucides : la courbe
+  // sans rien descend sous 80 → les étapes hypo gèrent, pas d'étape de dose.
+  const plan = computeNightPlan(
+    input({
+      currentGlucose: 95,
+      trendArrow: 3,
+      nowMs: OCT27,
+      glucoseAgeMin: 5,
+      events: [{ minutesAgo: 30, units: 3 }],
+    }),
+  );
+  assert.equal(correctionStep(plan), undefined);
+  assert.ok(plan.steps.some((s) => s.kind === "eat-now"), "l'étape hypo prend le relais");
+});
+
+test("nuit : glucides observés → étape « à digérer », plus d'alerte déficit", () => {
+  const plan = computeNightPlan(
+    oct27({
+      mealCoverage: { carbsRemainingG: 70, balanceU: -3, status: "deficit", uncertain: false },
+    }),
+  );
+  const dig = plan.steps.find((s) => s.kind === "digesting");
+  assert.ok(dig);
+  assert.equal(dig.headline, "Il reste ~57 g de ton repas à digérer");
+  assert.match(dig.detail, /^Ça va monter jusqu'à ~\d+ mg\/dL vers \d\d:\d\d si tu ne fais rien\.$/);
+  assert.equal(coverageStep(plan), undefined, "plus d'étape couverture déficit");
+});
+
+test("nuit : glucides observés + excès d'insuline → l'alerte excès reste", () => {
+  const plan = computeNightPlan(
+    oct27({
+      mealCoverage: { carbsRemainingG: 3, balanceU: 2.4, status: "excess", uncertain: false },
+    }),
+  );
+  assert.ok(coverageStep(plan), "l'alerte d'excès survit aux glucides observés");
+});
