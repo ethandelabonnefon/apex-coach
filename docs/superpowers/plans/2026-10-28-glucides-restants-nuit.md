@@ -19,7 +19,7 @@
 - Doses proposées : entiers uniquement (stylo au pas de 1 U).
 - Pic de nuit cible : `NIGHT_CEILING = 130` ; plancher : `NIGHT_FLOOR = 80` (mg/dL).
 - Facteur glucides tardifs : défaut `1.5`, borné `[0.5, 4]`, défaut tant que < `5` nuits utilisables.
-- Fenêtre de lecture observée : `[90, 240]` min après le repas ; point repas à ±20 min ; lecture actuelle ≤ 15 min.
+- Fenêtre de lecture observée : `[150, 240]` min après le repas (début relevé de 90 à 150 : le facteur est ajusté sur la montée nette à T+150, bolus restant compris) ; point repas à ±20 min ; lecture actuelle ≤ 15 min.
 - Étalement des glucides restants : linéaire sur `180` min.
 - Ne PAS toucher : dose du repas, `laterUnits`/split lipides, tuile COB en journée, `suggestTopUp`.
 - Pas de nouvelle requête LibreLink : réutiliser `useGlucose({ mode: "history" })` (cache partagé avec `GlucoseChart`). Ouvrir `/diabete` en rafale en dev coupe la glycémie live d'Ethan (429 Abbott).
@@ -260,7 +260,7 @@
 
 - [ ] **Step 1: Glucides observés dans `bedtimeInput`**
   - Historique : `useGlucose({ mode: "history" }).history` (pas de nouvel endpoint).
-  - Repas visé : dernier `InsulinLog` hors correction/split avec `resolveCarbs ≥ 20` dans `[90, 240]` min. `glucoseAtMeal` = `log.glucoseBefore` si > 0, sinon point d'historique ou d'archive à ±20 min. `glucoseNow` = `liveGlucose?.value` et `glucoseNowAgeMin` depuis `liveGlucose.date` — **jamais `currentGlucose`**. `otherMealsInWindow` / `rescueInWindow` depuis `insulinLogs` + `carbEntries` (`hypoEventId`).
+  - Repas visé : dernier `InsulinLog` hors correction/split avec `resolveCarbs ≥ 20` dans `[150, 240]` min. `glucoseAtMeal` = `log.glucoseBefore` si > 0, sinon point d'historique ou d'archive à ±20 min. `glucoseNow` = `liveGlucose?.value` et `glucoseNowAgeMin` depuis `liveGlucose.date` — **jamais `currentGlucose`**. `otherMealsInWindow` / `rescueInWindow` depuis `insulinLogs` + `carbEntries` (`hypoEventId`).
   - Si résultat non nul : `events = withObservedCarbs(events, log.id, remainingG, nightCalibration.lateCarb.mgPerGram)` et `observedCarbs = { remainingG, enteredG: resolveCarbs(log), uncertain: !isLearnable(log) }`. Passer aussi `glucoseAgeMin`.
 - [ ] **Step 2: Calibration** — `excluded = excludedNightKeys(nightReviews)` ; points filtrés par `filterExcludedNightPoints` avant `estimateNightDrift` / `estimateDawnCurve` / `estimateLateCarbFactor` ; logs filtrés `version === NIGHT_LOG_VERSION` et nuit non exclue avant `resolveNightLogs` / `estimateWakeupBias` ; règle `basalDoseChangedAt` conservée. Exposer `lateCarb` dans le memo.
 - [ ] **Step 3: Log de réveil** — remplacer la dédup 12 h par `upsertNightPredictionLog({ …, version: NIGHT_LOG_VERSION })` tant que `isEveningHours`, en n'écrivant que si la valeur prédite a changé ou si la dernière écriture date de ≥ 15 min.

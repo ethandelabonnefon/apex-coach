@@ -38,6 +38,9 @@ import {
 
 // ───────────────────────────────────────────────────────────────────────
 
+/** Glucides observés minimum (g) pour afficher l'étape « à digérer ». */
+export const DIGESTING_MIN_G = 10;
+
 export interface NightBrainInput extends BedtimeAdvisorInput {
   /**
    * GRG perso appris (mg/dL par gramme). Si absent → défaut 4. Permet une
@@ -228,10 +231,17 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
   const baseSummary: CurveSummary | undefined =
     advice.curve && advice.curve.length > 1 ? summarizeCurve(advice.curve, nowMs) : undefined;
   let digestingStep: NightStep | undefined;
-  if (input.observedCarbs && input.observedCarbs.remainingG > 0) {
+  // Sous 10 g, rien d'utile à dire. Le pic cité = max de TOUTE la courbe
+  // future (minute > 0), pas le pic « plafond » de `summarizeCurve` qui ne
+  // regarde qu'à partir de T+2h.
+  const futureCurve = advice.curve?.filter((p) => p.minute > 0) ?? [];
+  if (input.observedCarbs && input.observedCarbs.remainingG >= DIGESTING_MIN_G) {
     const g = Math.round(input.observedCarbs.remainingG);
-    const peak = baseSummary
-      ? { value: baseSummary.max, atMs: baseSummary.maxAtMs }
+    const peak = futureCurve.length > 0
+      ? (() => {
+          const p = futureCurve.reduce((a, b) => (b.value > a.value ? b : a));
+          return { value: p.value, atMs: p.at ?? nowMs + p.minute * 60_000 };
+        })()
       : (() => {
           const p = predictions.reduce((a, b) => (b.glucose > a.glucose ? b : a));
           return { value: p.glucose, atMs: nowMs + p.offsetHours * 3600_000 };

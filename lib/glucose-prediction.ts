@@ -662,8 +662,11 @@ function effectsAt(
     } else {
       glucose += carbGlucoseRise(ev.carbsGrams ?? 0, ev.minutesAgo, minutesAhead, csf);
     }
-    // Montée FPU (cumulée pour nette éventuelle avec le split)
-    fpuRiseTotal += fpuGlucoseRise(
+    // Montée FPU (cumulée pour nette éventuelle avec le split) — sauf part
+    // observée : l'effet des lipides de ce repas est déjà dans la montée
+    // nette sur laquelle le facteur a été ajusté (sinon double comptage).
+    // Le split en attente garde sa baisse (étape 3).
+    if (ev.observedRemainingG === undefined) fpuRiseTotal += fpuGlucoseRise(
       ev.fatGrams ?? 0,
       ev.proteinGrams ?? 0,
       ev.minutesAgo,

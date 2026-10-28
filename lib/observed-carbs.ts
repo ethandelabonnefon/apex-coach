@@ -11,8 +11,13 @@ import { ratioForMeal, type MealRatios } from "./prediction-inputs";
 import { isLearnable, resolveCarbs } from "./insulin-log-values";
 import type { CarbEntry, InsulinLog } from "@/types";
 
-/** Fenêtre de lecture : minutes après le repas. */
-export const OBS_WINDOW_MIN = 90;
+/**
+ * Fenêtre de lecture : minutes après le repas. Début à T+150 : le facteur
+ * glucides tardifs a été ajusté sur la montée NETTE lue à T+150 (bolus
+ * restant du repas compris). Plus tôt, ~47 % du bolus est encore actif à
+ * T+90 et serait ignoré → dose fictive après un dîner bien dosé.
+ */
+export const OBS_WINDOW_MIN = 150;
 export const OBS_WINDOW_MAX = 240;
 /** Tolérance du point « glycémie au repas » (min). */
 export const OBS_MEAL_POINT_TOLERANCE_MIN = 20;
@@ -122,7 +127,7 @@ export interface BuiltObservedCarbs {
  * Choisit le repas à lire sur la courbe et assemble `ObservedCarbsInput`.
  *
  * Repas visé : le dernier `InsulinLog` hors correction/split avec ≥ 20 g,
- * à condition qu'il ait entre 90 et 240 min. Glycémie au repas : capteur
+ * à condition qu'il ait entre 150 et 240 min. Glycémie au repas : capteur
  * seulement (point d'historique 8h, sinon d'archive, à ±20 min). Glycémie actuelle : UNIQUEMENT la lecture capteur `live` (son
  * âge vient de `live.date`) — jamais un champ de formulaire par défaut.
  * Renvoie null quand aucun repas n'est dans la fenêtre.

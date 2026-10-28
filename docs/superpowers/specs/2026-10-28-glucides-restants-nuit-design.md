@@ -53,7 +53,7 @@ nuits les erreurs vont de −229 à +155 : `estimateWakeupBias` apprend sur du b
 - `remainingG = clamp(glucidesSaisis − absorbéObs, 0, glucidesSaisis)` ;
   glucides saisis = `resolveCarbs` (confirmé ?? estimé).
 - Renvoie `null` (→ modèle actuel inchangé) si :
-  - repas hors fenêtre [90, 240] min ;
+  - repas hors fenêtre [150, 240] min (début à T+150 : le facteur est ajusté sur la montée nette lue à T+150 ; plus tôt, l'insuline encore active du repas serait ignorée) ;
   - pas de point capteur à ±20 min du repas, ou dernière lecture > 15 min ;
   - plus d'un repas ≥ 20 g dans la fenêtre ;
   - un resucrage (`isRescue`) dans la fenêtre.

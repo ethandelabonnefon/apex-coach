@@ -597,6 +597,22 @@ test("effort à venir : le prélèvement est modulé par l'insuline active au d�
     assert.ok(at([withOwnBolus, correction], 180) < at([withOwnBolus], 180) - 50);
   });
 
+  test("observedRemainingG : pas de montée FPU propre (déjà dans la montée nette), le split garde sa baisse", () => {
+    const fatty = { ...obsEv, fatGrams: 40, proteinGrams: 30 };
+    for (const m of [30, 90, 180, 360, 480]) {
+      assert.equal(at([fatty], m), at([obsEv], m), `minute ${m}`);
+    }
+    // Sans part observée, les lipides font toujours monter.
+    const plain = { minutesAgo: 150, carbsGrams: 140 };
+    assert.ok(at([{ ...plain, fatGrams: 40 }], 360) > at([plain], 360));
+    // Un split en attente fait toujours baisser la part observée.
+    const withSplit = predictGlucoseCurve({
+      currentGlucose: OBS_BASE, trendArrow: 3, events: [fatty], isf: 100, nowMs: 0, horizonMinutes: 480,
+      pendingSplit: { units: 2, minutesUntil: 30 },
+    }).curve.find((p) => p.minute === 360)!.value;
+    assert.ok(withSplit < at([fatty], 360) - 50, `split ${withSplit}`);
+  });
+
   test("sans observedRemainingG, rien ne change", () => {
     const ev = { minutesAgo: 150, carbsGrams: 140 };
     const ref = at([ev], 180);

@@ -16,8 +16,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { computeNightPlan, type NightBrainInput } from "./night-brain";
+import type { InsulinLog } from "@/types";
 import { resolveCobStatus, NIGHT_BALANCE_THRESHOLD_U } from "./carbs-on-board";
 import { carbSensitivity } from "./glucose-prediction";
+import { computeBedtimeAdvice } from "./bedtime-advisor";
+import { summarizeCurve } from "./bedtime-dose";
+import { buildObservedCarbsInput, observedCarbsRemaining } from "./observed-carbs";
+import { buildPredictionEvents, withObservedCarbs } from "./prediction-inputs";
 
 const EVENING = new Date("2026-09-02T22:30:00").getTime();
 
@@ -350,7 +355,8 @@ test("nuit : glucides observés mais 0 U tient déjà → « Va te coucher » re
       observedCarbs: { remainingG: 5, enteredG: 140, uncertain: false },
     }),
   );
-  assert.ok(plan.steps.some((s) => s.kind === "digesting"));
+  // 5 g < 10 g : pas d'étape « à digérer » (rien d'utile à dire).
+  assert.equal(plan.steps.find((s) => s.kind === "digesting"), undefined);
   assert.equal(correctionStep(plan), undefined);
   const ok = plan.steps.find((s) => s.kind === "all-good");
   assert.ok(ok, "la ligne de décision est attendue");
@@ -363,4 +369,122 @@ test("nuit 27/10 : compromis 0 U → « Pas de correction possible sans risque d
   assert.equal(step.headline, "Pas de correction possible sans risque d'hypo");
   assert.equal(step.action, undefined);
   assert.match(step.detail, /^Pic prévu ~\d+ vers \d\d:\d\d ; 1U te ferait descendre à ~\d+ vers \d\d:\d\d\.$/);
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// Étape « à digérer » : seuil 10 g et pic sur toute la courbe future
+// ───────────────────────────────────────────────────────────────────────
+
+test("nuit : étape « à digérer » seulement à partir de 10 g observés", () => {
+  const at = (remainingG: number) =>
+    computeNightPlan(
+      oct27({
+        events: [
+          { minutesAgo: 150, units: 9, carbsGrams: 140, carbSensitivity: 10, observedRemainingG: remainingG, lateCarbMgPerG: 1.5 },
+        ],
+        observedCarbs: { remainingG, enteredG: 140, uncertain: false },
+      }),
+    ).steps.find((s) => s.kind === "digesting");
+  assert.equal(at(9.9), undefined);
+  assert.ok(at(10));
+});
+
+test("nuit : le pic de l'étape « à digérer » = max de toute la courbe future (avant T+2h compris)", () => {
+  // ↑↑ au coucher + correction tout juste faite : le pic arrive dans la
+  // première heure, puis l'insuline fait redescendre.
+  const inp = oct27({
+    currentGlucose: 150,
+    trendArrow: 5,
+    events: [
+      { minutesAgo: 150, units: 6, carbsGrams: 60, carbSensitivity: 10, observedRemainingG: 12, lateCarbMgPerG: 1.5 },
+      { minutesAgo: 0, units: 1 },
+    ],
+    observedCarbs: { remainingG: 12, enteredG: 60, uncertain: false },
+  });
+  const curve = computeBedtimeAdvice(inp).curve!;
+  const fullMax = Math.max(...curve.filter((p) => p.minute > 0).map((p) => p.value));
+  const lateMax = summarizeCurve(curve, OCT27).max;
+  assert.ok(fullMax > lateMax, `scénario : pic précoce ${fullMax} > pic dès T+2h ${lateMax}`);
+  const dig = computeNightPlan(inp).steps.find((s) => s.kind === "digesting");
+  assert.ok(dig);
+  const quoted = Number(/jusqu'à ~(\d+) mg\/dL/.exec(dig.detail)?.[1]);
+  assert.equal(quoted, Math.round(fullMax));
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// Régression : pas de dose sur un dîner bien dosé entre T+90 et T+150
+// ───────────────────────────────────────────────────────────────────────
+
+/** Dîner 60 g / 6 U, glycémie plate à 150 depuis le repas, lecture 3 min. */
+function wellDosedDinner(minutesAfterMeal: number, fatGrams = 0) {
+  const nowMs = OCT27;
+  const mealMs = nowMs - minutesAfterMeal * 60_000;
+  const insulinLogs = [
+    {
+      id: "dinner",
+      units: 6,
+      insulinType: "Novorapid",
+      mealType: "dinner",
+      carbsGrams: 60,
+      fatGrams,
+      glucoseBefore: 150,
+      injectedAt: new Date(mealMs),
+    },
+  ] as InsulinLog[];
+  const history = [] as { value: number; date: string }[];
+  for (let t = mealMs - 30 * 60_000; t <= nowMs; t += 15 * 60_000) {
+    history.push({ value: 150, date: new Date(t).toISOString() });
+  }
+  const built = buildObservedCarbsInput({
+    insulinLogs,
+    carbEntries: [],
+    history,
+    archive: [],
+    live: { value: 150, date: new Date(nowMs - 3 * 60_000).toISOString() },
+    nowMs,
+    isf: 100,
+    ratios: { morning: 6.67, lunch: 10, snack: 8.33, dinner: 10 },
+  });
+  const obs = built ? observedCarbsRemaining(built.input) : null;
+  // Événements construits comme la page (`buildPredictionEvents` + part observée).
+  const base = buildPredictionEvents({
+    insulinLogs,
+    carbEntries: [],
+    isf: 100,
+    ratios: { morning: 6.67, lunch: 10, snack: 8.33, dinner: 10 },
+    nowMs,
+  });
+  const events = obs && built ? withObservedCarbs(base, built.sourceId, obs.remainingG, 1.5) : base;
+  const plan = computeNightPlan(
+    input({
+      currentGlucose: 150,
+      trendArrow: 3,
+      nowMs,
+      glucoseAgeMin: 3,
+      events,
+      observedCarbs: obs && built ? { remainingG: obs.remainingG, enteredG: built.enteredG, uncertain: built.uncertain } : undefined,
+    }),
+  );
+  return { built, obs, plan };
+}
+
+test("régression T+90 : dîner bien dosé 60 g / 6 U, plat à 150 → pas de lecture observée, pas de dose", () => {
+  const { built, obs, plan } = wellDosedDinner(90);
+  assert.equal(built, null, "pas de lecture observée avant T+150");
+  assert.equal(obs, null);
+  assert.equal(correctionStep(plan)?.action, undefined, "aucune dose proposée");
+});
+
+test("régression T+150 : dîner bien dosé 60 g / 6 U, plat à 150 → pas de dose", () => {
+  const { built, plan } = wellDosedDinner(150);
+  assert.ok(built, "lecture observée attendue à T+150");
+  assert.equal(correctionStep(plan)?.action, undefined, "aucune dose proposée");
+});
+
+test("régression T+150 : mêmes lipides ou pas (40 g) → même proposition (aucune dose)", () => {
+  const lean = wellDosedDinner(150, 0).plan;
+  const fatty = wellDosedDinner(150, 40).plan;
+  assert.equal(correctionStep(fatty)?.action, undefined);
+  assert.deepEqual(correctionStep(fatty)?.action, correctionStep(lean)?.action);
+  assert.equal(correctionStep(fatty)?.headline, correctionStep(lean)?.headline);
 });

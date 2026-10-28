@@ -53,6 +53,8 @@ test("bornes : jamais < 0, jamais > saisie", () => {
 test("null hors conditions de lecture", () => {
   const cas: Partial<ObservedCarbsInput>[] = [
     { mealMinutesAgo: 60 },
+    { mealMinutesAgo: 90 },
+    { mealMinutesAgo: 149 },
     { mealMinutesAgo: 300 },
     { glucoseAtMeal: null },
     { glucoseNow: null },
@@ -114,8 +116,11 @@ test("build : dîner à T+150, point capteur au repas, lecture live 3 min", () =
   assert.ok(r && r.remainingG > 40);
 });
 
-test("build : repas trop frais (< 90 min) ou trop vieux (> 240 min) → null", () => {
+test("build : repas trop frais (< 150 min) ou trop vieux (> 240 min) → null", () => {
   assert.equal(buildObservedCarbsInput({ ...baseOpts, insulinLogs: [meal({ injectedAt: minAgo(60) })] }), null);
+  assert.equal(buildObservedCarbsInput({ ...baseOpts, insulinLogs: [meal({ injectedAt: minAgo(90) })] }), null);
+  assert.equal(buildObservedCarbsInput({ ...baseOpts, insulinLogs: [meal({ injectedAt: minAgo(149) })] }), null);
+  assert.ok(buildObservedCarbsInput({ ...baseOpts, insulinLogs: [meal({ injectedAt: minAgo(150) })] }));
   assert.equal(buildObservedCarbsInput({ ...baseOpts, insulinLogs: [meal({ injectedAt: minAgo(260) })] }), null);
 });
 
