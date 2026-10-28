@@ -14,6 +14,7 @@ import {
   nightKeyFor,
   excludedNightKeys,
   filterExcludedNightPoints,
+  pendingMorningReview,
 } from "./night-review";
 
 const ms = (d: number, h: number, m = 0) => new Date(2026, 9, d, h, m).getTime();
@@ -105,4 +106,20 @@ test("plafond à 60", () => {
   const out = upsertNightLog(logs, rec("new", new Date(2026, 11, 1, 23, 0)));
   assert.equal(out.length, 60);
   assert.equal(out[0].id, "new");
+});
+
+test("pendingMorningReview : 5h-12h, nuit de la veille sans avis", () => {
+  assert.equal(pendingMorningReview(ms(28, 8, 0), []), "2026-10-27");
+  assert.equal(pendingMorningReview(ms(28, 5, 0), []), "2026-10-27");
+  assert.equal(pendingMorningReview(ms(28, 11, 59), []), "2026-10-27");
+  assert.equal(pendingMorningReview(ms(28, 4, 59), []), null);
+  assert.equal(pendingMorningReview(ms(28, 12, 0), []), null);
+  assert.equal(
+    pendingMorningReview(ms(28, 8, 0), [{ night: "2026-10-27", counted: false }]),
+    null,
+  );
+  assert.equal(
+    pendingMorningReview(ms(28, 8, 0), [{ night: "2026-10-26", counted: true }]),
+    "2026-10-27",
+  );
 });

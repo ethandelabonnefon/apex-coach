@@ -67,3 +67,15 @@ export function upsertNightLog(
   });
   return [rec, ...kept].slice(0, NIGHT_LOG_CAP);
 }
+
+/**
+ * Nuit à faire valider le matin : de 5h à 12h (heure locale), la nuit qui
+ * vient de finir (`nightKeyFor(now − 12 h)`) si Ethan ne l'a pas encore
+ * jugée. Sinon null.
+ */
+export function pendingMorningReview(nowMs: number, reviews: NightReview[]): string | null {
+  const h = new Date(nowMs).getHours();
+  if (h < 5 || h >= 12) return null;
+  const night = nightKeyFor(nowMs - 12 * 3_600_000);
+  return reviews.some((r) => r.night === night) ? null : night;
+}

@@ -18,6 +18,7 @@ import {
   type NightStep,
 } from "@/lib/night-brain";
 import type { BedtimePrediction } from "@/lib/bedtime-advisor";
+import { LATE_CARB_MIN_NIGHTS } from "@/lib/night-calibration";
 import {
   Moon,
   Sunrise,
@@ -46,7 +47,15 @@ interface NightBrainProps {
     bias: number;
     /** ISO du dernier changement de basale si la calibration a été reset. */
     recalibratingSince?: string;
+    /** Facteur glucides tardifs appris (mg/dL par g restant). */
+    lateCarbMgPerGram?: number;
+    lateCarbNights?: number;
+    lateCarbIsDefault?: boolean;
+    /** Nuits exclues par l'avis du matin (« YYYY-MM-DD », récentes d'abord). */
+    excludedNights?: string[];
   };
+  /** Réintègre une nuit exclue dans les calibrations. */
+  onIncludeNight?: (night: string) => void;
   /** Logge une prise de glucides en cas d'hypo (crée un HypoEvent). */
   onLogHypoCarbs?: (grams: number) => void;
   /** Logge une injection de correction. */
@@ -108,6 +117,7 @@ export default function NightBrain({
   onConfirmSplit,
   onAdjustSplit,
   onResetCalibration,
+  onIncludeNight,
 }: NightBrainProps) {
   const [open, setOpen] = useState(true);
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -300,7 +310,11 @@ export default function NightBrain({
 
           {/* Statut de calibration perso */}
           {calibration && (
-            <CalibrationLine c={calibration} onReset={onResetCalibration} />
+            <CalibrationLine
+              c={calibration}
+              onReset={onResetCalibration}
+              onIncludeNight={onIncludeNight}
+            />
           )}
         </>
       )}
@@ -316,12 +330,22 @@ const RESET_CHOICES: { label: string; daysAgo: number }[] = [
   { label: "Il y a 7 j", daysAgo: 7 },
 ];
 
+/** Nuits exclues affichées (les plus récentes). */
+const EXCLUDED_SHOWN = 7;
+
+function formatNightShort(night: string): string {
+  const [y, m, d] = night.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+}
+
 function CalibrationLine({
   c,
   onReset,
+  onIncludeNight,
 }: {
   c: NonNullable<NightBrainProps["calibration"]>;
   onReset?: (sinceMs: number) => void;
+  onIncludeNight?: (night: string) => void;
 }) {
   const [choosing, setChoosing] = useState(false);
 
@@ -360,10 +384,23 @@ function CalibrationLine({
       ? `Calibré sur tes données : ${parts.join(" · ")}.`
       : "Calibration en cours — il faut quelques nuits d'archive pour personnaliser.";
 
+  const lateCarbText =
+    c.lateCarbMgPerGram === undefined
+      ? null
+      : c.lateCarbIsDefault
+        ? `Glucides tardifs : ${c.lateCarbMgPerGram.toFixed(1).replace(".", ",")} mg/dL par gramme (valeur par défaut, ${c.lateCarbNights ?? 0}/${LATE_CARB_MIN_NIGHTS} nuits utilisables).`
+        : `Glucides tardifs : ${c.lateCarbMgPerGram.toFixed(1).replace(".", ",")} mg/dL par gramme (${c.lateCarbNights} nuits).`;
+  const excluded = (c.excludedNights ?? []).slice(0, EXCLUDED_SHOWN);
+
   return (
     <div className="mt-3 pt-3 border-t border-border-subtle">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-[10px] text-text-tertiary leading-snug min-w-0">{statusText}</p>
+        <div className="min-w-0">
+          <p className="text-[10px] text-text-tertiary leading-snug">{statusText}</p>
+          {lateCarbText && (
+            <p className="text-[10px] text-text-tertiary leading-snug mt-1">{lateCarbText}</p>
+          )}
+        </div>
         {onReset && !choosing && (
           <button
             type="button"
@@ -374,6 +411,32 @@ function CalibrationLine({
           </button>
         )}
       </div>
+      {excluded.length > 0 && (
+        <div className="mt-2">
+          <p className="text-[10px] text-text-secondary mb-1.5">
+            Nuits exclues des calculs :
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {excluded.map((night) => (
+              <span
+                key={night}
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-bg-secondary border border-border-default text-[10px] text-text-secondary"
+              >
+                <span className="num">{formatNightShort(night)}</span>
+                {onIncludeNight && (
+                  <button
+                    type="button"
+                    onClick={() => onIncludeNight(night)}
+                    className="font-medium underline underline-offset-2 hover:text-text-primary transition-colors tap-scale"
+                  >
+                    Réintégrer
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       {choosing && (
         <div className="mt-2 animate-slide-up">
           <p className="text-[10px] text-text-secondary mb-1.5">
