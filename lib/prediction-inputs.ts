@@ -112,3 +112,26 @@ export function withObservedCarbs(
       : e,
   );
 }
+
+/**
+ * Variante « plancher » des événements : pour chaque événement à part
+ * observée (`observedRemainingG`) qui porte un bolus, on retire les unités
+ * de l'événement et on ajoute un bolus séparé au même `minutesAgo`. Le
+ * moteur applique alors normalement la queue d'IOB de ce bolus à partir de
+ * maintenant (rem(now) − rem(futur)), que la part observée ignore (facteur
+ * ajusté sur la montée NETTE du pic). À n'utiliser QUE pour le point bas
+ * (plancher 80) : le pic reste sur les événements normaux.
+ * Pure : ne modifie ni le tableau ni les événements d'entrée.
+ */
+export function withMealBolusTail(events: PredictionEvent[]): PredictionEvent[] {
+  const out: PredictionEvent[] = [];
+  for (const e of events) {
+    if (e.observedRemainingG !== undefined && e.units !== undefined && e.units > 0) {
+      out.push({ ...e, units: undefined });
+      out.push({ units: e.units, minutesAgo: e.minutesAgo });
+    } else {
+      out.push(e);
+    }
+  }
+  return out;
+}

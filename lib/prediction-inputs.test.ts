@@ -14,7 +14,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildPredictionEvents, withObservedCarbs } from "./prediction-inputs";
+import { buildPredictionEvents, withMealBolusTail, withObservedCarbs } from "./prediction-inputs";
 import type { InsulinLog } from "@/types";
 
 const RATIOS = { morning: 6.7, lunch: 10, snack: 8.3, dinner: 10 };
@@ -101,4 +101,22 @@ test("withObservedCarbs ne modifie que l'événement ciblé, sans muter", () => 
   assert.equal(out[1].lateCarbMgPerG, 2);
   assert.equal((b as any).observedRemainingG, undefined);
   assert.notEqual(out, input);
+});
+
+test("withMealBolusTail sépare le bolus des seuls événements observés, sans muter", () => {
+  const obs = { sourceId: "o", minutesAgo: 150, units: 6, carbsGrams: 60, observedRemainingG: 12, lateCarbMgPerG: 1.5 };
+  const plain = { sourceId: "p", minutesAgo: 60, units: 2, carbsGrams: 20 };
+  const noBolus = { sourceId: "n", minutesAgo: 150, carbsGrams: 30, observedRemainingG: 5 };
+  const input = [obs, plain, noBolus];
+  const out = withMealBolusTail(input);
+  assert.equal(out.length, 4);
+  assert.equal(out[0].units, undefined);
+  assert.equal(out[0].observedRemainingG, 12);
+  assert.equal(out[0].carbsGrams, 60);
+  assert.deepEqual(out[1], { units: 6, minutesAgo: 150 });
+  assert.equal(out[2], plain);
+  assert.equal(out[3], noBolus);
+  assert.equal(obs.units, 6);
+  assert.notEqual(out, input);
+  assert.deepEqual(withMealBolusTail([plain]), [plain]);
 });

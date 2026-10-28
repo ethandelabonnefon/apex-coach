@@ -35,6 +35,7 @@ import {
   NIGHT_FLOOR,
   type CurveSummary,
 } from "./bedtime-dose";
+import { withMealBolusTail } from "./prediction-inputs";
 
 // ───────────────────────────────────────────────────────────────────────
 
@@ -357,6 +358,20 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
     // Mode events : dose entière « pic ≤ 130 à partir de T+2h, plancher 80 »
     // sur la courbe simulée (lib/bedtime-dose.ts). Pas d'arrondi 0,5 U ni
     // de plafond 2 U : c'est la courbe qui borne la dose.
+    // Plancher : la part observée ignore la queue d'IOB du bolus de son
+    // repas (facteur ajusté sur la montée nette du PIC). Pour le point bas
+    // on la remet (withMealBolusTail) : pic = courbe normale, bas = courbe
+    // « sécurité ». Sans part observée avec bolus, les deux sont identiques.
+    const safetyEvents = withMealBolusTail(input.events);
+    const hasTail = safetyEvents.length !== input.events.length;
+    const withFloor = (normal: CurveSummary, events: typeof safetyEvents): CurveSummary => {
+      if (!hasTail) return normal;
+      const curve = computeBedtimeAdvice({ ...input, events }).curve ?? [];
+      if (curve.length < 2) return normal;
+      const safety = summarizeCurve(curve, nowMs);
+      return { ...normal, min: safety.min, minAtMs: safety.minAtMs };
+    };
+    const baseFloor = withFloor(baseSummary, safetyEvents);
     const glucoseFresh =
       input.glucoseAgeMin !== undefined && input.glucoseAgeMin <= MAX_GLUCOSE_AGE_FOR_DOSE_MIN;
     const canDose =
@@ -366,16 +381,19 @@ export function computeNightPlan(input: NightBrainInput): NightPlan {
       // Repas frais + IOB élevé : la courbe n'est pas fiable, on ne dose pas
       // dessus (anti-stacking du dîner) — l'étape d'attente prend le relais.
       !advice.unreliableTooFresh &&
-      baseSummary.min >= NIGHT_FLOOR;
+      baseFloor.min >= NIGHT_FLOOR;
     if (canDose) {
       const events = input.events;
       const simulate = (u: number): CurveSummary =>
         u === 0
-          ? baseSummary
-          : summarizeCurve(
-              computeBedtimeAdvice({ ...input, events: [...events, { units: u, minutesAgo: 0 }] })
-                .curve ?? [],
-              nowMs,
+          ? baseFloor
+          : withFloor(
+              summarizeCurve(
+                computeBedtimeAdvice({ ...input, events: [...events, { units: u, minutesAgo: 0 }] })
+                  .curve ?? [],
+                nowMs,
+              ),
+              [...safetyEvents, { units: u, minutesAgo: 0 }],
             );
       const dose = findBedtimeDose(simulate);
       doseNone = dose.kind === "none";

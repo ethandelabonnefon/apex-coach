@@ -18,7 +18,7 @@
 import { readFileSync } from "node:fs";
 import { computeNightPlan, type NightBrainInput } from "../lib/night-brain";
 import { computeBedtimeAdvice } from "../lib/bedtime-advisor";
-import { buildPredictionEvents, ratioForMeal, withObservedCarbs } from "../lib/prediction-inputs";
+import { buildPredictionEvents, ratioForMeal, withMealBolusTail, withObservedCarbs } from "../lib/prediction-inputs";
 import { buildObservedCarbsInput, observedCarbsRemaining } from "../lib/observed-carbs";
 import {
   estimateDawnCurve,
@@ -201,7 +201,8 @@ for (const log of dinners) {
   const oldPeak = peak5h(oldInput);
   const newPeak = peak5h(newInput);
 
-  // Dose proposée par le plan (version « nouvelle ») et point bas avec elle.
+  // Dose proposée par le plan (version « nouvelle ») et point bas avec elle,
+  // sur la courbe « sécurité » du plan (queue d'IOB du bolus du repas).
   const plan = computeNightPlan(newInput);
   const act = plan.steps.find((s) => s.action?.kind === "log-correction")?.action;
   const dose = act ? act.quantity : null;
@@ -210,7 +211,7 @@ for (const log of dinners) {
     const c =
       computeBedtimeAdvice({
         ...newInput,
-        events: [...newEvents, { units: dose, minutesAgo: 0 }],
+        events: [...withMealBolusTail(newEvents), { units: dose, minutesAgo: 0 }],
       }).curve ?? [];
     minWithDose = Math.min(...c.filter((p) => p.minute > 0 && p.minute <= 7 * 60).map((p) => p.value));
   }

@@ -22,7 +22,7 @@ import { carbSensitivity } from "./glucose-prediction";
 import { computeBedtimeAdvice } from "./bedtime-advisor";
 import { summarizeCurve } from "./bedtime-dose";
 import { buildObservedCarbsInput, observedCarbsRemaining } from "./observed-carbs";
-import { buildPredictionEvents, withObservedCarbs } from "./prediction-inputs";
+import { buildPredictionEvents, withMealBolusTail, withObservedCarbs } from "./prediction-inputs";
 
 const EVENING = new Date("2026-09-02T22:30:00").getTime();
 
@@ -226,6 +226,8 @@ test("nuit 27/10 : glucides restants lus → étape « à digérer », pic sans 
 test("nuit : dose proposée → plus de collation préventive contradictoire", () => {
   // 88 ↘, correction 0,5 U il y a 2h, gros reliquat observé : la courbe sans
   // dose frôle 85 (collation préventive) puis monte haut ; 1 U tient ≥ 80.
+  // Glucides lus SANS bolus propre : avec un bolus de repas, sa queue d'IOB
+  // compte au plancher (withMealBolusTail) et aucune dose ne tiendrait.
   const at = (glucoseAgeMin: number | undefined) =>
     computeNightPlan(
       oct27({
@@ -234,7 +236,7 @@ test("nuit : dose proposée → plus de collation préventive contradictoire", (
         glucoseAgeMin,
         events: [
           { minutesAgo: 120, units: 0.5 },
-          { minutesAgo: 150, units: 9, carbsGrams: 250, carbSensitivity: 10, observedRemainingG: 120, lateCarbMgPerG: 1.5 },
+          { minutesAgo: 150, carbsGrams: 250, carbSensitivity: 10, observedRemainingG: 120, lateCarbMgPerG: 1.5 },
         ],
         observedCarbs: { remainingG: 120, enteredG: 250, uncertain: false },
       }),
@@ -363,12 +365,34 @@ test("nuit : glucides observés mais 0 U tient déjà → « Va te coucher » re
   assert.equal(ok.headline, "Va te coucher, rien à ajuster");
 });
 
-test("nuit 27/10 : compromis 0 U → « Pas de correction possible sans risque d'hypo »", () => {
-  const step = correctionStep(computeNightPlan(oct27()));
+test("nuit 27/10 : la queue du bolus de 9 U passe sous 80 → aucune étape de dose", () => {
+  // Avant le plancher « sécurité » : compromis 0 U (« Pas de correction
+  // possible »). Avec la queue d'IOB du bolus du repas, la courbe SANS dose
+  // descend déjà sous 80 → pas d'étape de dose du tout ; l'étape « à
+  // digérer » (courbe normale) reste.
+  const inp = oct27();
+  assert.ok(floorMin(inp, 0, true) < 80, `bas sécurité sans dose : ${floorMin(inp, 0, true)}`);
+  assert.ok(floorMin(inp, 0, false) >= 80, `bas normal sans dose : ${floorMin(inp, 0, false)}`);
+  const plan = computeNightPlan(inp);
+  assert.equal(correctionStep(plan), undefined);
+  assert.ok(plan.steps.find((s) => s.kind === "digesting"));
+});
+
+test("nuit : compromis 0 U → « Pas de correction possible », bas cité = courbe sécurité", () => {
+  // Dîner 140 g / 2 U, 57 g lus, 94 → : 0 U tient le plancher mais pas le
+  // plafond ; 1 U franchit 80 sur la courbe sécurité.
+  const inp = oct27({
+    events: [
+      { minutesAgo: 150, units: 2, carbsGrams: 140, carbSensitivity: 10, observedRemainingG: 57, lateCarbMgPerG: 1.5 },
+    ],
+  });
+  const step = correctionStep(computeNightPlan(inp));
   assert.ok(step);
   assert.equal(step.headline, "Pas de correction possible sans risque d'hypo");
   assert.equal(step.action, undefined);
   assert.match(step.detail, /^Pic prévu ~\d+ vers \d\d:\d\d ; 1U te ferait descendre à ~\d+ vers \d\d:\d\d\.$/);
+  const quoted = Number(/descendre à ~(\d+)/.exec(step.detail)?.[1]);
+  assert.equal(quoted, Math.round(floorMin(inp, 1, true)));
 });
 
 // ───────────────────────────────────────────────────────────────────────
@@ -415,8 +439,8 @@ test("nuit : le pic de l'étape « à digérer » = max de toute la courbe futur
 // Régression : pas de dose sur un dîner bien dosé entre T+90 et T+150
 // ───────────────────────────────────────────────────────────────────────
 
-/** Dîner 60 g / 6 U, glycémie plate à 150 depuis le repas, lecture 3 min. */
-function wellDosedDinner(minutesAfterMeal: number, fatGrams = 0) {
+/** Dîner 60 g / 6 U, glycémie plate (150 par défaut) depuis le repas, lecture 3 min. */
+function wellDosedDinner(minutesAfterMeal: number, fatGrams = 0, level = 150) {
   const nowMs = OCT27;
   const mealMs = nowMs - minutesAfterMeal * 60_000;
   const insulinLogs = [
@@ -427,20 +451,20 @@ function wellDosedDinner(minutesAfterMeal: number, fatGrams = 0) {
       mealType: "dinner",
       carbsGrams: 60,
       fatGrams,
-      glucoseBefore: 150,
+      glucoseBefore: level,
       injectedAt: new Date(mealMs),
     },
   ] as InsulinLog[];
   const history = [] as { value: number; date: string }[];
   for (let t = mealMs - 30 * 60_000; t <= nowMs; t += 15 * 60_000) {
-    history.push({ value: 150, date: new Date(t).toISOString() });
+    history.push({ value: level, date: new Date(t).toISOString() });
   }
   const built = buildObservedCarbsInput({
     insulinLogs,
     carbEntries: [],
     history,
     archive: [],
-    live: { value: 150, date: new Date(nowMs - 3 * 60_000).toISOString() },
+    live: { value: level, date: new Date(nowMs - 3 * 60_000).toISOString() },
     nowMs,
     isf: 100,
     ratios: { morning: 6.67, lunch: 10, snack: 8.33, dinner: 10 },
@@ -455,17 +479,16 @@ function wellDosedDinner(minutesAfterMeal: number, fatGrams = 0) {
     nowMs,
   });
   const events = obs && built ? withObservedCarbs(base, built.sourceId, obs.remainingG, 1.5) : base;
-  const plan = computeNightPlan(
-    input({
-      currentGlucose: 150,
-      trendArrow: 3,
-      nowMs,
-      glucoseAgeMin: 3,
-      events,
-      observedCarbs: obs && built ? { remainingG: obs.remainingG, enteredG: built.enteredG, uncertain: built.uncertain } : undefined,
-    }),
-  );
-  return { built, obs, plan };
+  const inp = input({
+    currentGlucose: level,
+    trendArrow: 3,
+    nowMs,
+    glucoseAgeMin: 3,
+    events,
+    observedCarbs: obs && built ? { remainingG: obs.remainingG, enteredG: built.enteredG, uncertain: built.uncertain } : undefined,
+  });
+  const plan = computeNightPlan(inp);
+  return { built, obs, plan, inp };
 }
 
 test("régression T+90 : dîner bien dosé 60 g / 6 U, plat à 150 → pas de lecture observée, pas de dose", () => {
@@ -487,4 +510,49 @@ test("régression T+150 : mêmes lipides ou pas (40 g) → même proposition (au
   assert.equal(correctionStep(fatty)?.action, undefined);
   assert.deepEqual(correctionStep(fatty)?.action, correctionStep(lean)?.action);
   assert.equal(correctionStep(fatty)?.headline, correctionStep(lean)?.headline);
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// Plancher 80 : la queue d'IOB du bolus du repas compte pour le point bas
+// ───────────────────────────────────────────────────────────────────────
+
+/** Point bas d'une courbe : courbe normale ou « sécurité » (queue de bolus). */
+const floorMin = (inp: NightBrainInput, extraU = 0, safety = true) => {
+  const base = inp.events ?? [];
+  const evs = safety ? withMealBolusTail(base) : base;
+  const all = extraU > 0 ? [...evs, { units: extraU, minutesAgo: 0 }] : evs;
+  return summarizeCurve(computeBedtimeAdvice({ ...inp, events: all }).curve!, OCT27).min;
+};
+
+test("plancher T+150 : dîner bien dosé 60 g / 6 U, plat à 180 → aucune dose dont le bas cité < 80", () => {
+  const { built, plan, inp } = wellDosedDinner(150, 0, 180);
+  assert.ok(built, "lecture observée attendue à T+150");
+  // Scénario : la courbe normale autorise 1 U (bas ≥ 80), la courbe
+  // sécurité (queue du bolus de 6 U) la fait passer sous 80.
+  assert.ok(floorMin(inp, 1, false) >= 80, `courbe normale avec 1 U : ${floorMin(inp, 1, false)}`);
+  assert.ok(floorMin(inp, 1, true) < 80, `courbe sécurité avec 1 U : ${floorMin(inp, 1, true)}`);
+  const step = correctionStep(plan);
+  assert.equal(step?.action, undefined, "aucune dose proposée");
+  // Si une étape cite un point bas, c'est celui de la courbe sécurité.
+  const quoted = step ? /descendre à ~(\d+)/.exec(step.detail)?.[1] : undefined;
+  if (quoted !== undefined) assert.equal(Number(quoted), Math.round(floorMin(inp, 1, true)));
+});
+
+test("plancher : gros reliquat observé + petit bolus → dose entière, bas sécurité ≥ 80", () => {
+  const inp = oct27({
+    currentGlucose: 200,
+    trendArrow: 3,
+    events: [
+      { minutesAgo: 150, units: 2, carbsGrams: 140, carbSensitivity: 10, observedRemainingG: 60, lateCarbMgPerG: 1.5 },
+    ],
+    observedCarbs: { remainingG: 60, enteredG: 140, uncertain: false },
+  });
+  const step = correctionStep(computeNightPlan(inp));
+  assert.ok(step?.action, "une dose est attendue");
+  const u = step.action!.quantity;
+  assert.ok(Number.isInteger(u) && u >= 1, `dose entière : ${u}`);
+  const safeMin = floorMin(inp, u, true);
+  assert.ok(safeMin >= 80, `bas sécurité avec ${u} U : ${safeMin}`);
+  const quoted = /point bas ~(\d+)/.exec(step.detail)?.[1];
+  if (quoted !== undefined) assert.equal(Number(quoted), Math.round(safeMin));
 });
