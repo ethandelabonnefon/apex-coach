@@ -13,6 +13,11 @@
  */
 
 import type { ArchivedPoint } from "@/lib/glucose-archive/store";
+import {
+  observedCarbsRemaining,
+  OBS_MEAL_POINT_TOLERANCE_MIN,
+} from "./observed-carbs";
+import { nightKeyFor } from "./night-review";
 
 export interface NightInjection {
   /** ISO du moment de l'injection. */
@@ -305,4 +310,130 @@ export function estimateWakeupBias(
     sampleSize: resolved.length,
     confidence: resolved.length >= 10 ? "high" : resolved.length >= 5 ? "medium" : "low",
   };
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// 5. Facteur « glucides tardifs » appris (mg/dL de montée par g restant)
+// ───────────────────────────────────────────────────────────────────────
+
+export const LATE_CARB_DEFAULT = 1.5;
+export const LATE_CARB_MIN = 0.5;
+export const LATE_CARB_MAX = 4;
+export const LATE_CARB_MIN_NIGHTS = 5;
+
+export interface LateCarbMeal {
+  injectedAt: string;
+  carbsGrams: number;
+  carbSensitivity: number;
+}
+
+export interface LateCarbFactorResult {
+  /** Montée nocturne (mg/dL) par gramme encore non digéré à T+150. */
+  mgPerGram: number;
+  sampleNights: number;
+  isDefault: boolean;
+}
+
+/** Point archive le plus proche de `targetMs`, dans la tolérance. */
+function nearestPoint(
+  sorted: ArchivedPoint[],
+  targetMs: number,
+  tolMs: number,
+): ArchivedPoint | null {
+  let best: ArchivedPoint | null = null;
+  let bestDiff = Infinity;
+  for (const p of sorted) {
+    const diff = Math.abs(p.t - targetMs);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = p;
+    }
+  }
+  return best && bestDiff <= tolMs ? best : null;
+}
+
+/**
+ * Apprend combien la glycémie monte la nuit par gramme de glucides restant
+ * 2h30 après un dîner copieux : régression (montée réelle ~ restant observé)
+ * sur les nuits passées, seule la pente compte. Défaut tant que < 5 nuits.
+ */
+export function estimateLateCarbFactor(
+  points: ArchivedPoint[],
+  meals: LateCarbMeal[],
+  injections: NightInjection[],
+  isf: number,
+  excluded: Set<string>,
+): LateCarbFactorResult {
+  const MIN = 60_000;
+  const tolMs = OBS_MEAL_POINT_TOLERANCE_MIN * MIN;
+  const sorted = [...points].sort((a, b) => a.t - b.t);
+  const injMs = injections.map((i) => ({
+    t: new Date(i.injectedAt).getTime(),
+    units: i.units,
+  }));
+  const mealsMs = meals.map((m) => ({ ...m, t: new Date(m.injectedAt).getTime() }));
+
+  const xs: number[] = []; // restant (g)
+  const ys: number[] = []; // montée réelle (mg/dL)
+
+  for (const meal of mealsMs) {
+    if (!(meal.carbsGrams >= 60)) continue;
+    const hour = new Date(meal.t).getHours();
+    if (hour < 18 || hour > 23) continue;
+    if (excluded.has(nightKeyFor(meal.t))) continue;
+
+    const readingMs = meal.t + 150 * MIN;
+    // Une injection après la lecture fausse la montée observée.
+    if (injMs.some((i) => i.t > readingMs && i.t <= readingMs + 300 * MIN)) continue;
+
+    const atMeal = nearestPoint(sorted, meal.t, tolMs);
+    const atReading = nearestPoint(sorted, readingMs, tolMs);
+    if (!atMeal || !atReading) continue;
+
+    const otherMeals = mealsMs.filter(
+      (o) =>
+        o !== meal &&
+        o.carbsGrams >= 20 &&
+        o.t >= meal.t - 240 * MIN &&
+        o.t <= readingMs,
+    ).length;
+
+    const obs = observedCarbsRemaining({
+      carbsGrams: meal.carbsGrams,
+      mealMinutesAgo: 150,
+      carbSensitivity: meal.carbSensitivity,
+      boluses: injMs
+        .filter((i) => i.t >= meal.t - 240 * MIN && i.t <= readingMs)
+        .map((i) => ({ units: i.units, minutesAgo: (readingMs - i.t) / MIN })),
+      glucoseAtMeal: atMeal.value,
+      glucoseNow: atReading.value,
+      glucoseNowAgeMin: 0,
+      isf,
+      otherMealsInWindow: otherMeals,
+      rescueInWindow: false,
+    });
+    if (!obs) continue;
+
+    let peak = -Infinity;
+    for (const p of sorted) {
+      if (p.t > readingMs && p.t <= readingMs + 300 * MIN && p.value > peak) {
+        peak = p.value;
+      }
+    }
+    if (!Number.isFinite(peak)) continue;
+
+    xs.push(obs.remainingG);
+    ys.push(peak - atReading.value);
+  }
+
+  const n = xs.length;
+  if (n < LATE_CARB_MIN_NIGHTS) {
+    return { mgPerGram: LATE_CARB_DEFAULT, sampleNights: n, isDefault: true };
+  }
+  const slope = linregSlope(xs, ys);
+  if (slope === null) {
+    return { mgPerGram: LATE_CARB_DEFAULT, sampleNights: n, isDefault: true };
+  }
+  const clamped = Math.min(LATE_CARB_MAX, Math.max(LATE_CARB_MIN, slope));
+  return { mgPerGram: clamped, sampleNights: n, isDefault: false };
 }
