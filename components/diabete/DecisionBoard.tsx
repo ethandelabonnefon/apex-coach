@@ -359,21 +359,21 @@ export default function DecisionBoard() {
             >
               <p className="text-xs text-text-secondary leading-relaxed">{goal.detail}</p>
               {goal.estimatedA1c !== null && (
-                <div className="mgrid c4 flat">
+                <div className="mgrid flat">
                   <div className="cell">
-                    <div className="v text-base">{fr(goal.estimatedA1c)}<small>%</small></div>
+                    <div className="v">{fr(goal.estimatedA1c)}<small>%</small></div>
                     <div className="l">HbA1c estimée</div>
                   </div>
                   <div className="cell">
-                    <div className="v text-base">{goal.mean}</div>
+                    <div className="v">{goal.mean}</div>
                     <div className="l">moyenne</div>
                   </div>
                   <div className="cell">
-                    <div className="v text-base">{goal.timeInRangePct}<small>%</small></div>
+                    <div className="v">{goal.timeInRangePct}<small>%</small></div>
                     <div className="l">70-180</div>
                   </div>
                   <div className="cell">
-                    <div className={`v text-base ${(goal.timeBelow70Pct ?? 0) >= 4 ? "text-error" : ""}`}>
+                    <div className={`v ${(goal.timeBelow70Pct ?? 0) >= 4 ? "text-error" : ""}`}>
                       {fr(goal.timeBelow70Pct ?? 0)}<small>%</small>
                     </div>
                     <div className="l">sous 70</div>

@@ -522,9 +522,10 @@ export function analyzeBasal(input: BasalAdvisorInput): BasalAdvice {
 
   // ── Changement récent : on observe, on ne conclut pas ──────────────────
   if (changedAt !== undefined && nowMs - changedAt < OBSERVATION_AFTER_CHANGE_H * HOUR_MS) {
-    const hours = Math.max(1, Math.round((nowMs - changedAt) / HOUR_MS));
+    const hours = Math.round((nowMs - changedAt) / HOUR_MS);
+    const since = hours < 1 ? "il y a moins d'une heure" : `il y a ${hours} h`;
     const reasons = [
-      `Tu as changé ta lente il y a ${hours} h. Une lente met environ 2 jours à donner son plein effet : je ne conclus rien avant.`,
+      `Tu as changé ta lente ${since}. Une lente met environ 2 jours à donner son plein effet : je ne conclus rien avant.`,
     ];
     if (recent.length > 0) {
       reasons.push(
