@@ -52,7 +52,7 @@ function fmtMin(min: number | null): string {
 }
 
 export default function Dashboard() {
-  const { profile, glucoseReadings, meals, completedWorkouts, insulinLogs, trainingLogs } = useStore();
+  const { profile, glucoseReadings, meals, completedWorkouts, insulinLogs, trainingLogs, diabetesConfig } = useStore();
 
   const { current: liveGlucose, history: liveHistory } = useGlucose({ mode: "history" });
   const whoop = useWhoop();
@@ -96,12 +96,17 @@ export default function Dashboard() {
   const glucoseLed = fallbackTone ?? "steel";
 
   // ─── Insuline active (même modèle bi-exponentiel que /diabete) ──
+  // Durée d'action réglée dans Paramètres (repli sur la valeur par défaut).
+  const insulinActiveMin =
+    diabetesConfig.insulinActiveDuration > 0
+      ? diabetesConfig.insulinActiveDuration
+      : DIABETES_CONFIG.insulinActiveDuration;
   const iob = useMemo(() => {
     const recent = insulinLogs
       .map((log) => ({ units: log.units, minutesAgo: (nowMs - new Date(log.injectedAt).getTime()) / 60000 }))
-      .filter((inj) => inj.minutesAgo >= 0 && inj.minutesAgo < DIABETES_CONFIG.insulinActiveDuration);
-    return { total: Math.round(activeIOB(recent) * 10) / 10, count: recent.length };
-  }, [insulinLogs, nowMs]);
+      .filter((inj) => inj.minutesAgo >= 0 && inj.minutesAgo < insulinActiveMin);
+    return { total: Math.round(activeIOB(recent, insulinActiveMin) * 10) / 10, count: recent.length };
+  }, [insulinLogs, nowMs, insulinActiveMin]);
 
   // ─── Nutrition du jour ───────────────────────────────
   const todayMeals = meals.filter((m) => new Date(m.eatenAt).toDateString() === now.toDateString());

@@ -69,3 +69,34 @@ test("NaN ne produit aucun CarbEntry", () => {
   });
   assert.equal(entry, null);
 });
+
+// ─── Insuline en trop au moment du resucrage (fable-5.2, nov. 2026) ─────
+
+import { suggestCarbsForHypo, type PersonalGRG } from "./hypo-resucrage";
+
+const GRG: PersonalGRG = { value: 4, sampleSize: 8, confidence: "high", isDefault: false };
+
+test("sans insuline en trop, la suggestion ne change pas", () => {
+  const plain = suggestCarbsForHypo(62, GRG);
+  assert.equal(plain.grams, 12);
+  assert.equal(plain.extraForInsulinG, 0);
+  const tiny = suggestCarbsForHypo(62, GRG, undefined, { units: 0.3, isf: 100 });
+  assert.equal(tiny.grams, 12, "0,3 U : dans le bruit du modèle, ignoré");
+});
+
+test("1 U en trop à l'ISF 100 ajoute 25 g au GRG 4", () => {
+  const s = suggestCarbsForHypo(62, GRG, undefined, { units: 1, isf: 100 });
+  assert.equal(s.extraForInsulinG, 25);
+  assert.equal(s.grams, 37);
+  assert.match(s.detail, /25 g pour les 1,0 U/);
+});
+
+test("le total est plafonné à 45 g même avec beaucoup d'insuline en trop", () => {
+  const s = suggestCarbsForHypo(55, GRG, undefined, { units: 4, isf: 100 });
+  assert.equal(s.grams, 45);
+});
+
+test("ISF invalide → l'excès est ignoré plutôt que de produire un chiffre absurde", () => {
+  const s = suggestCarbsForHypo(62, GRG, undefined, { units: 2, isf: 0 });
+  assert.equal(s.grams, 12);
+});

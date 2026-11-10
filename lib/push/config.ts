@@ -26,6 +26,8 @@ export const PUSH_CONFIG = {
   hypoReAlertMinutes: 20,
   /** Ne pas re-alerter hyper avant ces minutes */
   hyperReAlertMinutes: 30,
+  /** Ne pas re-alerter « hypo en approche » avant ces minutes */
+  lowSoonReAlertMinutes: 30,
 
   /** Seuils d'alerte (peuvent diverger des seuils UI : on alerte uniquement en zones vraiment critiques) */
   alertThresholds: {

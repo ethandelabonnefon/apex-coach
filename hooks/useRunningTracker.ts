@@ -215,8 +215,8 @@ export function useRunningTracker(): UseRunningTrackerReturn {
               .then((reg) => {
                 reg.showNotification("⚠️ Hypo en course !", {
                   body: `Glycémie ${value} mg/dL — mange 15g de glucides rapides`,
-                  icon: "/icons/icon-192.png",
-                  badge: "/icons/icon-192.png",
+                  icon: "/icons/icon-192x192.png",
+                  badge: "/icons/icon-192x192.png",
                   tag: "running-hypo",
                   data: { url: "/running", type: "running-hypo" },
                 });

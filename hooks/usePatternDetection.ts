@@ -80,8 +80,8 @@ function tryFireNotification(p: DetectedPattern) {
     .then((reg) => {
       reg.showNotification(p.title, {
         body: p.message,
-        icon: "/icons/icon-192.png",
-        badge: "/icons/icon-192.png",
+        icon: "/icons/icon-192x192.png",
+        badge: "/icons/icon-192x192.png",
         tag: `pattern-${p.type}`,
         data: { url: "/diabete", type: "pattern", patternType: p.type },
       });

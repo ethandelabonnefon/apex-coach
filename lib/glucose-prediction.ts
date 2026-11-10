@@ -109,8 +109,8 @@ export function iobGlucoseDrop(
 
 /**
  * IOB total (U) encore actif à « maintenant », via le modèle bi-exponentiel.
- * Équivalent fonctionnel de `getInsulinOnBoard` mais sur la courbe
- * exponentielle (et non linéaire) — à utiliser pour la prédiction.
+ * Courbe exponentielle (et non linéaire). Seul modèle d'insuline active de
+ * l'app depuis fable-5.2 : l'ancien modèle linéaire a été retiré.
  */
 export function activeIOB(
   boluses: ActiveBolus[],
@@ -208,27 +208,6 @@ export function fpuGlucoseRise(
   return ratePerHour * hoursCaptured;
 }
 
-/**
- * Montée glycémique TOTALE d'un repas (glucides + FPU) entre maintenant et
- * `minutesAhead`. C'est l'équivalent « COB » du modèle, mais ancré sur la
- * logique calibrée plutôt que sur le log-normal de la spec.
- */
-export function mealGlucoseRise(
-  meal: ActiveMeal,
-  minutesAhead: number,
-  mgPerGram: number = MG_PER_GRAM_CARB,
-): number {
-  const carbs = carbGlucoseRise(meal.carbsGrams, meal.minutesAgo, minutesAhead, mgPerGram);
-  const fpu = fpuGlucoseRise(
-    meal.fatGrams ?? 0,
-    meal.proteinGrams ?? 0,
-    meal.minutesAgo,
-    minutesAhead,
-    mgPerGram,
-  );
-  return carbs + fpu;
-}
-
 // ───────────────────────────────────────────────────────────────────────
 // Effet basal (Lantus) — Étape 5b
 // ───────────────────────────────────────────────────────────────────────
@@ -284,51 +263,6 @@ export function basalGlucoseEffect(
 export function carbSensitivity(isf: number, ratioGramsPerU: number): number {
   if (ratioGramsPerU <= 0) return isf / 10;
   return isf / ratioGramsPerU;
-}
-
-export type BasalTitration =
-  | "ok"
-  | "likely-too-strong"
-  | "likely-too-weak"
-  | "unknown";
-
-/**
- * Interprète la dérive basale mesurée pour signaler une basale mal titrée.
- * Utile cliniquement : une dérive nocturne franche et reproductible est le
- * signe d'une dose Lantus à ajuster (avec le diabéto), pas un défaut de bolus.
- *
- * Bande « ok » = ±`okBandPerHour` mg/dL/h (défaut ±5, point de départ à
- * calibrer). Au-delà, on flag — mais seulement si la confiance n'est pas faible
- * (sinon échantillon trop maigre pour conclure).
- */
-export function assessBasalTitration(
-  driftPerHour: number,
-  confidence: "low" | "medium" | "high",
-  okBandPerHour: number = 5,
-): { status: BasalTitration; message: string } {
-  if (confidence === "low") {
-    return {
-      status: "unknown",
-      message:
-        "Pas assez de nuits propres pour juger la basale. Continue à logger, la calibration affinera ça.",
-    };
-  }
-  if (driftPerHour < -okBandPerHour) {
-    return {
-      status: "likely-too-strong",
-      message: `Tes nuits descendent en moyenne de ${Math.abs(driftPerHour)} mg/dL/h à jeun → ta Lantus est peut-être un peu forte. À voir avec ton diabéto (jamais en auto).`,
-    };
-  }
-  if (driftPerHour > okBandPerHour) {
-    return {
-      status: "likely-too-weak",
-      message: `Tes nuits montent en moyenne de ${driftPerHour} mg/dL/h à jeun → ta Lantus est peut-être un peu faible. À voir avec ton diabéto (jamais en auto).`,
-    };
-  }
-  return {
-    status: "ok",
-    message: "Ta basale a l'air bien réglée (glycémie à jeun stable la nuit).",
-  };
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -848,159 +782,4 @@ export function predictGlucoseCurve(input: PredictGlucoseInput): GlucosePredicti
   const unreliableTooFresh = freshMealWithCarbs && totalIOB > 2;
 
   return { curve, min, max, alerts, unreliableTooFresh };
-}
-
-// ───────────────────────────────────────────────────────────────────────
-// Conseil actionnable dérivé de la courbe (atterrir à la cible)
-// ───────────────────────────────────────────────────────────────────────
-
-function fmtU(n: number): string {
-  return (Math.round(n * 10) / 10).toString().replace(".", ",");
-}
-
-/**
- * Fiabilité d'un conseil de CORRECTION selon le temps depuis le dernier bolus.
- * Recherche : analogue rapide (Novorapid) pic 60-90 min, durée ~4h ; corriger
- * dans les 2h = "stacking" (risque d'hypo max au pic). Tant que le bolus n'a
- * pas passé son pic, on ne peut pas savoir s'il "suffit" → décision peu fiable.
- *   < 90 min  → faible (bolus encore en montée / au pic)
- *   90-120 min → moyenne (pic passé, tendance se dessine)
- *   ≥ 120 min  → bonne (s'il reste haut, le bolus a vraiment sous-dosé)
- */
-export const CORRECTION_RELIABLE_MIN = 120;
-export const CORRECTION_PEAK_MIN = 90;
-
-export interface AdviceReliability {
-  level: "high" | "medium" | "low";
-  /** ms à partir duquel le conseil devient fiable (dernier bolus + 2h). */
-  reliableAtMs?: number;
-  /** Note explicative courte. */
-  note?: string;
-}
-
-export interface PredictionAdvice {
-  kind: "correction" | "carbs" | "wait-iob" | "in-range";
-  tone: "success" | "warning" | "error" | "info";
-  headline: string;
-  detail: string;
-  /** Quantité (U ou g) si action concrète. */
-  quantity?: number;
-  unit?: "U" | "g";
-  /** Fiabilité du conseil (surtout pertinent pour une correction). */
-  reliability: AdviceReliability;
-}
-
-function correctionReliability(
-  lastBolusMinutesAgo?: number,
-  lastBolusAtMs?: number,
-): AdviceReliability {
-  if (lastBolusMinutesAgo == null || lastBolusMinutesAgo >= CORRECTION_RELIABLE_MIN) {
-    return { level: "high" };
-  }
-  const reliableAtMs = lastBolusAtMs != null ? lastBolusAtMs + CORRECTION_RELIABLE_MIN * 60_000 : undefined;
-  if (lastBolusMinutesAgo >= CORRECTION_PEAK_MIN) {
-    return { level: "medium", reliableAtMs, note: "Le bolus précédent agit encore — surveille avant de corriger." };
-  }
-  return {
-    level: "low",
-    reliableAtMs,
-    note: `Bolus d'il y a ${Math.round(lastBolusMinutesAgo)} min encore en pleine action (pic ~1-1h30) — trop tôt pour juger.`,
-  };
-}
-
-/**
- * Transforme la courbe prédite en UN conseil : « fais ~XU » / « mange ~Yg » /
- * « attends, IOB en cours » / « rien à ajuster ».
- *
- * Sûreté : la correction se base sur le MINIMUM de la trajectoire à venir
- * (à partir de `fromMinutes`), pas sur un pic transitoire → on ne corrige que
- * si MÊME le point le plus bas reste au-dessus de la cible+marge, donc une
- * correction ne peut pas provoquer d'hypo sur un creux à venir. L'IOB est déjà
- * intégré dans la courbe ; on bloque quand même la suggestion si l'IOB actif
- * est élevé (anti-stacking). Décision finale = ressenti utilisateur.
- */
-export function buildPredictionAdvice(input: {
-  prediction: GlucosePrediction;
-  targetGlucose: number;
-  isf: number;
-  iobUnits: number;
-  /** Minutes depuis le dernier bolus rapide (pour la fiabilité d'une correction). */
-  lastBolusMinutesAgo?: number;
-  /** ms du dernier bolus rapide (pour calculer "fiable vers HH:MM"). */
-  lastBolusAtMs?: number;
-  /** Début de la fenêtre de référence (min). Défaut 120 (après le pic repas). */
-  fromMinutes?: number;
-  /** Plafond de correction suggérée (U). Défaut 3. */
-  maxCorrection?: number;
-}): PredictionAdvice {
-  const { prediction, targetGlucose, isf, iobUnits } = input;
-  const from = input.fromMinutes ?? 120;
-  const maxCorr = input.maxCorrection ?? 3;
-  const HIGH: AdviceReliability = { level: "high" };
-
-  if (prediction.unreliableTooFresh) {
-    return {
-      kind: "wait-iob",
-      tone: "info",
-      headline: "Repas trop récent pour conseiller",
-      detail: "La dynamique glucides/insuline est encore instable. Reviens dans 1-2h.",
-      reliability: { level: "low" },
-    };
-  }
-
-  const later = prediction.curve.filter((p) => p.minute >= from);
-  if (later.length === 0) {
-    return { kind: "in-range", tone: "success", headline: "Rien à ajuster", detail: "Horizon trop court.", reliability: HIGH };
-  }
-  const minLater = Math.min(...later.map((p) => p.value));
-  const maxLater = Math.max(...later.map((p) => p.value));
-
-  // 1. Hypo à venir → glucides (priorité absolue — JAMAIS gaté par la fiabilité :
-  // on traite un risque d'hypo tout de suite).
-  if (minLater < 75) {
-    const carbs = Math.min(25, Math.max(8, Math.ceil((targetGlucose - minLater) / 4)));
-    return {
-      kind: "carbs",
-      tone: "error",
-      headline: `Mange ~${carbs}g de glucides`,
-      detail: `Sans ça, tu descends vers ~${minLater} mg/dL. ${carbs}g te ramènent vers la cible.`,
-      quantity: carbs,
-      unit: "g",
-      reliability: HIGH,
-    };
-  }
-
-  // 2. Tu restes au-dessus de la cible → correction pour atterrir à la cible
-  if (minLater > targetGlucose + 25) {
-    if (iobUnits > 1.5) {
-      return {
-        kind: "wait-iob",
-        tone: "info",
-        headline: `Attends — ${fmtU(iobUnits)}U encore actives`,
-        detail: `Tu restes vers ${minLater} mg/dL, mais ${fmtU(iobUnits)}U travaillent déjà (c'est intégré au calcul). Re-vérifie dans 1-2h avant de corriger.`,
-        reliability: { level: "low", note: "IOB élevé — laisse l'insuline finir d'agir." },
-      };
-    }
-    const raw = (minLater - targetGlucose) / isf;
-    const units = Math.min(maxCorr, Math.max(0.5, Math.round(raw * 2) / 2));
-    const landing = Math.round(minLater - units * isf);
-    return {
-      kind: "correction",
-      tone: "warning",
-      headline: `Fais ~${fmtU(units)}U de correction`,
-      detail: `Sans rien, tu restes autour de ${minLater} mg/dL pendant des heures. ~${fmtU(units)}U te ramènent vers ${landing} mg/dL. Valide avec ton ressenti.`,
-      quantity: units,
-      unit: "U",
-      reliability: correctionReliability(input.lastBolusMinutesAgo, input.lastBolusAtMs),
-    };
-  }
-
-  // 3. En cible
-  return {
-    kind: "in-range",
-    tone: "success",
-    headline: "Bonne trajectoire — rien à ajuster",
-    detail: `Tu restes en cible (mini ~${minLater}, maxi ~${maxLater} mg/dL sur l'horizon).`,
-    reliability: HIGH,
-  };
 }

@@ -303,6 +303,17 @@ export async function fetchLatestCycle(): Promise<WhoopCycle | null> {
   return data?.records?.[0] ?? null;
 }
 
+/**
+ * Cycles récents (un par jour), du plus récent au plus ancien. Sert à
+ * mesurer la charge d'activité des derniers jours — une semaine à 30 000
+ * pas par jour se lit dans le strain du cycle, même sans séance déclarée.
+ */
+export async function fetchRecentCycles(limit: number = 14): Promise<WhoopCycle[]> {
+  const capped = String(Math.max(1, Math.min(25, Math.round(limit))));
+  const data = await whoopGet<WhoopPaginated<WhoopCycle>>("/v2/cycle", { limit: capped });
+  return data?.records ?? [];
+}
+
 export async function fetchLatestRecovery(): Promise<WhoopRecovery | null> {
   const data = await whoopGet<WhoopPaginated<WhoopRecovery>>("/v2/recovery", { limit: "1" });
   return data?.records?.[0] ?? null;

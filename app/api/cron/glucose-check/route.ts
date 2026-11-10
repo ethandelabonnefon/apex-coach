@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { PUSH_CONFIG } from "@/lib/push/config";
 import { checkGlucoseAndAlert } from "@/lib/push/alerts";
 import { checkRemindersAndAlert } from "@/lib/reminders/check";
+import { checkBasalAndAlert } from "@/lib/basal-watch/check";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,8 +66,21 @@ export async function GET(req: NextRequest) {
     reminderResult = { ok: false, checked: 0, fired: 0, errors: [msg] };
   }
 
+  // 3. Veille de la lente (même cron, pour la même raison). Se limite
+  //    elle-même à une analyse toutes les 3 h ; les autres passages ne
+  //    coûtent qu'une lecture KV.
+  let basalResult;
+  try {
+    basalResult = await checkBasalAndAlert();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "unknown";
+    console.error("[cron/glucose-check] basal-watch error:", msg);
+    basalResult = { ok: false, action: "error", reason: msg };
+  }
+
   return NextResponse.json({
     glucose: glucoseResult,
     reminders: reminderResult,
+    basal: basalResult,
   });
 }

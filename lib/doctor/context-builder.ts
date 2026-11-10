@@ -7,6 +7,7 @@
  * brute non filtrée. La lecture KV (`readPoints`) reste dans la route.
  */
 
+import { formatLocalStamp, isValidTimeZone } from "@/lib/local-time";
 import {
   buildWeeklyReport,
   type WeeklyReport,
@@ -53,6 +54,8 @@ export interface DoctorContextInput {
   workoutSessions?: WorkoutSummary[];
   mealContext?: MealContextEntry[];
   activeProfileName?: string;
+  /** Fuseau de la personne (IANA), envoyé par le navigateur. */
+  timeZone?: string;
 }
 
 export interface DoctorContext {
@@ -84,7 +87,8 @@ export function buildDoctorContext(input: DoctorContextInput): DoctorContext {
     })
     .filter((i) => Number.isFinite(i.t) && i.t >= fromMs && i.t <= toMs);
 
-  const report = buildWeeklyReport({ points, injections, range });
+  const timeZone = isValidTimeZone(input.timeZone) ? input.timeZone : undefined;
+  const report = buildWeeklyReport({ points, injections, range, timeZone });
 
   // Capping identique à weekly-insight (Phase 11 Bloc 5)
   const detectedPatterns = (input.detectedPatterns ?? []).slice(0, 6);
@@ -106,10 +110,19 @@ export function buildDoctorContext(input: DoctorContextInput): DoctorContext {
       (a, b) =>
         new Date(b.injectedAt).getTime() - new Date(a.injectedAt).getTime(),
     )
-    .slice(0, 40);
+    .slice(0, 40)
+    // L'ISO est en UTC : sans l'heure locale à côté, l'IA lirait « 19h41Z »
+    // comme 19 h 41 alors qu'il était 4 h 41 du matin pour la personne.
+    .map((m) => ({
+      ...m,
+      heureLocale: formatLocalStamp(new Date(m.injectedAt).getTime(), timeZone),
+    }));
 
   const payload = {
     range: report.range,
+    heures: timeZone
+      ? `Toutes les heures et tous les créneaux horaires sont en heure locale du patient (${timeZone}).`
+      : "Fuseau du patient inconnu : les créneaux horaires sont en UTC, ne conclus rien sur l'heure de la journée.",
     profileActif: input.activeProfileName ?? "inconnu",
     pointsCount: report.pointsCount,
     injectionsCount: report.injectionsCount,
@@ -122,12 +135,12 @@ export function buildDoctorContext(input: DoctorContextInput): DoctorContext {
     hypoEvents: report.hypoEvents.slice(0, 3).map((e) => ({
       durationMin: e.durationMin,
       minValue: e.minValue,
-      startMs: e.startMs,
+      debut: e.startLocal,
     })),
     hyperEvents: report.hyperEvents.slice(0, 3).map((e) => ({
       durationMin: e.durationMin,
       maxValue: e.maxValue,
-      startMs: e.startMs,
+      debut: e.startLocal,
     })),
     byProfile: report.byProfile,
     detectedPatterns,

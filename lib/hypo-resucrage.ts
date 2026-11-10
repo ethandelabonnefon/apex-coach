@@ -260,6 +260,26 @@ export interface CarbsSuggestion {
   grg: PersonalGRG;
   /** Explication courte FR. */
   detail: string;
+  /**
+   * Part des grammes ajoutée pour l'insuline rapide en trop (g). 0 quand il
+   * n'y en a pas — le cas d'une hypo « classique ».
+   */
+  extraForInsulinG: number;
+}
+
+/** En dessous, l'excès d'insuline est ignoré : dans le bruit du modèle (U). */
+export const EXCESS_INSULIN_MIN_U = 0.5;
+/** Plafond des grammes quand de l'insuline en trop est encore active. */
+export const MAX_CARBS_WITH_EXCESS = 45;
+
+export interface ExcessInsulin {
+  /**
+   * Insuline rapide active NON couverte par des glucides encore en
+   * digestion (U) — `balanceU` du module glucides actifs, côté positif.
+   */
+  units: number;
+  /** Sensibilité (mg/dL par U). */
+  isf: number;
 }
 
 /**
@@ -271,18 +291,42 @@ export interface CarbsSuggestion {
  *  - Maximum 30g (au-delà = sur-sucrage probable, risque rebond hyper)
  *  - Arrondi au-dessus pour anti-sous-sucrage (préférable de remonter
  *    légèrement plus haut que de rester en hypo).
+ *
+ * Insuline en trop (fable-5.2, nov. 2026) : jusqu'ici la quantité ne
+ * dépendait que de l'écart à la cible. Avec 2 U encore actives et rien à
+ * digérer en face, ces 2 U vont continuer à tirer ~200 mg/dL après le
+ * resucrage : 12 g ne suffisent pas, et l'hypo revient 30 minutes plus tard
+ * (verdict « pas assez » à répétition). On ajoute donc les glucides qui
+ * neutralisent cette insuline-là, sous un plafond relevé à 45 g. L'insuline
+ * couverte par un repas en cours de digestion n'est PAS comptée : c'est le
+ * solde du module glucides actifs qui est passé ici, pas l'insuline active
+ * brute.
  */
 export function suggestCarbsForHypo(
   currentGlucose: number,
   grg: PersonalGRG,
   targetGlucose: number = POST_HYPO_TARGET,
+  excess?: ExcessInsulin,
 ): CarbsSuggestion {
   const gap = Math.max(0, targetGlucose - currentGlucose);
   const theoretical = gap / grg.value;
-  const grams = Math.min(
+  const baseGrams = Math.min(
     MAX_CARBS,
     Math.max(MIN_CARBS, Math.ceil(theoretical)),
   );
+
+  let extraForInsulinG = 0;
+  if (
+    excess &&
+    Number.isFinite(excess.units) &&
+    excess.units >= EXCESS_INSULIN_MIN_U &&
+    excess.isf > 0 &&
+    grg.value > 0
+  ) {
+    const needed = Math.ceil((excess.units * excess.isf) / grg.value);
+    extraForInsulinG = Math.max(0, Math.min(needed, MAX_CARBS_WITH_EXCESS - baseGrams));
+  }
+  const grams = baseGrams + extraForInsulinG;
 
   let detail: string;
   if (grg.isDefault) {
@@ -295,7 +339,11 @@ export function suggestCarbsForHypo(
     detail = `Première estimation depuis ${grg.sampleSize} hypos (+${grg.value.toFixed(1).replace('.', ',')} mg/dL/g). À affiner.`;
   }
 
-  return { grams, grg, detail };
+  if (extraForInsulinG > 0 && excess) {
+    detail += ` Dont ${extraForInsulinG} g pour les ${excess.units.toFixed(1).replace('.', ',')} U d'insuline encore actives sans glucides en face.`;
+  }
+
+  return { grams, grg, detail, extraForInsulinG };
 }
 
 // ───────────────────────────────────────────────────────────────────────

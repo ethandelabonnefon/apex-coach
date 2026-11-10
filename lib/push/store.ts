@@ -57,6 +57,16 @@ export async function setLastHyperAlert(ts: number): Promise<void> {
   await kv.set(K_LAST_HYPER, ts);
 }
 
+const K_LAST_LOW_SOON = "push:last-low-soon-alert";
+
+export async function getLastLowSoonAlert(): Promise<number | null> {
+  return (await kv.get<number>(K_LAST_LOW_SOON)) ?? null;
+}
+
+export async function setLastLowSoonAlert(ts: number): Promise<void> {
+  await kv.set(K_LAST_LOW_SOON, ts);
+}
+
 /** Trace du dernier "retour en plage" — sert à reset les alertes */
 export async function getLastBackInRange(): Promise<number | null> {
   return (await kv.get<number>(K_LAST_BACK_IN_RANGE)) ?? null;

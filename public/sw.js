@@ -102,6 +102,7 @@ self.addEventListener("push", (event) => {
   // qu'Ethan y touche — il est fait pour être reçu poche fermée.
   const isUrgent =
     payload.type === "hypo" ||
+    payload.type === "hypo-soon" ||
     payload.type === "split" ||
     payload.type === "post-session";
   const options = {
@@ -112,7 +113,10 @@ self.addEventListener("push", (event) => {
     // Les alertes hypo/hyper et les rappels de dose sont urgents → renotify
     renotify: isUrgent || payload.type === "hyper",
     requireInteraction: isUrgent,
-    vibrate: payload.type === "hypo" ? [200, 100, 200, 100, 400] : [200, 100, 200],
+    vibrate:
+      payload.type === "hypo" || payload.type === "hypo-soon"
+        ? [200, 100, 200, 100, 400]
+        : [200, 100, 200],
     data: {
       url: payload.url || "/diabete",
       type: payload.type,

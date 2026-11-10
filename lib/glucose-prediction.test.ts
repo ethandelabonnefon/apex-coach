@@ -12,14 +12,11 @@ import {
   activeIOB,
   carbGlucoseRise,
   fpuGlucoseRise,
-  mealGlucoseRise,
   basalGlucoseEffect,
-  assessBasalTitration,
   BASAL_EFFECT_CAP_MGDL,
   DEFAULT_DIA_MIN,
   carbSensitivity,
   predictGlucoseCurve,
-  buildPredictionAdvice,
   type PredictionEvent,
 } from "./glucose-prediction";
 
@@ -140,14 +137,6 @@ test("fpuGlucoseRise: les protéines ne changent RIEN à la montée prédite", (
   assert.ok(sansProt > 0, "les lipides, eux, doivent bien produire une montée");
 });
 
-test("mealGlucoseRise: somme glucides + FPU", () => {
-  const meal = { carbsGrams: 60, fatGrams: 30, proteinGrams: 40, minutesAgo: 0 };
-  const combined = mealGlucoseRise(meal, 180);
-  const carbs = carbGlucoseRise(60, 0, 180);
-  const fpu = fpuGlucoseRise(30, 40, 0, 180);
-  assert.ok(Math.abs(combined - (carbs + fpu)) < 1e-6);
-});
-
 // ───────────────────────────────────────────────────────────────────────
 // Effet basal (Lantus) — Étape 5b
 // ───────────────────────────────────────────────────────────────────────
@@ -179,96 +168,6 @@ test("basalGlucoseEffect: extrapolation plafonnée (anti-runaway sur 8h)", () =>
 
 test("basalGlucoseEffect: horizon nul → 0", () => {
   assert.equal(basalGlucoseEffect(0, -10), 0);
-});
-
-test("assessBasalTitration: confiance faible → unknown (pas de conclusion)", () => {
-  assert.equal(assessBasalTitration(-12, "low").status, "unknown");
-});
-
-test("assessBasalTitration: dérive descendante franche → basale trop forte", () => {
-  assert.equal(assessBasalTitration(-8, "high").status, "likely-too-strong");
-});
-
-test("assessBasalTitration: dérive montante franche → basale trop faible", () => {
-  assert.equal(assessBasalTitration(7, "medium").status, "likely-too-weak");
-});
-
-test("assessBasalTitration: dans la bande ±5 → ok", () => {
-  assert.equal(assessBasalTitration(-2, "high").status, "ok");
-  assert.equal(assessBasalTitration(3, "high").status, "ok");
-});
-
-// ───────────────────────────────────────────────────────────────────────
-// Conseil actionnable buildPredictionAdvice
-// ───────────────────────────────────────────────────────────────────────
-
-function curveFlatHigh(v: number) {
-  return predictGlucoseCurve({ currentGlucose: v, events: [], isf: ISF, nowMs: NOON });
-}
-
-test("advice: reste haut (160) sans IOB → correction pour viser la cible", () => {
-  const a = buildPredictionAdvice({ prediction: curveFlatHigh(160), targetGlucose: 110, isf: ISF, iobUnits: 0 });
-  assert.equal(a.kind, "correction");
-  assert.equal(a.unit, "U");
-  // (160-110)/100 = 0,5U
-  assert.ok(a.quantity && a.quantity >= 0.5 && a.quantity <= 1, `unités=${a.quantity}`);
-});
-
-test("advice: correction plafonnée à maxCorrection", () => {
-  const a = buildPredictionAdvice({ prediction: curveFlatHigh(300), targetGlucose: 110, isf: ISF, iobUnits: 0, maxCorrection: 1 });
-  assert.equal(a.kind, "correction");
-  assert.ok(a.quantity! <= 1);
-});
-
-test("advice: IOB élevé + reste haut → wait-iob (anti-stacking)", () => {
-  const a = buildPredictionAdvice({ prediction: curveFlatHigh(200), targetGlucose: 110, isf: ISF, iobUnits: 2 });
-  assert.equal(a.kind, "wait-iob");
-});
-
-test("advice: en cible → rien à ajuster", () => {
-  const a = buildPredictionAdvice({ prediction: curveFlatHigh(120), targetGlucose: 110, isf: ISF, iobUnits: 0 });
-  assert.equal(a.kind, "in-range");
-});
-
-test("advice fiabilité: correction 30 min après bolus → faible + reliableAt", () => {
-  const now = NOON;
-  const a = buildPredictionAdvice({
-    prediction: curveFlatHigh(160), targetGlucose: 110, isf: ISF, iobUnits: 0,
-    lastBolusMinutesAgo: 30, lastBolusAtMs: now - 30 * 60000,
-  });
-  assert.equal(a.kind, "correction");
-  assert.equal(a.reliability.level, "low");
-  assert.ok(a.reliability.reliableAtMs); // "fiable vers HH:MM"
-});
-
-test("advice fiabilité: correction 100 min après bolus → moyenne", () => {
-  const a = buildPredictionAdvice({
-    prediction: curveFlatHigh(160), targetGlucose: 110, isf: ISF, iobUnits: 0,
-    lastBolusMinutesAgo: 100, lastBolusAtMs: NOON - 100 * 60000,
-  });
-  assert.equal(a.reliability.level, "medium");
-});
-
-test("advice fiabilité: correction 2h+ après bolus (ou aucun) → bonne", () => {
-  const a1 = buildPredictionAdvice({ prediction: curveFlatHigh(160), targetGlucose: 110, isf: ISF, iobUnits: 0, lastBolusMinutesAgo: 130 });
-  assert.equal(a1.reliability.level, "high");
-  const a2 = buildPredictionAdvice({ prediction: curveFlatHigh(160), targetGlucose: 110, isf: ISF, iobUnits: 0 });
-  assert.equal(a2.reliability.level, "high");
-});
-
-test("advice fiabilité: hypo (glucides) JAMAIS gatée même bolus récent", () => {
-  const pred = predictGlucoseCurve({ currentGlucose: 160, events: [{ minutesAgo: 0, units: 3 }], isf: ISF, nowMs: NOON });
-  const a = buildPredictionAdvice({ prediction: pred, targetGlucose: 110, isf: ISF, iobUnits: 0, lastBolusMinutesAgo: 5 });
-  assert.equal(a.kind, "carbs");
-  assert.equal(a.reliability.level, "high");
-});
-
-test("advice: trajectoire qui descend bas → glucides", () => {
-  // 3U de correction sur 160 → chute → hypo prévue
-  const pred = predictGlucoseCurve({ currentGlucose: 160, events: [{ minutesAgo: 0, units: 3 }], isf: ISF, nowMs: NOON });
-  const a = buildPredictionAdvice({ prediction: pred, targetGlucose: 110, isf: ISF, iobUnits: 0 });
-  assert.equal(a.kind, "carbs");
-  assert.equal(a.unit, "g");
 });
 
 // ───────────────────────────────────────────────────────────────────────

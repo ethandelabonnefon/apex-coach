@@ -74,6 +74,12 @@ export interface BackupPayload {
   savedAt: string;
   summary: BackupSummary;
   state: Record<string, unknown>;
+  /**
+   * Fuseau de l'appareil au moment de la sauvegarde (IANA). Sert aux
+   * analyses faites côté serveur (veille de la lente), qui tourne en UTC.
+   * Absent des sauvegardes d'avant fable-5.2.
+   */
+  timeZone?: string;
 }
 
 type AnyState = Record<string, unknown>;
@@ -122,6 +128,7 @@ export function buildBackupPayload(
   state: AnyState,
   storeVersion: number,
   now: Date = new Date(),
+  timeZone?: string,
 ): BackupPayload {
   const picked: AnyState = {};
   for (const key of BACKED_UP_KEYS) {
@@ -144,6 +151,7 @@ export function buildBackupPayload(
     savedAt: now.toISOString(),
     summary: summarizeState(picked),
     state: picked,
+    ...(timeZone ? { timeZone } : {}),
   };
 }
 
@@ -155,7 +163,10 @@ export function backupFingerprint(payload: BackupPayload): string {
   const s = JSON.stringify(payload.state);
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return `${s.length}:${h}`;
+  // Le fuseau fait partie de l'empreinte : un voyage (ou la première
+  // synchro après fable-5.2) doit renvoyer la sauvegarde même si aucune
+  // donnée n'a bougé, sinon le serveur garde l'ancien fuseau.
+  return payload.timeZone ? `${s.length}:${h}:${payload.timeZone}` : `${s.length}:${h}`;
 }
 
 /** Seuil à partir duquel une perte d'injections est traitée comme un accident. */

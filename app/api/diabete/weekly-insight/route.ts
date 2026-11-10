@@ -48,6 +48,7 @@ import {
   RETENTION_DAYS,
 } from "@/lib/glucose-archive/store";
 import { buildWeeklyReport } from "@/lib/glucose-archive/analytics";
+import { formatLocalStamp, isValidTimeZone } from "@/lib/local-time";
 import { T1D_SAFETY_RULES } from "@/lib/doctor/t1d-safety-rules";
 import type { InsulinLog } from "@/types";
 
@@ -97,6 +98,8 @@ interface RequestBody {
   detectedPatterns?: ClientDetectedPattern[];
   workoutSessions?: WorkoutSummary[];
   mealContext?: MealContextEntry[];
+  /** Fuseau de l'appareil (IANA) — le serveur tourne en UTC. */
+  timeZone?: string;
 }
 
 interface InsightOutput {
@@ -202,11 +205,13 @@ export async function POST(req: NextRequest) {
     profileNameById.set(p.id, p.name);
   }
 
+  const timeZone = isValidTimeZone(body.timeZone) ? body.timeZone : undefined;
   const report = buildWeeklyReport({
     points,
     injections,
     range: { fromMs, toMs, days },
     profileNameById,
+    timeZone,
   });
 
   // Garde-fou : si vraiment rien dans la fenêtre, on retourne sans appeler Claude
@@ -244,11 +249,20 @@ export async function POST(req: NextRequest) {
       return Number.isFinite(t) && t >= fromMs && t <= toMs;
     })
     .sort((a, b) => new Date(b.injectedAt).getTime() - new Date(a.injectedAt).getTime())
-    .slice(0, 40);
+    .slice(0, 40)
+    // L'ISO est en UTC : on ajoute l'heure locale pour que l'IA ne situe
+    // pas un repas de midi à 3 h du matin.
+    .map((m) => ({
+      ...m,
+      heureLocale: formatLocalStamp(new Date(m.injectedAt).getTime(), timeZone),
+    }));
 
   // Préparer le contexte minimal pour Claude
   const claudeContext = {
     range: report.range,
+    heures: timeZone
+      ? `Toutes les heures et tous les créneaux horaires sont en heure locale du patient (${timeZone}).`
+      : "Fuseau du patient inconnu : les créneaux horaires sont en UTC, ne conclus rien sur l'heure de la journée.",
     profileActif: body.activeProfileName ?? "inconnu",
     pointsCount: report.pointsCount,
     injectionsCount: report.injectionsCount,
@@ -261,12 +275,12 @@ export async function POST(req: NextRequest) {
     hypoEvents: report.hypoEvents.slice(0, 3).map((e) => ({
       durationMin: e.durationMin,
       minValue: e.minValue,
-      startMs: e.startMs,
+      debut: e.startLocal,
     })),
     hyperEvents: report.hyperEvents.slice(0, 3).map((e) => ({
       durationMin: e.durationMin,
       maxValue: e.maxValue,
-      startMs: e.startMs,
+      debut: e.startLocal,
     })),
     byProfile: report.byProfile,
     // Phase 11 Bloc 5

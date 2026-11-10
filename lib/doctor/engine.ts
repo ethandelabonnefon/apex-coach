@@ -53,6 +53,8 @@ export interface DoctorRequestBody {
   activeProfileName?: string;
   /** Réglages actuels réels (ratios/ISF/basal) — source de vérité pour les actions "Valider". */
   currentSettings?: DoctorCurrentSettings;
+  /** Fuseau de l'appareil (IANA) — le serveur tourne en UTC. */
+  timeZone?: string;
 }
 
 export interface DoctorReply extends DoctorReplyMeta {
@@ -300,6 +302,7 @@ export async function runDoctor(
     workoutSessions: body.workoutSessions,
     mealContext: body.mealContext,
     activeProfileName: body.activeProfileName,
+    timeZone: body.timeZone,
   });
 
   const history = truncateForContext(await deps.conversation.read(userId));
