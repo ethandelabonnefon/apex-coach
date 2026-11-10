@@ -16,6 +16,7 @@
  */
 
 import { useStore } from "@/lib/store";
+import { deviceTimeZone } from "@/lib/local-time";
 import {
   backupFingerprint,
   buildBackupPayload,
@@ -66,7 +67,12 @@ export function syncBackupNow(force = false): Promise<boolean> {
   if (inFlight) return inFlight;
   inFlight = (async () => {
     const meta = readLocalMeta();
-    const payload = buildBackupPayload(useStore.getState() as unknown as Record<string, unknown>, STORE_VERSION);
+    const payload = buildBackupPayload(
+      useStore.getState() as unknown as Record<string, unknown>,
+      STORE_VERSION,
+      new Date(),
+      deviceTimeZone(),
+    );
     const fp = backupFingerprint(payload);
     if (!force && meta.lastFingerprint === fp) return false;
     try {

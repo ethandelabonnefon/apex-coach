@@ -50,6 +50,13 @@ interface HypoLoggerProps {
   lastBolusMinutesAgo?: number | null;
   /** Units du dernier bolus (pour contexte affichage). */
   lastBolusUnits?: number | null;
+  /**
+   * Insuline active non couverte par des glucides en digestion (U) — solde
+   * positif du module glucides actifs. Augmente la quantité suggérée.
+   */
+  excessInsulinU?: number;
+  /** Sensibilité (mg/dL par U), nécessaire avec `excessInsulinU`. */
+  isf?: number;
 }
 
 const QUICK_CARBS = [8, 10, 15, 20, 30];
@@ -60,6 +67,8 @@ export default function HypoLogger({
   iobUnits = 0,
   lastBolusMinutesAgo = null,
   lastBolusUnits = null,
+  excessInsulinU = 0,
+  isf = 0,
 }: HypoLoggerProps) {
   const hypoEvents = useStore((s) => s.hypoEvents);
   const addHypoEvent = useStore((s) => s.addHypoEvent);
@@ -68,8 +77,14 @@ export default function HypoLogger({
   // GRG perso basé sur les hypos passées (over-bolus exclus auto)
   const grg = useMemo(() => estimatePersonalGRG(hypoEvents), [hypoEvents]);
   const suggestion = useMemo(
-    () => suggestCarbsForHypo(currentGlucose, grg),
-    [currentGlucose, grg],
+    () =>
+      suggestCarbsForHypo(
+        currentGlucose,
+        grg,
+        undefined,
+        excessInsulinU > 0 && isf > 0 ? { units: excessInsulinU, isf } : undefined,
+      ),
+    [currentGlucose, grg, excessInsulinU, isf],
   );
 
   // Classification du contexte courant (over-bolus ?)

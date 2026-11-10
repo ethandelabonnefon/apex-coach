@@ -18,6 +18,7 @@
 
 import { GLUCOSE_THRESHOLDS } from "@/lib/libre-link/config";
 import { resolveCarbs } from "@/lib/insulin-log-values";
+import { formatLocalStamp, localParts } from "@/lib/local-time";
 import type { ArchivedPoint } from "@/lib/glucose-archive/store";
 import type { InsulinLog } from "@/types";
 
@@ -98,6 +99,8 @@ export interface GlucoseEvent {
   minValue: number;          // pour hypos : creux
   maxValue: number;          // pour hypers : pic
   pointCount: number;
+  /** Début de l'épisode en heure locale (`JJ/MM HHhMM`), lisible par l'IA. */
+  startLocal?: string;
 }
 
 export interface ProfileSegmentStats {
@@ -243,10 +246,10 @@ const TIME_BUCKETS: { startHour: number; endHour: number; label: string }[] = [
   { startHour: 21, endHour: 24, label: "21-00h" },
 ];
 
-function aggregateByTimeBucket(points: ArchivedPoint[]): TimeBucketStats[] {
+function aggregateByTimeBucket(points: ArchivedPoint[], timeZone?: string): TimeBucketStats[] {
   return TIME_BUCKETS.map((bucket) => {
     const inBucket = points.filter((p) => {
-      const h = new Date(p.t).getHours();
+      const h = localParts(p.t, timeZone).hour;
       return h >= bucket.startHour && h < bucket.endHour;
     });
     const stats = statsForValues(inBucket.map((p) => p.value));
@@ -269,7 +272,7 @@ function aggregateByTimeBucket(points: ArchivedPoint[]): TimeBucketStats[] {
 // Hour buckets (24 × 1h)
 // ───────────────────────────────────────────────────────────────────────
 
-function aggregateByHour(points: ArchivedPoint[]): HourBucket[] {
+function aggregateByHour(points: ArchivedPoint[], timeZone?: string): HourBucket[] {
   const buckets = Array.from({ length: 24 }, (_, h) => ({
     hour: h,
     hourLabel: `${String(h).padStart(2, "0")}h`,
@@ -280,7 +283,7 @@ function aggregateByHour(points: ArchivedPoint[]): HourBucket[] {
   }));
 
   for (const p of points) {
-    const h = new Date(p.t).getHours();
+    const h = localParts(p.t, timeZone).hour;
     const b = buckets[h];
     b.sum += p.value;
     b.count += 1;
@@ -539,6 +542,12 @@ export interface BuildReportInput {
   range: { fromMs: number; toMs: number; days: number };
   /** Map id → name pour annoter byProfile. */
   profileNameById?: Map<string, string>;
+  /**
+   * Fuseau de la personne (IANA). À fournir dès que le rapport est construit
+   * côté serveur : sans lui les créneaux horaires sont calculés en UTC et
+   * tout ce qui parle d'heure (« hypos entre 0 h et 3 h ») est décalé.
+   */
+  timeZone?: string;
 }
 
 export function buildWeeklyReport(input: BuildReportInput): WeeklyReport {
@@ -552,10 +561,10 @@ export function buildWeeklyReport(input: BuildReportInput): WeeklyReport {
   const overall = statsForValues(sortedPoints.map((p) => p.value));
 
   // Time buckets
-  const byTimeBucket = aggregateByTimeBucket(sortedPoints);
+  const byTimeBucket = aggregateByTimeBucket(sortedPoints, input.timeZone);
 
   // Hour buckets
-  const byHour = aggregateByHour(sortedPoints);
+  const byHour = aggregateByHour(sortedPoints, input.timeZone);
 
   // Risky hours (top 3 par moyenne descendante, count >= 2)
   const riskyHours = [...byHour]
@@ -575,13 +584,20 @@ export function buildWeeklyReport(input: BuildReportInput): WeeklyReport {
   const postMeal = aggregatePostMeal(sortedPoints, injectionsForMeal);
 
   // Events hypos / hypers
+  const withLocalStart = (e: GlucoseEvent): GlucoseEvent => ({
+    ...e,
+    startLocal: formatLocalStamp(e.startMs, input.timeZone),
+  });
+
   const hypoEvents = detectEvents(sortedPoints, (v) => v < GLUCOSE_THRESHOLDS.hypo, 30)
     .sort((a, b) => b.durationMin - a.durationMin)
-    .slice(0, 5);
+    .slice(0, 5)
+    .map(withLocalStart);
 
   const hyperEvents = detectEvents(sortedPoints, (v) => v > GLUCOSE_THRESHOLDS.hyper, 30)
     .sort((a, b) => b.durationMin - a.durationMin)
-    .slice(0, 5);
+    .slice(0, 5)
+    .map(withLocalStart);
 
   // Stats par profil
   const byProfile = aggregateByProfile(

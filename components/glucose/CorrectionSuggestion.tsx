@@ -1,76 +1,73 @@
 "use client";
 
 /**
- * CorrectionSuggestion — carte qui propose un bolus de correction.
+ * CorrectionSuggestion — carte « tu es en hyper, voici quoi faire ».
  *
- * Se déclenche automatiquement quand la glycémie live (capteur Libre 2)
- * dépasse la cible haute (180 mg/dL par défaut), en prenant en compte
- * l'insuline active (IOB) pour éviter le stacking.
+ * N'apparaît que si la glycémie live dépasse le haut de la plage cible.
+ * Le calcul vit dans `lib/correction-suggestion.ts` (pur, testé) :
+ *   - arrondi EN DESSOUS à l'unité entière (stylo sans demi-unités, et une
+ *     correction n'a pas de repas derrière pour rattraper une unité de trop) ;
+ *   - l'insuline déjà active est soustraite ; au-dessus de 0,5 U on attend ;
+ *   - une glycémie qui descend déjà ne se corrige pas ;
+ *   - la sensibilité post-sport réduit la dose, comme dans le calculateur.
  *
- * Règle T1D-first :
- *   - correction = (glucose - cible) / ISF, arrondie à l'entier supérieur
- *     (le stylo Novorapid d'Ethan n'a pas de demi-unités)
- *   - si IOB > 0,5U : on affiche un WARNING rouge "ne pas empiler", pas de bouton injection
- *   - si IOB ≈ 0 et glucose > 180 : on propose l'injection
- *   - si glucose > 250 (hyper) : message "vérifier cétones"
- *
- * Ne s'affiche PAS si :
- *   - capteur non configuré / en erreur
- *   - glycémie en plage (<= targetRange.max)
+ * L'insuline active, la flèche et l'ajustement sport sont fournis par la
+ * page : un seul modèle d'insuline active à l'écran, jamais deux chiffres
+ * différents sur la même page.
  */
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { useGlucose } from "@/hooks/useGlucose";
-import { getInsulinOnBoard } from "@/lib/insulin-calculator";
-import { DIABETES_CONFIG } from "@/lib/constants";
-import { glucoseTone, glucoseToneLabel } from "@/lib/libre-link/utils";
+import { glucoseTone, glucoseToneLabel, trendStringToNumber } from "@/lib/libre-link/utils";
+import { computeHyperCorrection } from "@/lib/correction-suggestion";
 import { Badge } from "@/components/ui/Badge";
 import { Syringe, AlertTriangle, Info, Check } from "lucide-react";
 
-export default function CorrectionSuggestion() {
-  const { profile, diabetesConfig, insulinLogs, addInsulinLog } = useStore();
+interface CorrectionSuggestionProps {
+  /** Insuline rapide active (U), modèle de la page. */
+  iobUnits: number;
+  /** Réduction due à la sensibilité post-sport (%). */
+  exerciseReductionPct?: number;
+}
+
+function fr(n: number): string {
+  return n.toFixed(1).replace(".", ",");
+}
+
+export default function CorrectionSuggestion({
+  iobUnits,
+  exerciseReductionPct,
+}: CorrectionSuggestionProps) {
+  const { profile, diabetesConfig, addInsulinLog } = useStore();
   const { current: live } = useGlucose({ mode: "current" });
   const [justLogged, setJustLogged] = useState(false);
 
-  // ─── IOB (insuline active) ─────────────────────
-  const iob = useMemo(() => {
-    const now = new Date();
-    const recentInjections = insulinLogs
-      .map((log) => {
-        const injectedAt = new Date(log.injectedAt);
-        const minutesAgo =
-          (now.getTime() - injectedAt.getTime()) / 60_000;
-        return { units: log.units, minutesAgo };
-      })
-      .filter(
-        (inj) =>
-          inj.minutesAgo < DIABETES_CONFIG.insulinActiveDuration &&
-          inj.minutesAgo >= 0,
-      );
-    return getInsulinOnBoard(recentInjections);
-  }, [insulinLogs]);
-
-  // ─── Ne s'affiche pas si pas de donnée live ou glycémie OK ──
   if (!live) return null;
   const value = live.value;
-  const targetHigh = diabetesConfig.targetRange.max;
-  if (value <= targetHigh) return null;
-
-  // ─── Calculs ────────────────────────────────
   const target = diabetesConfig.targetGlucose;
   const isf = diabetesConfig.insulinSensitivityFactor;
-  const rawCorrection = (value - target) / isf;
-  // Arrondi au-dessus : stylo sans demi-unités.
-  const correctionBolus = Math.max(0, Math.ceil(rawCorrection));
+
+  const suggestion = computeHyperCorrection({
+    glucose: value,
+    target,
+    thresholdHigh: diabetesConfig.targetRange.max,
+    isf,
+    iobUnits,
+    trendArrow: trendStringToNumber(live.trend),
+    exerciseReductionPct,
+  });
+  if (!suggestion) return null;
+
   const tone = glucoseTone(value);
   const isHyper = tone === "hyper"; // > 250
-  const iobTooHigh = iob.totalIOB > 0.5;
+  const units = suggestion.kind === "dose" ? suggestion.units : 0;
 
   function handleLog() {
+    if (suggestion?.kind !== "dose") return;
     addInsulinLog({
       id: crypto.randomUUID(),
-      units: correctionBolus,
+      units: suggestion.units,
       insulinType: profile.insulinRapid,
       mealType: "correction",
       carbsGrams: 0,
@@ -79,12 +76,8 @@ export default function CorrectionSuggestion() {
       injectedAt: new Date(),
     });
     setJustLogged(true);
-    // Reset le confirm visuel après 3s (au cas où l'utilisateur reste sur la page)
     setTimeout(() => setJustLogged(false), 3000);
   }
-
-  // Ratio ISF en format naturel : 0,5U pour 50 mg/dL
-  const unitsPer50 = 50 / isf; // = 0.5 avec ISF 100
 
   return (
     <section className="panel border border-warning/30">
@@ -120,9 +113,7 @@ export default function CorrectionSuggestion() {
         </div>
       </div>
 
-      {/* Bloc dose suggérée */}
-      {iobTooHigh ? (
-        // Cas 1 : IOB trop élevé → ne pas empiler
+      {suggestion.kind === "wait-iob" ? (
         <div className="rounded-2xl bg-error/8 border border-error/25 p-4 mb-3">
           <div className="flex items-center gap-2 mb-1">
             <Info className="w-4 h-4 text-error" />
@@ -132,47 +123,56 @@ export default function CorrectionSuggestion() {
           </div>
           <p className="text-xs text-text-secondary leading-relaxed">
             Tu as déjà{" "}
-            <span className="num font-semibold">{iob.totalIOB}U</span>{" "}
-            d&apos;insuline active (IOB). Empiler une correction maintenant
-            risque de te faire passer en hypo. Attends que l&apos;IOB retombe
-            sous 0,5U avant de corriger.
+            <span className="num font-semibold">{fr(suggestion.iobUnits)} U</span>{" "}
+            d&apos;insuline active. En rajouter maintenant risque de te faire
+            passer en hypo. Attends qu&apos;elle retombe sous 0,5 U.
           </p>
         </div>
-      ) : correctionBolus === 0 ? (
-        // Cas 2 : correction arrondie à 0U (tu es juste au-dessus de target+threshold mais pas assez)
+      ) : suggestion.kind === "falling" ? (
         <div className="rounded-2xl surface-2 p-4 mb-3">
-          <p className="text-xs text-text-secondary">
-            Dose trop faible pour être utile (arrondi à 0U). Surveille la
-            tendance — une correction pourra s&apos;imposer si ça continue à
-            monter.
+          <p className="text-sm font-semibold text-text-primary mb-1">
+            Ta glycémie descend déjà
+          </p>
+          <p className="text-xs text-text-secondary leading-relaxed">
+            Pas de correction tant que la flèche pointe vers le bas : elle
+            s&apos;ajouterait à la descente en cours. Revois dans 30 min.
+          </p>
+        </div>
+      ) : suggestion.kind === "too-small" ? (
+        <div className="rounded-2xl surface-2 p-4 mb-3">
+          <p className="text-xs text-text-secondary leading-relaxed">
+            Il faudrait <span className="num">{fr(suggestion.raw)} U</span> :
+            moins d&apos;une unité entière. Une unité complète te ferait passer
+            sous ta cible. Surveille la tendance.
           </p>
         </div>
       ) : (
-        // Cas 3 : on propose la dose
         <div className="rounded-2xl bg-diabete/10 border border-diabete/30 p-4 mb-3">
           <div className="flex items-center justify-between mb-3">
             <p className="label" style={{ color: "var(--diabete)" }}>
               Dose suggérée
             </p>
-            <Badge variant={iob.totalIOB > 0 ? "warning" : "default"} size="sm">
-              IOB <span className="num ml-1">{iob.totalIOB}</span>U
+            <Badge variant={iobUnits > 0 ? "warning" : "default"} size="sm">
+              Insuline active <span className="num ml-1">{fr(iobUnits)}</span> U
             </Badge>
           </div>
 
           <div className="flex items-baseline gap-2 mb-3">
             <span className="num-hero text-5xl sm:text-6xl font-semibold text-diabete leading-none">
-              {correctionBolus}
+              {units}
             </span>
             <span className="text-lg text-diabete/70 font-medium">U</span>
           </div>
 
-          <p className="text-xs text-text-secondary mb-4">
-            {value - target} mg/dL au-dessus de la cible →{" "}
-            <span className="num">
-              {unitsPer50.toFixed(1).replace(".", ",")}
-            </span>
-            U pour 50 mg/dL ={" "}
-            <span className="num font-semibold">{correctionBolus}</span>U
+          <p className="text-xs text-text-secondary mb-4 leading-relaxed">
+            {value - target} mg/dL au-dessus de la cible, soit{" "}
+            <span className="num">{fr(suggestion.raw)} U</span> théoriques
+            {suggestion.iobDeducted > 0 ? " (insuline active déduite)" : ""}
+            {suggestion.exerciseReductionPct > 0
+              ? `, réduites de ${Math.round(suggestion.exerciseReductionPct)} % après le sport`
+              : ""}
+            . Arrondi en dessous : <span className="num font-semibold">{units} U</span>,
+            atterrissage vers <span className="num">{suggestion.landing}</span> mg/dL.
           </p>
 
           {isHyper && (
@@ -191,7 +191,7 @@ export default function CorrectionSuggestion() {
           {justLogged ? (
             <div className="w-full bg-success/15 border border-success/30 text-success font-medium py-3 rounded-xl flex items-center justify-center gap-2">
               <Check className="w-4 h-4" />
-              <span>Correction enregistrée ({correctionBolus}U)</span>
+              <span>Correction enregistrée ({units} U)</span>
             </div>
           ) : (
             <button
@@ -200,15 +200,15 @@ export default function CorrectionSuggestion() {
               className="w-full bg-diabete text-ink font-semibold py-3 rounded-xl hover:bg-diabete/90 transition-colors tap-scale flex items-center justify-center gap-2"
             >
               <Syringe className="w-4 h-4" />
-              Enregistrer la correction ({correctionBolus}U)
+              Enregistrer la correction ({units} U)
             </button>
           )}
         </div>
       )}
 
       <p className="text-[11px] text-text-tertiary italic text-center">
-        Suggestion basée sur ton ISF ({isf} mg/dL/U) et ta cible ({target} mg/dL).
-        Ajuste manuellement si besoin via le calculateur ci-dessous.
+        Calculé avec ta sensibilité ({isf} mg/dL par U) et ta cible ({target} mg/dL).
+        Ajuste à la main dans le calculateur si besoin.
       </p>
     </section>
   );

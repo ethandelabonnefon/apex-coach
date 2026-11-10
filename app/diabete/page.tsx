@@ -93,6 +93,7 @@ import {
 } from "@/lib/night-review";
 import { isLearnable } from "@/lib/insulin-log-values";
 import NightReviewCard from "@/components/diabete/NightReviewCard";
+import DecisionBoard from "@/components/diabete/DecisionBoard";
 import { capDoseByPrediction } from "@/lib/dose-capping";
 import { useWhoop } from "@/hooks/useWhoop";
 import NightBrain from "@/components/diabete/NightBrain";
@@ -124,7 +125,6 @@ import {
   Trash2,
   Pencil,
   History,
-  Sparkles,
   Clock,
   Plus,
   CheckCircle2,
@@ -518,6 +518,12 @@ export default function DiabetePage() {
     if (mealTimeTouched) return;
     setMealTime(inferMealTimeFromClock(new Date(nowTick)));
   }, [nowTick, mealTimeTouched]);
+  // Durée d'action de la rapide : le réglage de l'utilisateur, avec la
+  // valeur par défaut en repli si le réglage est absent ou invalide.
+  const insulinActiveMin =
+    diabetesConfig.insulinActiveDuration > 0
+      ? diabetesConfig.insulinActiveDuration
+      : DIABETES_CONFIG.insulinActiveDuration;
   const iob = useMemo(() => {
     const now = nowTick;
     const recentInjections = insulinLogs
@@ -527,20 +533,22 @@ export default function DiabetePage() {
         return { units: log.units, minutesAgo, mealType: log.mealType, injectedAt };
       })
       .filter(
-        (inj) =>
-          inj.minutesAgo < DIABETES_CONFIG.insulinActiveDuration && inj.minutesAgo >= 0
+        (inj) => inj.minutesAgo < insulinActiveMin && inj.minutesAgo >= 0
       );
     // Modèle bi-exponentiel (même moteur que la prédiction nuit / COB) — un
     // seul modèle d'IOB affiché sur la page pour ne jamais contredire la
-    // tuile Glucides actifs.
+    // tuile Glucides actifs. La durée d'action est celle réglée dans
+    // Paramètres (fable-5.2) : avant, la constante par défaut était lue
+    // ici, et modifier le réglage ne changeait pas l'insuline active.
     const totalIOB = activeIOB(
       recentInjections.map((inj) => ({ units: inj.units, minutesAgo: inj.minutesAgo })),
+      insulinActiveMin,
     );
     return {
       totalIOB: Math.round(totalIOB * 10) / 10,
       details: recentInjections,
     };
-  }, [insulinLogs, nowTick]);
+  }, [insulinLogs, nowTick, insulinActiveMin]);
 
   // ─── Confirmation des glucides (T+15 → T+3h) ──────────────────────
   // État dérivé : la première injection avec glucides, ni confirmée ni
@@ -585,10 +593,10 @@ export default function DiabetePage() {
         const minutesAgo = (now - injectedAt.getTime()) / 60000;
         return { log, minutesAgo, injectedAt };
       })
-      .filter((c) => c.minutesAgo < DIABETES_CONFIG.insulinActiveDuration && c.minutesAgo >= 0)
+      .filter((c) => c.minutesAgo < insulinActiveMin && c.minutesAgo >= 0)
       .sort((a, b) => a.minutesAgo - b.minutesAgo);
     return candidates[0] ?? null;
-  }, [insulinLogs, nowTick]);
+  }, [insulinLogs, nowTick, insulinActiveMin]);
 
   // Phase F2 — Hook Whoop (strain Whoop prime sur l'estimation interne)
   const whoop = useWhoop();
@@ -2156,9 +2164,6 @@ export default function DiabetePage() {
             <NavIconLink href="/diabete/historique" label="Historique">
               <History className="w-3.5 h-3.5" />
             </NavIconLink>
-            <NavIconLink href="/diabete/patterns" label="Patterns">
-              <Sparkles className="w-3.5 h-3.5" />
-            </NavIconLink>
             <NavIconLink href="/diabete/parametres" label="Paramètres">
               <Settings className="w-3.5 h-3.5" />
             </NavIconLink>
@@ -2213,6 +2218,13 @@ export default function DiabetePage() {
         <GlucoseChart />
       </div>
 
+      {/* ── BILAN AUTOMATIQUE (fable-5.2) : objectif HbA1c, lente, doses ──
+          Sous la courbe : c'est une lecture de fond, pas un geste d'urgence.
+          La ligne « lente » s'ouvre d'elle-même quand une action est due. */}
+      <div className="mb-4">
+        <DecisionBoard />
+      </div>
+
       {/* ── PATTERNS DÉTECTÉS (Phase 11 Bloc 3) ── */}
       {visiblePatterns.length > 0 && (
         <section className="mb-4 space-y-2">
@@ -2232,16 +2244,26 @@ export default function DiabetePage() {
           iobUnits={iob.totalIOB}
           lastBolusMinutesAgo={lastActiveInjection?.minutesAgo ?? null}
           lastBolusUnits={lastActiveInjection?.log.units ?? null}
+          excessInsulinU={Math.max(0, cob.balanceU)}
+          isf={diabetesConfig.insulinSensitivityFactor}
         />
       )}
 
       {/* ── HYPO FEEDBACK (hypos récentes 24h) ── */}
       <HypoFeedback />
 
-      {/* ── CORRECTION SUGGÉRÉE (hyper) ── */}
-      <div className="mb-4">
-        <CorrectionSuggestion />
-      </div>
+      {/* ── CORRECTION SUGGÉRÉE (hyper) ──
+          Masquée en soirée : de 20 h à 2 h c'est le plan de nuit qui décide
+          de la correction (dose calculée pour tenir jusqu'au réveil). Deux
+          cartes, deux doses différentes pour la même glycémie : non. */}
+      {!isEveningHours && (
+        <div className="mb-4">
+          <CorrectionSuggestion
+            iobUnits={iob.totalIOB}
+            exerciseReductionPct={exerciseAdjustment?.reductionPct}
+          />
+        </div>
+      )}
 
       {/* ── CONFIRMATION DES GLUCIDES (T+15 → T+3h) ── */}
       {/* key={pendingConfirm.id} : si l'injection éligible change pendant que

@@ -62,6 +62,24 @@ const REFRESH_LOCK_TTL_SEC = 10; // auto-release après 10s (safety)
 const K_REFRESH_FAILS = "whoop:refresh-fails";
 const REFRESH_FAILS_TTL_SEC = 600; // 10min — si pas re-fail pendant 10min, reset
 
+/** Un cycle Whoop réduit à ce dont l'analyse a besoin — cache 1 h. */
+export interface WhoopCycleStrain {
+  /** Début du cycle (ISO, UTC). */
+  start: string;
+  strain: number;
+}
+
+const K_STRAIN_HISTORY = "whoop:cycle-strain";
+const STRAIN_HISTORY_TTL_SEC = 60 * 60;
+
+export async function getCycleStrainCache(): Promise<WhoopCycleStrain[] | null> {
+  return (await kv.get<WhoopCycleStrain[]>(K_STRAIN_HISTORY)) ?? null;
+}
+
+export async function saveCycleStrainCache(cycles: WhoopCycleStrain[]): Promise<void> {
+  await kv.set(K_STRAIN_HISTORY, cycles, { ex: STRAIN_HISTORY_TTL_SEC });
+}
+
 export function isKvConfigured(): boolean {
   return Boolean(process.env.KV_REST_API_URL || process.env.KV_URL);
 }

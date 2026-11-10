@@ -911,28 +911,6 @@ export default function DiabeteParametresPage() {
       {/* ── Connexion Whoop (Phase F2) ── */}
       <WhoopConnection />
 
-      {/* ── Patterns connus ── */}
-      <section className="panel">
-        <h2 className="text-base font-semibold text-text-primary mb-4">Patterns connus</h2>
-        <div className="space-y-2">
-          {diabetesConfig.knownPatterns.map((p, i) => (
-            <div
-              key={i}
-              className="surface-2 rounded-xl p-3 flex items-start gap-3"
-            >
-              <div className="shrink-0 w-7 h-7 rounded-lg bg-warning/15 flex items-center justify-center">
-                <AlertTriangle className="w-3.5 h-3.5 text-warning" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-text-primary">{p.name}</p>
-                <p className="text-xs text-text-tertiary mt-0.5">{p.description}</p>
-                <p className="text-xs text-diabete mt-1">→ {p.suggestion}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
       {/* ── Export des données (sauvegarde manuelle, sept. 2026) ──
           Action sûre : carte dédiée, volontairement séparée de la zone
           dangereuse ci-dessous pour ne jamais se mêler visuellement à une

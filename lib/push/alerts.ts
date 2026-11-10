@@ -20,12 +20,15 @@ import {
   setLastHypoAlert,
   getLastHyperAlert,
   setLastHyperAlert,
+  getLastLowSoonAlert,
+  setLastLowSoonAlert,
   setLastBackInRange,
   removeSubscription,
   isKvConfigured,
 } from "./store";
 import { fetchGlucoseSnapshot } from "@/lib/libre-link/client";
 import { isLibreLinkConfigured } from "@/lib/libre-link/config";
+import { assessLowSoon, readingAgeMinutes, MAX_READING_AGE_MIN } from "./low-prediction";
 
 // Init VAPID une fois par cold-start
 let vapidInitialized = false;
@@ -41,7 +44,15 @@ function initVapid() {
 }
 
 export type GlucoseAlertPayload = {
-  type: "hypo" | "hyper" | "split" | "meal-confirm" | "post-session" | "test";
+  type:
+    | "hypo"
+    | "hypo-soon"
+    | "hyper"
+    | "split"
+    | "meal-confirm"
+    | "post-session"
+    | "basal"
+    | "test";
   title: string;
   body: string;
   value?: number;
@@ -71,7 +82,7 @@ export async function sendGlucosePush(
 
   try {
     await webpush.sendNotification(sub, JSON.stringify(payload), {
-      urgency: payload.type === "hypo" ? "high" : "normal",
+      urgency: payload.type === "hypo" || payload.type === "hypo-soon" ? "high" : "normal",
       TTL: 60 * 10, // 10 min — si le device est offline > 10 min, on abandonne
     });
     return { sent: true };
@@ -94,7 +105,7 @@ export async function sendGlucosePush(
 export type CheckResult = {
   ok: boolean;
   value?: number;
-  action: "none" | "hypo" | "hyper" | "skipped_backoff" | "error";
+  action: "none" | "hypo" | "hypo-soon" | "hyper" | "skipped_backoff" | "skipped_stale" | "error";
   reason?: string;
   sentReason?: string;
 };
@@ -117,12 +128,43 @@ export async function checkGlucoseAndAlert(): Promise<CheckResult> {
 
   const value = snapshot.current.value;
   const now = Date.now();
+
+  // Lecture périmée (capteur déconnecté, téléphone hors réseau) : Abbott
+  // renvoie alors la DERNIÈRE valeur connue. Alerter dessus ferait sonner
+  // « Hypo : 65 » toutes les 20 min pendant des heures sur un chiffre mort.
+  const ageMin = readingAgeMinutes(snapshot.current.date, now);
+  if (ageMin > MAX_READING_AGE_MIN) {
+    return { ok: true, value, action: "skipped_stale", reason: `reading_${Math.round(ageMin)}min_old` };
+  }
+
   const isHypo = value < PUSH_CONFIG.alertThresholds.hypo;
   const isHyper = value > PUSH_CONFIG.alertThresholds.hyper;
 
   // Si en plage : on marque "back in range" (permet de re-alerter à la prochaine sortie sans attendre le backoff)
   if (!isHypo && !isHyper) {
     await setLastBackInRange(now);
+
+    // Hypo en approche : pas encore sous 70, mais la flèche y mène dans les
+    // 20 minutes. Prévenir maintenant, c'est un resucrage léger au lieu
+    // d'une vraie hypo.
+    const soon = assessLowSoon({ value, trend: snapshot.current.trend, readingAgeMin: ageMin });
+    if (soon.warn) {
+      const last = await getLastLowSoonAlert();
+      const backoffMs = PUSH_CONFIG.lowSoonReAlertMinutes * 60_000;
+      if (last && now - last < backoffMs) {
+        return { ok: true, value, action: "skipped_backoff", reason: "low_soon_backoff" };
+      }
+      const res = await sendGlucosePush({
+        type: "hypo-soon",
+        title: `Hypo en approche : ${value} mg/dL et ça descend`,
+        body: `À ce rythme tu passes sous 70 dans une vingtaine de minutes. Prends 10 à 15 g de glucides maintenant.`,
+        value,
+        url: "/diabete",
+      });
+      if (res.sent) await setLastLowSoonAlert(now);
+      return { ok: true, value, action: "hypo-soon", sentReason: res.reason };
+    }
+
     return { ok: true, value, action: "none" };
   }
 

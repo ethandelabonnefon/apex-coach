@@ -233,18 +233,3 @@ export function computeAvgSportImpact(
   if (summary.trackedCount < minSample) return null;
   return summary.avgDelta;
 }
-
-/**
- * Recommandation pré-séance basée sur l'historique : étant donné une
- * glycémie de départ, prédit la valeur attendue à T+45min.
- * Renvoie null si on n'a pas l'avgDelta (pas assez de data).
- */
-export function predictGlucoseAtMidWorkout(
-  startGlucose: number,
-  sessions: EnrichedSportSession[],
-  type: "muscu" | "running",
-): number | null {
-  const avg = computeAvgSportImpact(sessions, type);
-  if (avg === null) return null;
-  return startGlucose + avg;
-}

@@ -400,41 +400,6 @@ export function calculateBolus(
   };
 }
 
-export function estimateGlucoseImpact(
-  currentGlucose: number,
-  insulinUnits: number,
-  carbsGrams: number,
-  mealTime: MealTime,
-  configOverride?: DiabetesConfig,
-): { estimatedPeak: number; estimatedTrough: number; timeline: { time: number; glucose: number }[] } {
-  const config = configOverride || DIABETES_CONFIG;
-  const ratio = getRatioForMeal(config, mealTime);
-  const isf = config.insulinSensitivityFactor;
-
-  // Estimation simplifiée de l'impact
-  const carbImpact = (carbsGrams / ratio) * isf; // mg/dL que les glucides vont faire monter (via le ratio)
-  // En réalité: glucides montent ~3-4 mg/dL par gramme, insuline baisse de ISF par unité
-  const glucoseRise = carbsGrams * 3.5; // estimation
-  const insulinDrop = insulinUnits * isf;
-
-  const peakTime = 45; // minutes après le repas
-  const insulinPeak = 90; // minutes
-
-  const timeline: { time: number; glucose: number }[] = [];
-  for (let t = 0; t <= 240; t += 15) {
-    // Modèle simplifié: montée rapide des glucides puis descente de l'insuline
-    const carbEffect = glucoseRise * Math.exp(-((t - peakTime) ** 2) / (2 * 30 ** 2));
-    const insulinEffect = insulinDrop * (1 - Math.exp(-t / 60)) * Math.exp(-Math.max(0, t - insulinPeak) / 120);
-    const glucose = currentGlucose + carbEffect * (t < peakTime ? t / peakTime : 1) - insulinEffect;
-    timeline.push({ time: t, glucose: Math.round(glucose) });
-  }
-
-  const estimatedPeak = Math.max(...timeline.map((t) => t.glucose));
-  const estimatedTrough = Math.min(...timeline.slice(4).map((t) => t.glucose));
-
-  return { estimatedPeak, estimatedTrough, timeline: timeline.filter((_, i) => i <= 16) };
-}
-
 // ─── Glucides pré-sport par famille d'effort (sept. 2026) ───────────────
 //
 // Jusqu'ici, le briefing ne savait combler que l'ÉCART entre la glycémie
@@ -686,20 +651,4 @@ export function getDigestiveComplexity(
     message: 'Digestion rapide (~2h). Pic glycémique attendu à T+45min.',
     fpu,
   };
-}
-
-export function getInsulinOnBoard(
-  recentInjections: { units: number; minutesAgo: number }[],
-): { totalIOB: number; details: { units: number; minutesAgo: number; remaining: number }[] } {
-  const activeDuration = DIABETES_CONFIG.insulinActiveDuration;
-  const details = recentInjections
-    .filter((inj) => inj.minutesAgo < activeDuration)
-    .map((inj) => {
-      // Modèle linéaire simplifié de l'IOB
-      const remaining = inj.units * Math.max(0, 1 - inj.minutesAgo / activeDuration);
-      return { ...inj, remaining };
-    });
-
-  const totalIOB = details.reduce((sum, d) => sum + d.remaining, 0);
-  return { totalIOB: Math.round(totalIOB * 10) / 10, details };
 }

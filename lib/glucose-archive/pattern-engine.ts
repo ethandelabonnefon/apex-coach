@@ -167,14 +167,17 @@ function detectRecurringHypo(points: ArchivedPoint[], now: number): DetectedPatt
 
   // Suggestion dynamique selon le créneau
   let suggestion: string;
+  // Les suggestions renvoient au bilan automatique (fable-5.2), qui calcule
+  // la dose à changer. L'ancienne « réduis de 0,5U » était inapplicable : le
+  // stylo ne délivre pas de demi-unités.
   if (startH >= 19 && startH <= 21) {
-    suggestion = "Réduis le bolus du goûter de 0,5U les jours où tu fais du sport le soir.";
+    suggestion = "Les jours de sport le soir, baisse le bolus du goûter de 1 U. Le bilan automatique dit si le ratio du goûter ou du dîner est à revoir.";
   } else if (startH >= 0 && startH <= 6) {
-    suggestion = "Ton basal nocturne est peut-être trop fort. Parle à ton diabéto.";
+    suggestion = "La nuit, c'est la lente qui agit. Regarde le bilan automatique : il dit de combien la baisser.";
   } else if (startH >= 12 && startH <= 14) {
-    suggestion = "Ton ratio du midi est peut-être trop agressif.";
+    suggestion = "Probablement le ratio du matin ou du midi. Le bilan automatique dit lequel et de combien.";
   } else {
-    suggestion = "Surveille ce créneau et regarde si quelque chose se répète (sport, repas, stress).";
+    suggestion = "Regarde le bilan automatique : il sépare ce qui vient d'un repas de ce qui vient de la lente.";
   }
 
   return {

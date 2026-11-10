@@ -32,6 +32,7 @@ import {
   ComposedChart,
 } from "recharts";
 import { useStore } from "@/lib/store";
+import { deviceTimeZone } from "@/lib/local-time";
 import { GLUCOSE_THRESHOLDS } from "@/lib/libre-link/config";
 import GlucoseCalendar from "@/components/glucose/GlucoseCalendar";
 import AGPChart from "@/components/glucose/AGPChart";
@@ -404,6 +405,9 @@ export default function DiabeteHistoriquePage() {
             name: p.name,
           })),
           activeProfileName,
+          // Le serveur tourne en UTC : sans le fuseau de l'appareil, les
+          // créneaux horaires du bilan seraient décalés.
+          timeZone: deviceTimeZone(),
           // Phase 11 Bloc 5
           detectedPatterns: detectedPatterns.map((p) => ({
             type: p.type,
@@ -788,7 +792,7 @@ export default function DiabeteHistoriquePage() {
           fetch dédié : cette section ne dépend NI du sélecteur de période,
           NI du fetch qui l'alimente, donc elle reste rendue même si celui-ci
           échoue. */}
-      <section className="panel mb-4">
+      <section id="validation-doses" className="panel mb-4 scroll-mt-20">
         <div className="mb-1">
           <h2 className="text-[15px] font-semibold">
             Validation des doses

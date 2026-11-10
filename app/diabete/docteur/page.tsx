@@ -20,6 +20,7 @@ import {
   Button,
 } from "@/components/ui";
 import { useStore } from "@/lib/store";
+import { deviceTimeZone } from "@/lib/local-time";
 import { usePatternDetection } from "@/hooks/usePatternDetection";
 import { isLearnable, resolveCarbs } from "@/lib/carbs-on-board";
 import type { InsulinRatio } from "@/types";
@@ -311,6 +312,9 @@ export default function DocteurPage() {
             mode,
             message,
             ...buildContextPayload(days),
+            // Le serveur tourne en UTC : sans le fuseau de l'appareil, les
+            // créneaux horaires du bilan seraient décalés.
+            timeZone: deviceTimeZone(),
           }),
         });
         if (!res.ok) {

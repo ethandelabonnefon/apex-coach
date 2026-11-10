@@ -28,7 +28,6 @@
  */
 
 import type { GpsPoint } from "@/lib/running-tracker";
-import { totalDistance } from "@/lib/running-tracker";
 // `lib/sports.ts` n'importe de ce fichier QUE le type `ExerciseSource`
 // (effacé à la compilation) : pas de cycle à l'exécution.
 import { sportSessionEndMs } from "@/lib/sports";
@@ -534,12 +533,6 @@ export function resolveRecentExercise(input: {
   if (sameSession) return whoopCandidate;
 
   return otherCandidate.endedAtMs > whoopCandidate.endedAtMs ? otherCandidate : whoopCandidate;
-}
-
-/** Compte les points GPS valides (utilitaire pour debug). */
-export function _countValidGpsPoints(points: GpsPoint[] | undefined): number {
-  if (!points) return 0;
-  return totalDistance(points) > 50 ? points.length : 0;
 }
 
 // ───────────────────────────────────────────────────────────────────────

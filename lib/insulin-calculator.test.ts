@@ -12,7 +12,6 @@ import {
   inferMealTimeFromClock,
   getInjectionTimingAdvice,
   calculateBolus,
-  getInsulinOnBoard,
 } from "./insulin-calculator";
 import { activeIOB } from "./glucose-prediction";
 import { DIABETES_CONFIG } from "./constants";
@@ -110,11 +109,10 @@ test("pas de conseil : sans glucides, mealTime 'other', ou pré-workout", () => 
 // physiologiquement plus juste) : ils figent le comportement actuel pour
 // qu'un futur changement d'IOB ne déplace plus les doses en silence.
 
-test("IOB : les deux modèles divergent nettement à 2h30 d'un bolus de 6 U", () => {
-  const inj = [{ units: 6, minutesAgo: 150 }];
-  const linear = getInsulinOnBoard(inj).totalIOB;
-  const biExp = activeIOB(inj);
-  assert.equal(linear, 1.4, "modèle linéaire (1 − t/DIA)");
+test("IOB : 2h30 après un bolus de 6 U, il reste ~0,56 U (modèle bi-exponentiel)", () => {
+  // L'ancien modèle linéaire (1 − t/DIA) donnait 1,4 U au même instant. Il
+  // a été retiré en fable-5.2 : un seul modèle d'insuline active dans l'app.
+  const biExp = activeIOB([{ units: 6, minutesAgo: 150 }]);
   assert.ok(
     Math.abs(biExp - 0.56) < 0.01,
     `modèle bi-exponentiel attendu ~0,56 U, reçu ${biExp}`,
