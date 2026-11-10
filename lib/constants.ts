@@ -145,30 +145,3 @@ export const DIABETES_CONFIG: DiabetesConfig = {
     },
   ],
 };
-
-export const HALF_MARATHON_PLAN = {
-  duration: 14,
-  targetRace: "Semi-marathon",
-  weeklyStructure: { running: 2, muscu: 2 },
-  volumeProgression: [
-    1.0, 1.1, 1.2, 1.15,
-    1.25, 1.35, 1.45, 1.35,
-    1.5, 1.6, 1.55,
-    1.3, 0.8, 0.5,
-  ],
-  intervalProgression: [
-    null, null,
-    { reps: 4, distance: 400, recovery: 400 },
-    null,
-    { reps: 5, distance: 600, recovery: 400 },
-    { reps: 6, distance: 800, recovery: 400 },
-    { reps: 5, distance: 1000, recovery: 500 },
-    { reps: 4, distance: 800, recovery: 400 },
-    { reps: 6, distance: 1000, recovery: 500 },
-    { reps: 3, distance: 1600, recovery: 600 },
-    { reps: 4, distance: 1200, recovery: 500 },
-    { reps: 3, distance: 1000, recovery: 400 },
-    { reps: 3, distance: 600, recovery: 400 },
-    null,
-  ],
-};

@@ -2,50 +2,66 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  CalendarDays,
-  Footprints,
-  Apple,
-  Droplet,
-  UserRound,
-} from "lucide-react";
+import { Activity, History, Stethoscope, SlidersHorizontal, Syringe } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Logo from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
+
+/**
+ * Navigation — app recentrée sur le diabète (nov. 2026).
+ *
+ * Quatre écrans, nommés par ce qu'on y fait :
+ *   Suivi       maintenant : glycémie, doses, alertes
+ *   Historique  ce qui s'est passé : courbes, statistiques, validation des doses
+ *   Docteur     demander un avis
+ *   Réglages    ratios, lente, capteur, sauvegarde
+ *
+ * Et UN geste, sorti des onglets parce qu'il se fait quatre fois par jour :
+ * le bolus. Le bouton central amène au calculateur depuis n'importe quel
+ * écran, d'un seul appui du pouce, sans avoir à faire défiler la page Suivi.
+ *
+ * Règles (BRAND.md) : onglet actif en cobalt, icônes au trait, pas de
+ * capsule. Le bouton Bolus est le seul aplat anthracite de la barre — c'est
+ * l'action primaire, pas une destination.
+ */
 
 type NavItem = {
   href: string;
   label: string;
   Icon: LucideIcon;
+  /** Chemins qui allument cet onglet. */
+  match: (pathname: string) => boolean;
 };
 
-/* Brand v5 "Instrument" : icônes au trait, onglet actif en cobalt
-   (--accent) quel que soit le module — la couleur de catégorie reste un
-   code de données dans les pages, pas un signal de navigation. */
-/* Barre mobile = 5 onglets du prototype (Overview · Muscu · Running · T1D ·
-   Profil). La nutrition se rejoint depuis l'Overview et la sidebar desktop. */
 const NAV: NavItem[] = [
-  { href: "/", label: "Overview", Icon: LayoutDashboard },
-  { href: "/muscu", label: "Muscu", Icon: CalendarDays },
-  { href: "/running", label: "Running", Icon: Footprints },
-  { href: "/diabete", label: "T1D", Icon: Droplet },
-  { href: "/profil", label: "Profil", Icon: UserRound },
+  {
+    href: "/diabete",
+    label: "Suivi",
+    Icon: Activity,
+    match: (p) => p === "/" || p === "/diabete",
+  },
+  {
+    href: "/diabete/historique",
+    label: "Historique",
+    Icon: History,
+    match: (p) => p.startsWith("/diabete/historique"),
+  },
+  {
+    href: "/diabete/docteur",
+    label: "Docteur",
+    Icon: Stethoscope,
+    match: (p) => p.startsWith("/diabete/docteur"),
+  },
+  {
+    href: "/diabete/parametres",
+    label: "Réglages",
+    Icon: SlidersHorizontal,
+    match: (p) => p.startsWith("/diabete/parametres") || p.startsWith("/whoop"),
+  },
 ];
 
-const SIDEBAR_NAV: NavItem[] = [
-  NAV[0],
-  NAV[1],
-  NAV[2],
-  { href: "/nutrition", label: "Nutrition", Icon: Apple },
-  NAV[3],
-  NAV[4],
-];
-
-function useActive(href: string) {
-  const pathname = usePathname();
-  return pathname === href || (href !== "/" && pathname.startsWith(href));
-}
+/** Ancre du calculateur de bolus sur la page Suivi. */
+export const BOLUS_HREF = "/diabete#bolus";
 
 function ActiveBar() {
   return (
@@ -57,12 +73,12 @@ function ActiveBar() {
   );
 }
 
-function SidebarLink({ item }: { item: NavItem }) {
-  const active = useActive(item.href);
+function SidebarLink({ item, active }: { item: NavItem; active: boolean }) {
   const { Icon } = item;
   return (
     <Link
       href={item.href}
+      aria-current={active ? "page" : undefined}
       className="group relative flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors hover:bg-bg-hover"
       style={{
         color: active ? "var(--accent)" : "var(--text-secondary)",
@@ -75,12 +91,12 @@ function SidebarLink({ item }: { item: NavItem }) {
   );
 }
 
-function BottomNavLink({ item }: { item: NavItem }) {
-  const active = useActive(item.href);
+function BottomNavLink({ item, active }: { item: NavItem; active: boolean }) {
   const { Icon } = item;
   return (
     <Link
       href={item.href}
+      aria-current={active ? "page" : undefined}
       className="relative flex flex-1 flex-col items-center justify-center gap-1 py-2 touch-target"
       style={{ color: active ? "var(--accent)" : "var(--text-tertiary)" }}
     >
@@ -97,56 +113,63 @@ function BottomNavLink({ item }: { item: NavItem }) {
 }
 
 export function Navigation() {
+  const pathname = usePathname() ?? "/";
+  const [suivi, historique, docteur, reglages] = NAV;
+
   return (
     <>
       {/* ============ Sidebar desktop ============ */}
       <aside className="hidden lg:flex fixed top-0 left-0 h-full w-60 flex-col bg-bg-secondary border-r border-border-default z-50">
-        {/* Logo block */}
         <div className="px-5 pt-6 pb-4">
-          <Logo size={28} withWordmark tagline="Tableau de bord" />
+          <Logo size={28} withWordmark tagline="Diabète T1" />
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto scrollbar-hide">
-          <p className="label px-3 mb-2 mt-2">Modules</p>
-          {SIDEBAR_NAV.map((item) => (
-            <SidebarLink key={item.href} item={item} />
+        <div className="px-3 pb-3">
+          <Link
+            href={BOLUS_HREF}
+            className="flex h-11 items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90"
+            style={{ background: "var(--text-primary)", color: "var(--bg-secondary)" }}
+          >
+            <Syringe size={16} strokeWidth={2} />
+            Calculer un bolus
+          </Link>
+        </div>
+
+        <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto scrollbar-hide" aria-label="Navigation principale">
+          {NAV.map((item) => (
+            <SidebarLink key={item.href} item={item} active={item.match(pathname)} />
           ))}
         </nav>
 
-        {/* Theme toggle */}
-        <div className="mx-3 mb-2 flex items-center justify-between px-1">
+        <div className="mx-3 mb-4 flex items-center justify-between px-1">
           <span className="label">Thème</span>
           <ThemeToggle />
         </div>
-
-        {/* User block */}
-        <Link
-          href="/profil"
-          className="mx-3 mb-4 p-3 rounded-lg border border-border-default hover:bg-bg-hover transition-colors flex items-center gap-3"
-        >
-          <div
-            className="h-9 w-9 rounded-md flex items-center justify-center text-sm font-semibold font-mono"
-            style={{ background: "var(--bg-tertiary)", color: "var(--text-secondary)" }}
-          >
-            E
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-medium truncate">Ethan</p>
-            <p className="text-[11px] text-text-tertiary font-mono">T1D</p>
-          </div>
-        </Link>
       </aside>
 
-      {/* ============ Bottom nav mobile ============ */}
+      {/* ============ Barre mobile ============ */}
       <nav
         className="lg:hidden fixed bottom-0 left-0 right-0 z-50 glass pb-safe"
         aria-label="Navigation principale"
       >
-        <div className="flex items-stretch px-2">
-          {NAV.map((item) => (
-            <BottomNavLink key={item.href} item={item} />
-          ))}
+        <div className="flex items-stretch px-1">
+          <BottomNavLink item={suivi} active={suivi.match(pathname)} />
+          <BottomNavLink item={historique} active={historique.match(pathname)} />
+
+          {/* Action primaire : le bolus, au centre, sous le pouce. */}
+          <div className="flex flex-1 items-center justify-center py-1.5">
+            <Link
+              href={BOLUS_HREF}
+              aria-label="Calculer un bolus"
+              className="nav-action tap-scale"
+            >
+              <Syringe size={20} strokeWidth={2} />
+              <span>Bolus</span>
+            </Link>
+          </div>
+
+          <BottomNavLink item={docteur} active={docteur.match(pathname)} />
+          <BottomNavLink item={reglages} active={reglages.match(pathname)} />
         </div>
       </nav>
     </>

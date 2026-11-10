@@ -30,8 +30,8 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "APEX — Endurance, nutrition & T1D",
-  description: "Tableau de bord d'endurance et de santé métabolique : séances, running, nutrition et gestion du diabète T1",
+  title: "APEX — Diabète T1",
+  description: "Diabète de type 1 : glycémie en direct, calcul des doses, bilan automatique",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

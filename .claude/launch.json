@@ -4,7 +4,19 @@
     {
       "name": "Next.js Dev Server",
       "runtimeExecutable": "/bin/bash",
-      "runtimeArgs": ["-c", "export PATH=/usr/local/bin:$PATH && cd /Users/ethandelabonnefon/APEX/apex-coach && npm run dev"],
+      "runtimeArgs": [
+        "-c",
+        "export PATH=/usr/local/bin:$PATH && cd /Users/ethandelabonnefon/APEX/apex-coach && npm run dev"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "Aperçu sans capteur",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": [
+        "-c",
+        "export PATH=/usr/local/bin:$PATH && cd /Users/ethandelabonnefon/APEX/apex-coach && LIBRELINK_EMAIL= LIBRELINK_PASSWORD= npm run dev"
+      ],
       "port": 3000
     }
   ]

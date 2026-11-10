@@ -1,15 +1,16 @@
 // APEX Coach — Service Worker
-// v5 : rappels génériques (split + meal-confirm)
-const CACHE_NAME = "apex-coach-v6";
+// v7 : app recentrée sur le diabète (modules sport et nutrition retirés).
+// La liste ci-dessous ne doit contenir QUE des pages qui existent :
+// `cache.addAll` échoue en bloc si une seule adresse répond en erreur ou en
+// redirection, et le service worker ne s'installe alors pas du tout.
+const CACHE_NAME = "apex-coach-v7";
 
 const PRECACHE_URLS = [
   "/",
-  "/muscu",
-  "/nutrition",
-  "/running",
   "/diabete",
-  "/profil",
-  "/profil/diagnostic",
+  "/diabete/historique",
+  "/diabete/docteur",
+  "/diabete/parametres",
   "/manifest.json",
 ];
 

@@ -115,7 +115,6 @@ import type { ArchivedPoint } from "@/lib/glucose-archive/store";
 import {
   Syringe,
   Calculator,
-  Settings,
   AlertTriangle,
   ChevronRight,
   ChevronDown,
@@ -124,7 +123,6 @@ import {
   Minus,
   Trash2,
   Pencil,
-  History,
   Clock,
   Plus,
   CheckCircle2,
@@ -147,7 +145,6 @@ import {
   ShieldAlert,
   Shield,
   Sparkle,
-  Stethoscope,
   HelpCircle,
   Bike,
   Waves,
@@ -2157,17 +2154,6 @@ export default function DiabetePage() {
         <p className="eyebrow">Diabète T1 · {profile.insulinRapid} · {profile.cgmType}</p>
         <div className="flex items-end justify-between gap-3">
           <h1 className="h-title">Suivi</h1>
-          <div className="flex gap-1.5 pb-1">
-            <NavIconLink href="/diabete/docteur" label="Docteur">
-              <Stethoscope className="w-3.5 h-3.5" />
-            </NavIconLink>
-            <NavIconLink href="/diabete/historique" label="Historique">
-              <History className="w-3.5 h-3.5" />
-            </NavIconLink>
-            <NavIconLink href="/diabete/parametres" label="Paramètres">
-              <Settings className="w-3.5 h-3.5" />
-            </NavIconLink>
-          </div>
         </div>
       </header>
 
@@ -2213,26 +2199,12 @@ export default function DiabetePage() {
         <CarbEntryLogger />
       </div>
 
-      {/* ── COURBE 8H (capteur live) ── */}
-      <div className="mb-4">
-        <GlucoseChart />
-      </div>
-
-      {/* ── BILAN AUTOMATIQUE (fable-5.2) : objectif HbA1c, lente, doses ──
-          Sous la courbe : c'est une lecture de fond, pas un geste d'urgence.
-          La ligne « lente » s'ouvre d'elle-même quand une action est due. */}
-      <div className="mb-4">
-        <DecisionBoard />
-      </div>
-
-      {/* ── PATTERNS DÉTECTÉS (Phase 11 Bloc 3) ── */}
-      {visiblePatterns.length > 0 && (
-        <section className="mb-4 space-y-2">
-          {visiblePatterns.map((p) => (
-            <PatternCard key={p.id} pattern={p} onDismiss={() => dismissPattern(p.id)} />
-          ))}
-        </section>
-      )}
+      {/* ═══ À FAIRE MAINTENANT ═══
+          Tout ce qui demande un geste tout de suite, juste sous l'état
+          du moment : hypo, correction, repas à confirmer, rappels de
+          dose, plan de nuit. Ces cartes ne s'affichent que quand elles
+          ont quelque chose à dire — la plupart du temps, il n'y a rien
+          entre les glucides et la courbe. */}
 
       {/* ── HYPO LOGGER (Phase H — apparait si glycémie < 80) ──
           En soirée (20h-2h), c'est le Night Brain qui gère l'hypo dans le
@@ -2249,15 +2221,12 @@ export default function DiabetePage() {
         />
       )}
 
-      {/* ── HYPO FEEDBACK (hypos récentes 24h) ── */}
-      <HypoFeedback />
-
       {/* ── CORRECTION SUGGÉRÉE (hyper) ──
           Masquée en soirée : de 20 h à 2 h c'est le plan de nuit qui décide
           de la correction (dose calculée pour tenir jusqu'au réveil). Deux
           cartes, deux doses différentes pour la même glycémie : non. */}
       {!isEveningHours && (
-        <div className="mb-4">
+        <div className="mb-4 empty:hidden">
           <CorrectionSuggestion
             iobUnits={iob.totalIOB}
             exerciseReductionPct={exerciseAdjustment?.reductionPct}
@@ -2417,416 +2386,19 @@ export default function DiabetePage() {
         </>
       )}
 
-      {/* ── BRIEFING PRÉ-SPORT (advisor indépendant) ── */}
-      <section className="panel mb-4">
-        <div className="panel-hd">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-diabete" />
-              <h2>
-              Briefing pré-sport
-            </h2>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setBriefingActive((v) => !v)}
-            className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
-              briefingActive ? "bg-success" : "bg-border-strong"
-            }`}
-            aria-label="Toggle briefing pré-sport"
-          >
-            <span
-              className={`absolute top-0.5 w-5 h-5 rounded-full bg-bg-primary transition-transform ${
-                briefingActive ? "translate-x-5" : "translate-x-0.5"
-              }`}
-            />
-          </button>
-        </div>
+      {/* ═══ VOIR ═══ */}
 
-        {/* Séances non confirmées par Whoop — signalées, jamais supprimées.
-            Discret (pas de rouge/warning) : Whoop peut juste ne pas avoir
-            sync, ou Ethan a joué sans bracelet — ce n'est pas une erreur. */}
-        {unconfirmedBriefingSessions.length > 0 && (
-          <div className="space-y-2 mb-3">
-            {unconfirmedBriefingSessions.map((session) => {
-              const sport = getSport(session.sportKey);
-              const label = sport?.label ?? exerciseSourceLabel(session.family);
-              return (
-                <div
-                  key={session.id}
-                  className="flex items-start gap-2 rounded-xl bg-bg-secondary border border-border-subtle p-2.5"
-                >
-                  <Info className="w-3.5 h-3.5 text-text-tertiary shrink-0 mt-0.5" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] text-text-secondary leading-snug">
-                      Whoop n&apos;a pas retrouvé ta séance de {label.toLowerCase()} —
-                      elle reste prise en compte, annule-la si elle n&apos;a pas eu lieu.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => handleCancelBriefingSession(session)}
-                      className="mt-1 text-[10px] font-semibold text-text-tertiary hover:text-warning underline underline-offset-2 tap-scale"
-                    >
-                      Annuler cette séance
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+      {/* ── COURBE 8H (capteur live) ── */}
+      <div className="mb-4">
+        <GlucoseChart />
+      </div>
 
-        {/* La carte et le formulaire ne s'excluent plus : une séance
-            terminée garde sa carte (annuler / info) ET laisse déclarer la
-            suivante. Seule une séance en cours ou à venir masque le
-            formulaire. */}
-        {activeBriefingSession && (
-          <BriefingSessionCard
-            session={activeBriefingSession}
-            nowMs={nowTick}
-            onCancel={() => handleCancelBriefingSession(activeBriefingSession)}
-          />
-        )}
-
-        {activeBriefingSession && !canDeclareBriefingSession ? null : !briefingActive ? (
-          <p className="text-xs text-text-tertiary leading-relaxed">
-            Active si tu prévois un sport bientôt. On regarde ton IOB, ta
-            glycémie live et tes split doses pour te donner des conseils
-            actionnables (manger des glucides, réduire ou décaler une dose).
-          </p>
-        ) : (
-          <div className="space-y-3 animate-slide-up">
-            {/* Sélecteur sport — composant partagé avec le calculateur */}
-            <SportPicker value={briefingSportKey} onSelect={handleSelectBriefingSport} />
-
-            {/* Quand fais-tu ton sport ? — boutons discrets (le slider était
-                trompeur : les repères ne correspondaient pas à l'échelle). */}
-            <div>
-              <div className="panel-hd">
-                <h3>Dans combien de temps ?</h3>
-                <span className="num text-xs text-text-tertiary">
-                  {formatBriefingDelay(briefingMinutes)} · à{" "}
-                  {new Date(nowTick + briefingMinutes * 60000).toLocaleTimeString("fr-FR", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {[15, 30, 45, 60, 90, 120].map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setBriefingMinutes(m)}
-                    className={`chip num ${briefingMinutes === m ? "on" : ""}`}
-                  >
-                    {formatBriefingDelay(m)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Durée prévue — pré-remplie depuis le sport choisi, modifiable */}
-            <div>
-              <p className="text-[11px] text-text-tertiary mb-1.5">Durée prévue</p>
-              <div className="relative">
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  value={briefingDurationMin}
-                  onChange={(e) => {
-                    setBriefingDurationTouched(true);
-                    const v = Number(e.target.value);
-                    setBriefingDurationMin(Number.isFinite(v) ? Math.max(0, v) : 0);
-                  }}
-                  min={0}
-                  max={300}
-                  className="num w-full h-11 bg-bg-secondary border border-border-default rounded-lg px-3 text-base text-text-primary focus:outline-none focus:border-accent transition-colors"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-mono text-text-tertiary pointer-events-none">
-                  min
-                </span>
-              </div>
-            </div>
-
-            {!briefingSportKey && (
-              <p className="text-[11px] text-text-tertiary italic px-1">
-                Choisis un sport ci-dessus pour voir les recommandations.
-              </p>
-            )}
-
-            {briefingSport && (
-            <>
-            {/* Données utilisées — transparence sur les inputs */}
-            <div>
-              <div className="panel-hd">
-                <h3>Données utilisées</h3>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBriefingRefreshing(true);
-                    Promise.resolve(refetchGlucose()).finally(() => {
-                      setBriefingRefreshing(false);
-                    });
-                  }}
-                  disabled={briefingRefreshing}
-                  className="pill hover:bg-bg-hover transition-colors disabled:opacity-50 tap-scale"
-                >
-                  {briefingRefreshing ? 'Refresh…' : 'Rafraîchir'}
-                </button>
-              </div>
-              <div className="mgrid c3 flat">
-                <div className="cell">
-                  <div className="v" style={{ color: liveGlucose ? "var(--success)" : undefined }}>
-                    {liveGlucose ? liveGlucose.value : currentGlucose}
-                  </div>
-                  <div className="l">
-                    {liveGlucose
-                      ? `Glycémie ${liveGlucose.arrow} · ${Math.round((Date.now() - new Date(liveGlucose.date).getTime()) / 60000)} min`
-                      : "Glycémie · manuel"}
-                  </div>
-                </div>
-                <div className="cell">
-                  <div className="v">
-                    {iob.totalIOB.toFixed(1).replace(".", ",")}
-                    <small>U</small>
-                  </div>
-                  <div className="l">IOB</div>
-                </div>
-                <div className="cell">
-                  <div className="v">
-                    {Math.round(cob.totalRemainingG)}
-                    <small>g</small>
-                  </div>
-                  <div className="l">COB</div>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-[11px] mt-2">
-                {/* Split en attente */}
-                {(() => {
-                  const upcomingSplit = splitDoseReminders
-                    .filter((r) => r.status === "pending")
-                    .map((r) => ({ ...r, minutesUntil: Math.round((new Date(r.triggerAt).getTime() - nowTick) / 60000) }))
-                    .filter((r) => r.minutesUntil >= 0)
-                    .sort((a, b) => a.minutesUntil - b.minutesUntil)[0];
-                  if (!upcomingSplit) return null;
-                  return (
-                    <div className="flex items-start gap-1.5 col-span-2">
-                      <Clock className="w-3 h-3 text-accent-2 shrink-0 mt-0.5" />
-                      <div className="min-w-0">
-                        <p className="text-[9px] text-text-tertiary uppercase tracking-wide">Split en attente</p>
-                        <p className="num text-text-primary font-semibold">
-                          {upcomingSplit.units}U dans {upcomingSplit.minutesUntil}min
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })()}
-                {/* Repas récent en digestion (transparence — la prédiction
-                    reste prudente et ne crédite pas la montée du repas). */}
-                {loggedMealPrefill && loggedMealPrefill.minsAgo < 180 && (
-                  <div className="flex items-start gap-1.5 col-span-2">
-                    <Apple className="w-3 h-3 text-text-tertiary shrink-0 mt-0.5" />
-                    <div className="min-w-0">
-                      <p className="text-[9px] text-text-tertiary uppercase tracking-wide">
-                        Repas en digestion
-                      </p>
-                      <p className="num text-text-secondary text-[11px] leading-snug">
-                        {loggedMealPrefill.carbsGrams}g il y a {loggedMealPrefill.minsAgo}min — l&apos;estimation reste prudente
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Briefing résultats */}
-            {preSportBriefing && (
-              <div
-                className="panel"
-                style={{
-                  borderColor:
-                    preSportBriefing.risk === "risk"
-                      ? "var(--error)"
-                      : preSportBriefing.risk === "caution"
-                        ? "var(--warning)"
-                        : "var(--success)",
-                }}
-              >
-                <div className="panel-hd">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`led ${
-                        preSportBriefing.risk === "risk" ? "red" : preSportBriefing.risk === "caution" ? "amber" : "green"
-                      }`}
-                    />
-                    <h3>Prédiction</h3>
-                  </div>
-                  <span
-                    className={`pill ${
-                      preSportBriefing.risk === "risk" ? "amber" : preSportBriefing.risk === "caution" ? "amber" : "green"
-                    }`}
-                  >
-                    {preSportBriefing.risk === "risk" ? "Risque" : preSportBriefing.risk === "caution" ? "Prudence" : "Safe"}
-                  </span>
-                </div>
-                {preSportBriefing.status === "ok" ? (
-                  <>
-                    <div className="mgrid c3 flat mb-2">
-                      <div className="cell">
-                        <div className="v">{preSportBriefing.predictedAtStart}</div>
-                        <div className="l">Au départ</div>
-                      </div>
-                      <div className="cell">
-                        <div className="v">{preSportBriefing.predictedDuringMin}</div>
-                        <div className="l">Min pendant</div>
-                      </div>
-                      <div className="cell">
-                        <div className="v">{preSportBriefing.predictedAtEnd}</div>
-                        <div className="l">À la fin</div>
-                      </div>
-                    </div>
-                    {/* Ce que le modèle a utilisé — pour qu'Ethan voie le calcul */}
-                    <p className="text-xs text-text-tertiary mb-2 leading-snug">
-                      insuline au départ{" "}
-                      {preSportBriefing.iobAtStartU.toFixed(1).replace(".", ",")} U · effort{" "}
-                      {preSportBriefing.exerciseImpactMgDl > 0 ? "+" : ""}
-                      {Math.round(preSportBriefing.exerciseImpactMgDl)} mg/dL (
-                      {Math.round(preSportBriefing.iobFactor * 100)} % de l&apos;effet plein)
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-[10px] text-text-tertiary mb-2 leading-snug">
-                    Aucun chiffre tant que la lecture n&apos;est pas fraîche ou que le départ est trop loin.
-                  </p>
-                )}
-
-                <div className="space-y-2">
-                  {preSportBriefing.recommendations.map((reco, i) => {
-                    const RecoIcon =
-                      reco.type === "eat-carbs"
-                        ? Apple
-                        : reco.type === "reduce-split"
-                        ? Minus
-                        : reco.type === "delay-split"
-                        ? Clock
-                        : reco.type === "delay-workout"
-                        ? AlertTriangle
-                        : reco.type === "check-glucose"
-                        ? AlertCircle
-                        : CheckCircle2;
-                    const tone =
-                      preSportBriefing.risk === "risk"
-                        ? "text-error"
-                        : preSportBriefing.risk === "caution"
-                        ? "text-warning"
-                        : "text-success";
-                    return (
-                      <div key={i} className="row-item items-start">
-                        <RecoIcon className={`w-4 h-4 shrink-0 mt-0.5 ${tone}`} />
-                        <div className="min-w-0 flex-1">
-                          <p className="t">
-                            {reco.headline}
-                          </p>
-                          <p className="text-xs text-text-secondary mt-0.5 leading-snug" style={{ fontFamily: "var(--font-sans)" }}>
-                            {reco.detail}
-                          </p>
-                          {/* Actions inline pour reduce-split / delay-split */}
-                          {(reco.type === "reduce-split" || reco.type === "delay-split") &&
-                            (() => {
-                              const split = splitDoseReminders.find(
-                                (r) => r.status === "pending",
-                              );
-                              if (!split) return null;
-                              if (reco.type === "reduce-split" && reco.quantity !== undefined) {
-                                return (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleReduceSplit(split.id, reco.quantity!)}
-                                    className="mt-1.5 text-[10px] font-semibold text-diabete bg-diabete/10 hover:bg-diabete/20 transition-colors px-2 py-1 rounded-md tap-scale"
-                                  >
-                                    Réduire à {reco.quantity}U →
-                                  </button>
-                                );
-                              }
-                              if (reco.type === "delay-split") {
-                                return (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDelaySplit(split.id, 90)}
-                                    className="mt-1.5 text-[10px] font-semibold text-diabete bg-diabete/10 hover:bg-diabete/20 transition-colors px-2 py-1 rounded-md tap-scale"
-                                  >
-                                    Décaler de 1h30 →
-                                  </button>
-                                );
-                              }
-                              return null;
-                            })()}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Acceptation — vaut déclaration de la séance (décision
-                    produit d'Ethan : pas de bouton de confirmation en plus).
-                    Si le conseil du moment recommande des glucides, les
-                    accepter crée la séance ET le CarbEntry taggé ensemble ;
-                    sinon (cas résistance le plus fréquent, ou tout autre
-                    conseil sans grammage), "Je pars" déclare la séance seule
-                    — sans quoi la muscu ne créerait jamais de séance et
-                    l'ajustement post-effort ne se déclencherait pas. */}
-                {(() => {
-                  const eatCarbsReco = preSportBriefing.recommendations.find(
-                    (r) => r.type === "eat-carbs" && r.quantity !== undefined,
-                  );
-                  if (eatCarbsReco) {
-                    const carbs = briefingCarbsOverride ?? eatCarbsReco.quantity!;
-                    return (
-                      <div className="mt-3 space-y-2">
-                        {/* La quantité se corrige à la main avant de valider
-                            (demande d'Ethan, 19 sept.) : ce qui est tapé est
-                            ce qui est tagué. */}
-                        <CarbsStepper
-                          value={carbs}
-                          suggested={eatCarbsReco.quantity!}
-                          onChange={setBriefingCarbsOverride}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => createBriefingSession(briefingSport, carbs > 0 ? carbs : null)}
-                          disabled={briefingSessionSubmittedRef.current}
-                          className="w-full h-12 flex items-center justify-center gap-2 text-sm font-semibold rounded-lg bg-text-primary text-bg-secondary transition-opacity hover:opacity-90 tap-scale disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          <Apple className="w-4 h-4" />
-                          {carbs > 0 ? `Je mange ${carbs}g et je pars` : "Je pars sans manger"}
-                        </button>
-                      </div>
-                    );
-                  }
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => createBriefingSession(briefingSport, null)}
-                      disabled={briefingSessionSubmittedRef.current}
-                      className="mt-3 w-full h-12 flex items-center justify-center gap-2 text-sm font-semibold rounded-lg bg-text-primary text-bg-secondary transition-opacity hover:opacity-90 tap-scale disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      Je pars
-                    </button>
-                  );
-                })()}
-              </div>
-            )}
-            </>
-            )}
-          </div>
-        )}
-      </section>
+      {/* ═══ AGIR ═══
+          Le calculateur porte l'ancre #bolus : le bouton central de la
+          barre de navigation y amène depuis n'importe quel écran. */}
 
       {/* ── CALCULATEUR BOLUS (action primaire) ── */}
-      <section className="panel mb-4">
+      <section id="bolus" className="panel mb-4 scroll-mt-4">
         <div className="panel-hd">
           <div className="flex items-center gap-2">
             <Calculator className="w-5 h-5 text-diabete" />
@@ -3740,6 +3312,438 @@ export default function DiabetePage() {
         </div>
       )}
 
+      {/* ── BRIEFING PRÉ-SPORT (advisor indépendant) ── */}
+      <section className="panel mb-4">
+        <div className="panel-hd">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Activity className="w-4 h-4 text-diabete" />
+              <h2>
+              Briefing pré-sport
+            </h2>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setBriefingActive((v) => !v)}
+            className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+              briefingActive ? "bg-success" : "bg-border-strong"
+            }`}
+            aria-label="Toggle briefing pré-sport"
+          >
+            <span
+              className={`absolute top-0.5 w-5 h-5 rounded-full bg-bg-primary transition-transform ${
+                briefingActive ? "translate-x-5" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* Séances non confirmées par Whoop — signalées, jamais supprimées.
+            Discret (pas de rouge/warning) : Whoop peut juste ne pas avoir
+            sync, ou Ethan a joué sans bracelet — ce n'est pas une erreur. */}
+        {unconfirmedBriefingSessions.length > 0 && (
+          <div className="space-y-2 mb-3">
+            {unconfirmedBriefingSessions.map((session) => {
+              const sport = getSport(session.sportKey);
+              const label = sport?.label ?? exerciseSourceLabel(session.family);
+              return (
+                <div
+                  key={session.id}
+                  className="flex items-start gap-2 rounded-xl bg-bg-secondary border border-border-subtle p-2.5"
+                >
+                  <Info className="w-3.5 h-3.5 text-text-tertiary shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] text-text-secondary leading-snug">
+                      Whoop n&apos;a pas retrouvé ta séance de {label.toLowerCase()} —
+                      elle reste prise en compte, annule-la si elle n&apos;a pas eu lieu.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => handleCancelBriefingSession(session)}
+                      className="mt-1 text-[10px] font-semibold text-text-tertiary hover:text-warning underline underline-offset-2 tap-scale"
+                    >
+                      Annuler cette séance
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* La carte et le formulaire ne s'excluent plus : une séance
+            terminée garde sa carte (annuler / info) ET laisse déclarer la
+            suivante. Seule une séance en cours ou à venir masque le
+            formulaire. */}
+        {activeBriefingSession && (
+          <BriefingSessionCard
+            session={activeBriefingSession}
+            nowMs={nowTick}
+            onCancel={() => handleCancelBriefingSession(activeBriefingSession)}
+          />
+        )}
+
+        {activeBriefingSession && !canDeclareBriefingSession ? null : !briefingActive ? (
+          <p className="text-xs text-text-tertiary leading-relaxed">
+            Active si tu prévois un sport bientôt. On regarde ton IOB, ta
+            glycémie live et tes split doses pour te donner des conseils
+            actionnables (manger des glucides, réduire ou décaler une dose).
+          </p>
+        ) : (
+          <div className="space-y-3 animate-slide-up">
+            {/* Sélecteur sport — composant partagé avec le calculateur */}
+            <SportPicker value={briefingSportKey} onSelect={handleSelectBriefingSport} />
+
+            {/* Quand fais-tu ton sport ? — boutons discrets (le slider était
+                trompeur : les repères ne correspondaient pas à l'échelle). */}
+            <div>
+              <div className="panel-hd">
+                <h3>Dans combien de temps ?</h3>
+                <span className="num text-xs text-text-tertiary">
+                  {formatBriefingDelay(briefingMinutes)} · à{" "}
+                  {new Date(nowTick + briefingMinutes * 60000).toLocaleTimeString("fr-FR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[15, 30, 45, 60, 90, 120].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setBriefingMinutes(m)}
+                    className={`chip num ${briefingMinutes === m ? "on" : ""}`}
+                  >
+                    {formatBriefingDelay(m)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Durée prévue — pré-remplie depuis le sport choisi, modifiable */}
+            <div>
+              <p className="text-[11px] text-text-tertiary mb-1.5">Durée prévue</p>
+              <div className="relative">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={briefingDurationMin}
+                  onChange={(e) => {
+                    setBriefingDurationTouched(true);
+                    const v = Number(e.target.value);
+                    setBriefingDurationMin(Number.isFinite(v) ? Math.max(0, v) : 0);
+                  }}
+                  min={0}
+                  max={300}
+                  className="num w-full h-11 bg-bg-secondary border border-border-default rounded-lg px-3 text-base text-text-primary focus:outline-none focus:border-accent transition-colors"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-mono text-text-tertiary pointer-events-none">
+                  min
+                </span>
+              </div>
+            </div>
+
+            {!briefingSportKey && (
+              <p className="text-[11px] text-text-tertiary italic px-1">
+                Choisis un sport ci-dessus pour voir les recommandations.
+              </p>
+            )}
+
+            {briefingSport && (
+            <>
+            {/* Données utilisées — transparence sur les inputs */}
+            <div>
+              <div className="panel-hd">
+                <h3>Données utilisées</h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBriefingRefreshing(true);
+                    Promise.resolve(refetchGlucose()).finally(() => {
+                      setBriefingRefreshing(false);
+                    });
+                  }}
+                  disabled={briefingRefreshing}
+                  className="pill hover:bg-bg-hover transition-colors disabled:opacity-50 tap-scale"
+                >
+                  {briefingRefreshing ? 'Refresh…' : 'Rafraîchir'}
+                </button>
+              </div>
+              <div className="mgrid c3 flat">
+                <div className="cell">
+                  <div className="v" style={{ color: liveGlucose ? "var(--success)" : undefined }}>
+                    {liveGlucose ? liveGlucose.value : currentGlucose}
+                  </div>
+                  <div className="l">
+                    {liveGlucose
+                      ? `Glycémie ${liveGlucose.arrow} · ${Math.round((Date.now() - new Date(liveGlucose.date).getTime()) / 60000)} min`
+                      : "Glycémie · manuel"}
+                  </div>
+                </div>
+                <div className="cell">
+                  <div className="v">
+                    {iob.totalIOB.toFixed(1).replace(".", ",")}
+                    <small>U</small>
+                  </div>
+                  <div className="l">IOB</div>
+                </div>
+                <div className="cell">
+                  <div className="v">
+                    {Math.round(cob.totalRemainingG)}
+                    <small>g</small>
+                  </div>
+                  <div className="l">COB</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px] mt-2">
+                {/* Split en attente */}
+                {(() => {
+                  const upcomingSplit = splitDoseReminders
+                    .filter((r) => r.status === "pending")
+                    .map((r) => ({ ...r, minutesUntil: Math.round((new Date(r.triggerAt).getTime() - nowTick) / 60000) }))
+                    .filter((r) => r.minutesUntil >= 0)
+                    .sort((a, b) => a.minutesUntil - b.minutesUntil)[0];
+                  if (!upcomingSplit) return null;
+                  return (
+                    <div className="flex items-start gap-1.5 col-span-2">
+                      <Clock className="w-3 h-3 text-accent-2 shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-[9px] text-text-tertiary uppercase tracking-wide">Split en attente</p>
+                        <p className="num text-text-primary font-semibold">
+                          {upcomingSplit.units}U dans {upcomingSplit.minutesUntil}min
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+                {/* Repas récent en digestion (transparence — la prédiction
+                    reste prudente et ne crédite pas la montée du repas). */}
+                {loggedMealPrefill && loggedMealPrefill.minsAgo < 180 && (
+                  <div className="flex items-start gap-1.5 col-span-2">
+                    <Apple className="w-3 h-3 text-text-tertiary shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-[9px] text-text-tertiary uppercase tracking-wide">
+                        Repas en digestion
+                      </p>
+                      <p className="num text-text-secondary text-[11px] leading-snug">
+                        {loggedMealPrefill.carbsGrams}g il y a {loggedMealPrefill.minsAgo}min — l&apos;estimation reste prudente
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Briefing résultats */}
+            {preSportBriefing && (
+              <div
+                className="panel"
+                style={{
+                  borderColor:
+                    preSportBriefing.risk === "risk"
+                      ? "var(--error)"
+                      : preSportBriefing.risk === "caution"
+                        ? "var(--warning)"
+                        : "var(--success)",
+                }}
+              >
+                <div className="panel-hd">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`led ${
+                        preSportBriefing.risk === "risk" ? "red" : preSportBriefing.risk === "caution" ? "amber" : "green"
+                      }`}
+                    />
+                    <h3>Prédiction</h3>
+                  </div>
+                  <span
+                    className={`pill ${
+                      preSportBriefing.risk === "risk" ? "amber" : preSportBriefing.risk === "caution" ? "amber" : "green"
+                    }`}
+                  >
+                    {preSportBriefing.risk === "risk" ? "Risque" : preSportBriefing.risk === "caution" ? "Prudence" : "Safe"}
+                  </span>
+                </div>
+                {preSportBriefing.status === "ok" ? (
+                  <>
+                    <div className="mgrid c3 flat mb-2">
+                      <div className="cell">
+                        <div className="v">{preSportBriefing.predictedAtStart}</div>
+                        <div className="l">Au départ</div>
+                      </div>
+                      <div className="cell">
+                        <div className="v">{preSportBriefing.predictedDuringMin}</div>
+                        <div className="l">Min pendant</div>
+                      </div>
+                      <div className="cell">
+                        <div className="v">{preSportBriefing.predictedAtEnd}</div>
+                        <div className="l">À la fin</div>
+                      </div>
+                    </div>
+                    {/* Ce que le modèle a utilisé — pour qu'Ethan voie le calcul */}
+                    <p className="text-xs text-text-tertiary mb-2 leading-snug">
+                      insuline au départ{" "}
+                      {preSportBriefing.iobAtStartU.toFixed(1).replace(".", ",")} U · effort{" "}
+                      {preSportBriefing.exerciseImpactMgDl > 0 ? "+" : ""}
+                      {Math.round(preSportBriefing.exerciseImpactMgDl)} mg/dL (
+                      {Math.round(preSportBriefing.iobFactor * 100)} % de l&apos;effet plein)
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-[10px] text-text-tertiary mb-2 leading-snug">
+                    Aucun chiffre tant que la lecture n&apos;est pas fraîche ou que le départ est trop loin.
+                  </p>
+                )}
+
+                <div className="space-y-2">
+                  {preSportBriefing.recommendations.map((reco, i) => {
+                    const RecoIcon =
+                      reco.type === "eat-carbs"
+                        ? Apple
+                        : reco.type === "reduce-split"
+                        ? Minus
+                        : reco.type === "delay-split"
+                        ? Clock
+                        : reco.type === "delay-workout"
+                        ? AlertTriangle
+                        : reco.type === "check-glucose"
+                        ? AlertCircle
+                        : CheckCircle2;
+                    const tone =
+                      preSportBriefing.risk === "risk"
+                        ? "text-error"
+                        : preSportBriefing.risk === "caution"
+                        ? "text-warning"
+                        : "text-success";
+                    return (
+                      <div key={i} className="row-item items-start">
+                        <RecoIcon className={`w-4 h-4 shrink-0 mt-0.5 ${tone}`} />
+                        <div className="min-w-0 flex-1">
+                          <p className="t">
+                            {reco.headline}
+                          </p>
+                          <p className="text-xs text-text-secondary mt-0.5 leading-snug" style={{ fontFamily: "var(--font-sans)" }}>
+                            {reco.detail}
+                          </p>
+                          {/* Actions inline pour reduce-split / delay-split */}
+                          {(reco.type === "reduce-split" || reco.type === "delay-split") &&
+                            (() => {
+                              const split = splitDoseReminders.find(
+                                (r) => r.status === "pending",
+                              );
+                              if (!split) return null;
+                              if (reco.type === "reduce-split" && reco.quantity !== undefined) {
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReduceSplit(split.id, reco.quantity!)}
+                                    className="mt-1.5 text-[10px] font-semibold text-diabete bg-diabete/10 hover:bg-diabete/20 transition-colors px-2 py-1 rounded-md tap-scale"
+                                  >
+                                    Réduire à {reco.quantity}U →
+                                  </button>
+                                );
+                              }
+                              if (reco.type === "delay-split") {
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDelaySplit(split.id, 90)}
+                                    className="mt-1.5 text-[10px] font-semibold text-diabete bg-diabete/10 hover:bg-diabete/20 transition-colors px-2 py-1 rounded-md tap-scale"
+                                  >
+                                    Décaler de 1h30 →
+                                  </button>
+                                );
+                              }
+                              return null;
+                            })()}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Acceptation — vaut déclaration de la séance (décision
+                    produit d'Ethan : pas de bouton de confirmation en plus).
+                    Si le conseil du moment recommande des glucides, les
+                    accepter crée la séance ET le CarbEntry taggé ensemble ;
+                    sinon (cas résistance le plus fréquent, ou tout autre
+                    conseil sans grammage), "Je pars" déclare la séance seule
+                    — sans quoi la muscu ne créerait jamais de séance et
+                    l'ajustement post-effort ne se déclencherait pas. */}
+                {(() => {
+                  const eatCarbsReco = preSportBriefing.recommendations.find(
+                    (r) => r.type === "eat-carbs" && r.quantity !== undefined,
+                  );
+                  if (eatCarbsReco) {
+                    const carbs = briefingCarbsOverride ?? eatCarbsReco.quantity!;
+                    return (
+                      <div className="mt-3 space-y-2">
+                        {/* La quantité se corrige à la main avant de valider
+                            (demande d'Ethan, 19 sept.) : ce qui est tapé est
+                            ce qui est tagué. */}
+                        <CarbsStepper
+                          value={carbs}
+                          suggested={eatCarbsReco.quantity!}
+                          onChange={setBriefingCarbsOverride}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => createBriefingSession(briefingSport, carbs > 0 ? carbs : null)}
+                          disabled={briefingSessionSubmittedRef.current}
+                          className="w-full h-12 flex items-center justify-center gap-2 text-sm font-semibold rounded-lg bg-text-primary text-bg-secondary transition-opacity hover:opacity-90 tap-scale disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <Apple className="w-4 h-4" />
+                          {carbs > 0 ? `Je mange ${carbs}g et je pars` : "Je pars sans manger"}
+                        </button>
+                      </div>
+                    );
+                  }
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => createBriefingSession(briefingSport, null)}
+                      disabled={briefingSessionSubmittedRef.current}
+                      className="mt-3 w-full h-12 flex items-center justify-center gap-2 text-sm font-semibold rounded-lg bg-text-primary text-bg-secondary transition-opacity hover:opacity-90 tap-scale disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Je pars
+                    </button>
+                  );
+                })()}
+              </div>
+            )}
+            </>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* ═══ COMPRENDRE ═══ */}
+      <p className="zone">Comprendre</p>
+
+      {/* ── BILAN AUTOMATIQUE (fable-5.2) : objectif HbA1c, lente, doses ──
+          Sous la courbe : c'est une lecture de fond, pas un geste d'urgence.
+          La ligne « lente » s'ouvre d'elle-même quand une action est due. */}
+      <div className="mb-4">
+        <DecisionBoard />
+      </div>
+
+      {/* ── PATTERNS DÉTECTÉS (Phase 11 Bloc 3) ── */}
+      {visiblePatterns.length > 0 && (
+        <section className="mb-4 space-y-2">
+          {visiblePatterns.map((p) => (
+            <PatternCard key={p.id} pattern={p} onDismiss={() => dismissPattern(p.id)} />
+          ))}
+        </section>
+      )}
+
+      {/* ── HYPO FEEDBACK (hypos récentes 24h) ── */}
+      <HypoFeedback />
+
+      <p className="zone">Journal</p>
+
       {/* ── Historique des injections ── */}
       <div className="mb-4">
         <section className="panel">
@@ -4186,27 +4190,6 @@ function RatioChip({
       <p className="num text-base font-semibold text-text-primary mt-0.5">{value}</p>
       {unit && <p className="text-[9px] text-text-tertiary">{unit}</p>}
     </div>
-  );
-}
-
-function NavIconLink({
-  href,
-  label,
-  children,
-}: {
-  href: string;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      aria-label={label}
-      title={label}
-      className="pill h-8 w-8 justify-center px-0 hover:bg-bg-hover transition-colors"
-    >
-      {children}
-    </Link>
   );
 }
 

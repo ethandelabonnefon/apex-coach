@@ -27,7 +27,6 @@
  * ⚠️ Pure function. Aucun import serveur.
  */
 
-import type { GpsPoint } from "@/lib/running-tracker";
 // `lib/sports.ts` n'importe de ce fichier QUE le type `ExerciseSource`
 // (effacé à la compilation) : pas de cycle à l'exécution.
 import { sportSessionEndMs } from "@/lib/sports";
@@ -332,7 +331,7 @@ export function findMostRecentExercise(
     date: string;
     actualDuration: number;
     glucoseCheckpoints?: { value: number; offsetSec: number }[];
-    gpsPoints?: GpsPoint[];
+    gpsPoints?: unknown[];
   }[],
   /** Strain Whoop par session ID si dispo (workout strain via API Whoop). */
   whoopStrainBySessionId?: Record<string, number>,

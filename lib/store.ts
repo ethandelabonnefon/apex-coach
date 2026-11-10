@@ -5,9 +5,29 @@ import { USER_PROFILE, DIABETES_CONFIG, DIABETES_PROFILES_DEFAULT } from './cons
 import type { UserProfile, DiabetesConfig, InsulinLog, Meal, GlucoseReading, CompletedExercise, CompletedRunningSession, RatioProfile, SplitDoseReminder, HypoEvent, CarbEntry, DeclaredSportSession } from '@/types';
 import type { NightPredictionRecord } from '@/lib/night-calibration';
 import { upsertNightLog, type NightReview } from '@/lib/night-review';
-import type { TrainingLog } from '@/lib/training/schedule';
 import { computeRatioStamps, hasNewRatioStamps } from '@/lib/dose-validation';
 import { syncInsulinRatios } from '@/lib/ratio-sync';
+
+/**
+ * Journal d'une séance de l'ancien module musculation (retiré en nov. 2026
+ * avec les modules sport et nutrition). Le type reste ici parce que les
+ * données, elles, restent dans le store et dans la sauvegarde serveur : on
+ * ne retire AUCUN champ du store (cf. incident du 19/09/2026, store vidé
+ * après un déploiement qui retirait des champs).
+ */
+export interface TrainingLog {
+  sessionId: string;
+  status: "in-progress" | "done";
+  startedAt?: string;
+  doneAt?: string;
+  durationMin?: number;
+  rpe?: number;
+  glucoseBefore?: number;
+  glucoseAfter?: number;
+  notes?: string;
+  loadFactor?: number;
+  exercises?: unknown[];
+}
 
 export interface CompletedWorkout {
   id: string;

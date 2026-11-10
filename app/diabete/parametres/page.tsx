@@ -15,9 +15,10 @@ import type { InsulinRatio } from "@/types";
 import { StoreBackupPanel } from "@/components/diabete/StoreBackupPanel";
 import { Badge } from "@/components/ui/Badge";
 import WhoopConnection from "@/components/whoop/WhoopConnection";
+import DeviceSettings from "@/components/diabete/DeviceSettings";
 import {
-  ArrowLeft,
   Check,
+  ChevronRight,
   AlertTriangle,
   Pencil,
   RotateCcw,
@@ -459,22 +460,12 @@ export default function DiabeteParametresPage() {
 
   return (
     <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 lg:py-8 pb-32 stagger">
-      {/* Header */}
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <p className="eyebrow">Diabète · Paramètres</p>
-          <h1 className="h-title">
-            Mon programme d&apos;insuline
-          </h1>
-        </div>
-        <Link
-          href="/diabete"
-          className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-primary transition-colors px-3 py-1.5 rounded-lg border border-border-subtle tap-scale"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Retour
-        </Link>
-      </div>
+      {/* En-tête — plus de bouton « Retour » : la barre de navigation est
+          toujours là, et un bouton de plus en haut n'apportait rien. */}
+      <header className="mb-6">
+        <p className="eyebrow">Diabète T1</p>
+        <h1 className="h-title">Réglages</h1>
+      </header>
 
       {saved && (
         <div className="mb-4 text-center">
@@ -908,8 +899,18 @@ export default function DiabeteParametresPage() {
         </div>
       </section>
 
+      {/* ── Apparence & matériel (ex-page Profil) ── */}
+      <DeviceSettings />
+
       {/* ── Connexion Whoop (Phase F2) ── */}
       <WhoopConnection />
+      <Link
+        href="/whoop"
+        className="-mt-2 mb-4 flex h-11 items-center justify-between rounded-lg border border-border-default bg-bg-secondary px-4 text-sm font-medium text-text-primary hover:bg-bg-hover transition-colors"
+      >
+        Voir mes données Whoop (récupération, effort, sommeil)
+        <ChevronRight className="w-4 h-4 text-text-tertiary" />
+      </Link>
 
       {/* ── Export des données (sauvegarde manuelle, sept. 2026) ──
           Action sûre : carte dédiée, volontairement séparée de la zone

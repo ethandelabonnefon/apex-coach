@@ -2,6 +2,15 @@
 
 # APEX Coach - Reference Documentation
 
+> ⚠️ **Novembre 2026 — app recentrée sur le diabète.** Les modules musculation, running, nutrition, les diagnostics, la page Profil et l'Overview ont été **retirés** (inutilisés). Ce qui suit dans ce fichier à leur sujet est de l'historique. État réel :
+> - **4 écrans** : Suivi (`/diabete`, aussi servi sur `/`), Historique, Docteur, Réglages (`/diabete/parametres`, qui a repris thème + matériel de l'ancien Profil). `/whoop` reste, accessible depuis Réglages. Les anciennes adresses sont redirigées dans `next.config.ts`.
+> - **Navigation** (`components/navigation.tsx`) : 4 onglets + bouton **Bolus** central qui mène à `/diabete#bolus`.
+> - **Ordre de la page Suivi** : état → à faire → voir → agir → comprendre → journal. Règles dans `BRAND.md` §10 « Praticité ».
+> - **Le store n'a PAS été touché** : `meals`, `completedWorkouts`, `trainingLogs`, `completedRunningSessions`, diagnostics… restent dans `lib/store.ts` et dans la sauvegarde serveur, même sans écran pour les alimenter. Ne retire jamais un champ du store (incident du 19/09/2026).
+> - Le sport côté diabète reste entier : briefing pré-sport, séances déclarées, sensibilité post-effort, Whoop.
+> - `public/sw.js` : `PRECACHE_URLS` ne doit lister que des pages existantes, sinon le service worker ne s'installe pas.
+> - **Version fable-5.2** (nov. 2026) : bilan automatique (`components/diabete/DecisionBoard.tsx`), analyse de la lente (`lib/basal-advisor.ts`), heures locales côté serveur (`lib/local-time.ts` — le serveur est en UTC, toujours passer le fuseau du navigateur).
+
 ## Stack Technique
 
 - **Framework**: Next.js 16.2.1 (App Router, Turbopack)
