@@ -111,7 +111,7 @@ export function libreLinkActionHint(message: string | null | undefined): string 
   if (m.includes("backoff actif")) {
     return "Nouvelle tentative automatique en cours. Inutile de rafraîchir : chaque essai rallonge l'attente.";
   }
-  if (m.includes("token") || m.includes("429") || m.includes("too many")) {
+  if (m.includes("token") || m.includes("429") || m.includes("430") || m.includes("too many")) {
     return "Abbott limite temporairement les connexions. L'app réessaiera seule, laisse-la tranquille quelques minutes.";
   }
   if (m.includes("not_configured") || m.includes("manquants")) {
