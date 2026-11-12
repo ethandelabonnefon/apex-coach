@@ -14,19 +14,13 @@ import { ArrowLeft } from "lucide-react";
 export default function WhoopPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 stagger">
-      <div className="flex items-center justify-between mb-4">
-        <Link
-          href="/"
-          className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-running transition-colors tap-scale"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Dashboard</span>
-        </Link>
+      <div className="mb-4">
         <Link
           href="/diabete/parametres"
-          className="text-xs text-text-tertiary hover:text-running transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors tap-scale"
         >
-          Paramètres Whoop →
+          <ArrowLeft className="w-4 h-4" />
+          <span>Réglages</span>
         </Link>
       </div>
 

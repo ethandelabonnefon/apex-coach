@@ -13,7 +13,9 @@ Dernière révision : septembre 2026 — **brand v5 "Instrument"** (tableau de b
 
 Pas "coach", pas "tracker", pas "app", pas "assistant IA". **Instrument.** Mot qui porte la précision, la fiabilité, le fait que l'utilisateur n'agit pas sans le consulter.
 
-Public cible : un athlète qui vit avec un T1D (séances de force + running + nutrition + glycémie). Veut un outil **médical-grade qui ne ralentit pas la perf**, pas une app gamifiée ni un magazine lifestyle.
+Public cible : une personne qui vit avec un diabète de type 1 et qui fait du sport. Veut un outil **médical-grade qui ne ralentit pas la journée**, pas une app gamifiée ni un magazine lifestyle.
+
+> **Novembre 2026 — recentrage.** Les modules musculation, running et nutrition ont été retirés : ils n'étaient pas utilisés. L'app n'a plus qu'un sujet, le diabète. Le sport y reste présent là où il change une dose (briefing avant l'effort, sensibilité après, charge Whoop) — jamais comme un module à part.
 
 **Direction visuelle v5** : tableau de bord d'endurance et de santé métabolique — précis, rassurant, personnel. Gris bleuté, anthracite, blanc cassé. Trois couleurs qui signifient chacune une chose (cobalt = cardio, vert = glycémie, ambre = alerte). Chaque couleur et chaque forme signale une information ; rien n'est décoratif. Ton d'un coach expert et calme.
 
@@ -197,7 +199,51 @@ Encadré bordé + fond 10 % : ambre avec icône triangle (`AlertTriangle`) pour 
 
 ---
 
-## 10. Ship checklist (avant chaque deploy prod)
+## 10. Praticité — règles d'usage (nov. 2026)
+
+Le langage visuel dit *à quoi ça ressemble*. Cette section dit *comment ça se manipule* — debout, d'une main, quatre fois par jour, parfois en hypo. Une règle de cette section l'emporte sur une préférence esthétique.
+
+### Quatre écrans, nommés par ce qu'on y fait
+
+| Onglet | Adresse | On y vient pour |
+|---|---|---|
+| **Suivi** | `/diabete` (et `/`) | maintenant : glycémie, doses, alertes |
+| **Historique** | `/diabete/historique` | ce qui s'est passé : courbes, statistiques, validation des doses |
+| **Docteur** | `/diabete/docteur` | demander un avis |
+| **Réglages** | `/diabete/parametres` | ratios, lente, capteur, thème, sauvegarde |
+
+Un écran = un nom, le même partout (onglet, titre de page, notification). Pas de « Paramètres » ici et « Réglages » là.
+
+### Une action primaire, toujours sous le pouce
+
+Le **bolus** est le geste le plus fréquent : il a son bouton au centre de la barre (`.nav-action`, seul aplat anthracite de la barre), qui amène au calculateur (`#bolus`) depuis n'importe quel écran en un appui. Aucune autre action n'a droit à ce traitement.
+
+### L'ordre d'une page : état → à faire → voir → agir → comprendre
+
+La page Suivi suit cet ordre, et toute nouvelle carte doit y trouver sa place :
+
+1. **État** — glycémie, insuline active, glucides actifs. Lisible sans défiler.
+2. **À faire maintenant** — hypo, correction, repas à confirmer, rappels de dose, plan de nuit. Ces cartes n'existent que quand elles ont quelque chose à dire ; absentes, elles ne laissent ni vide ni titre.
+3. **Voir** — la courbe.
+4. **Agir** — calculateur de bolus, briefing sport.
+5. **Comprendre** — bilan automatique, tendances, retours sur les hypos. Séparé par un intertitre `.zone`.
+6. **Journal** — les injections du jour.
+
+Ce qui est urgent n'est jamais sous ce qui est simplement intéressant.
+
+### Règles de manipulation
+
+- **Cible tactile ≥ 44 px** de haut (`.touch-target`, `h-11`). Le bouton Bolus fait 48 px.
+- **Pas de bouton « Retour »** en tête de page : la barre de navigation est toujours visible.
+- **Un seul chiffre par notion** sur un écran (une seule insuline active, une seule dose proposée). Deux cartes qui proposent deux doses pour la même glycémie, c'est un défaut, pas une nuance.
+- **Une carte qui propose une dose dit toujours** : la dose, pourquoi, et où elle fait atterrir. Jamais un chiffre nu.
+- **Rien ne s'applique seul** : tout changement de réglage passe par un bouton « Valider » et une confirmation.
+- **Saisie minimale** : un libellé simple s'enregistre à la sortie du champ ; un réglage qui change une dose demande un bouton explicite.
+- **Une carte vide ne prend pas de place** (`empty:hidden` sur son conteneur).
+
+---
+
+## 11. Ship checklist (avant chaque deploy prod)
 
 - [ ] Aucune couleur hors du tableau §4 (grep hex dans `app/` et `components/`)
 - [ ] Toute donnée numérique porte `.num` / `.mono`
@@ -205,16 +251,17 @@ Encadré bordé + fond 10 % : ambre avec icône triangle (`AlertTriangle`) pour 
 - [ ] Aucun `blur-3xl`, `glow-*`, gradient
 - [ ] Aucun emoji nouveau dans l'UI
 - [ ] Ambre = alerte uniquement ; aucun titre coloré
-- [ ] `npm test` 416+ verts, `npm run build` clean
+- [ ] Toute nouvelle carte de la page Suivi est rangée dans la bonne zone (§10)
+- [ ] Cibles tactiles ≥ 44 px, vérifiées à 375 px de large
+- [ ] `npm test` verts, `npm run build` clean
 - [ ] Light **et** dark vérifiés dans le preview
 
 ---
 
-## 11. Évolutions prévues (roadmap brand)
+## 12. Évolutions prévues (roadmap brand)
 
-- **Q4 2026** : module calendrier & séances dans ce langage (grille semaine, coches, feu Whoop)
-- **Q4 2026** : audit accessibilité WCAG 2.1 AA complet (contrastes ambre sur fond 10 %)
-- **2027** : LogoMark animé (le dot pulse) pour splash screen et notifications
+- Audit accessibilité WCAG 2.1 AA complet (contrastes ambre sur fond 10 %)
+- LogoMark animé (le dot pulse) pour les notifications
 
 ---
 
