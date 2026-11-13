@@ -103,7 +103,6 @@ export interface UsePatternDetectionResult {
   dismissedIds: Set<string>;
   dismissPattern: (id: string) => void;
   resetDismissed: () => void;
-  refetch: () => void;
 }
 
 export function usePatternDetection(
@@ -200,26 +199,6 @@ export function usePatternDetection(
     });
   };
 
-  const refetch = () => {
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.removeItem(CACHE_KEY);
-      } catch {
-        /* */
-      }
-    }
-    fetchIdRef.current++;
-    // Trigger re-effect via state bump
-    setLoading(true);
-    setPatterns([]);
-    // L'effect se re-déclenche au prochain tick si les deps changent ;
-    // sinon force un mini delay puis ré-exécution manuelle :
-    setTimeout(() => {
-      const ev = new Event("apex-pattern-refetch");
-      window.dispatchEvent(ev);
-    }, 0);
-  };
-
   return {
     patterns,
     loading,
@@ -227,6 +206,5 @@ export function usePatternDetection(
     dismissedIds,
     dismissPattern,
     resetDismissed,
-    refetch,
   };
 }

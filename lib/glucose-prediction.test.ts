@@ -476,7 +476,7 @@ test("effort à venir : le prélèvement est modulé par l'insuline active au d�
 {
   const OBS_BASE = 100;
   const obsEv = { minutesAgo: 150, carbsGrams: 140, observedRemainingG: 57, lateCarbMgPerG: 1.5 };
-  const at = (events: any[], m: number) =>
+  const at = (events: PredictionEvent[], m: number) =>
     predictGlucoseCurve({ currentGlucose: OBS_BASE, trendArrow: 3, events, isf: 100, nowMs: 0, horizonMinutes: 480 })
       .curve.find((p) => p.minute === m)!.value;
 

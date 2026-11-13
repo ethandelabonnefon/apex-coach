@@ -15,7 +15,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { buildPredictionEvents, withObservedCarbs } from "./prediction-inputs";
-import type { InsulinLog } from "@/types";
+import type { CarbEntry, InsulinLog } from "@/types";
 
 const RATIOS = { morning: 6.7, lunch: 10, snack: 8.3, dinner: 10 };
 
@@ -83,7 +83,7 @@ test("buildPredictionEvents renseigne sourceId", () => {
   const now = Date.now();
   const evs = buildPredictionEvents({
     insulinLogs: [log({ id: "L9", injectedAt: new Date(now - 30 * 60_000) })],
-    carbEntries: [{ id: "C7", carbsGrams: 20, eatenAt: new Date(now - 10 * 60_000).toISOString() } as any],
+    carbEntries: [{ id: "C7", carbsGrams: 20, eatenAt: new Date(now - 10 * 60_000).toISOString() } as CarbEntry],
     isf: 100,
     ratios: RATIOS,
     nowMs: now,
@@ -99,6 +99,6 @@ test("withObservedCarbs ne modifie que l'événement ciblé, sans muter", () => 
   assert.equal(out[0], a);
   assert.equal(out[1].observedRemainingG, 30);
   assert.equal(out[1].lateCarbMgPerG, 2);
-  assert.equal((b as any).observedRemainingG, undefined);
+  assert.equal((b as { observedRemainingG?: number }).observedRemainingG, undefined);
   assert.notEqual(out, input);
 });

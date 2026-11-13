@@ -130,6 +130,32 @@ export function readingAgeMinutes(isoDate: string, now: number = Date.now()): nu
 }
 
 /**
+ * Âge maximal (min) d'une mesure capteur pour qu'elle compte comme « en
+ * direct ». Au-delà, l'app la traite comme une ABSENCE de mesure : elle ne
+ * colore plus la tuile, ne projette plus de tendance, n'entre plus dans un
+ * calcul de dose.
+ *
+ * Pourquoi (incident du 12/11/2026) : pendant une coupure Abbott, l'écran
+ * gardait la dernière mesure reçue sans limite de durée, et le calculateur
+ * la lisait comme la glycémie du moment. Une glycémie de 40 minutes, en
+ * pleine descente, ne doit pas décider d'une dose.
+ *
+ * 15 min = la même borne que le plan de nuit (« lecture ≤ 15 min ») et que
+ * le serveur quand il ressert une mesure faute de réponse d'Abbott.
+ */
+export const LIVE_MAX_AGE_MIN = 15;
+
+/** Une mesure datée `isoDate` est-elle encore « en direct » ? */
+export function isReadingFresh(isoDate: string | undefined | null, now: number = Date.now()): boolean {
+  if (!isoDate) return false;
+  const t = new Date(isoDate).getTime();
+  if (!Number.isFinite(t)) return false;
+  const ageMin = (now - t) / 60_000;
+  // −5 min de tolérance : horloges du téléphone et du serveur décalées.
+  return ageMin >= -5 && ageMin <= LIVE_MAX_AGE_MIN;
+}
+
+/**
  * Formatage "il y a X min" / "à l'instant".
  */
 export function formatReadingAge(isoDate: string, now: number = Date.now()): string {
