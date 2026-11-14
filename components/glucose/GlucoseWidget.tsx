@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import { libreLinkActionHint } from "@/lib/libre-link/config";
 import { useGlucose } from "@/hooks/useGlucose";
-import { glucoseToneColor, formatReadingAge, trendStringToNumber } from "@/lib/libre-link/utils";
+import { glucoseToneColor, formatReadingAge, isReadingFresh, trendStringToNumber } from "@/lib/libre-link/utils";
 
 type Props = {
   /** Valeur de repli (lecture manuelle la plus récente du store) */
@@ -69,10 +69,15 @@ export default function GlucoseWidget({ fallbackValue, fallbackRecordedAt }: Pro
     return () => clearInterval(id);
   }, []);
 
-  const hasLive = current !== null;
-  const displayValue = hasLive ? current!.value : fallbackValue;
+  // « En direct » = reçue ET récente. Une mesure de plus de 15 min reste
+  // affichée (c'est la dernière chose qu'on sait), mais comme une mesure
+  // ancienne : grisée, sans flèche ni projection, et annoncée comme telle.
+  const received = current !== null;
+  const hasLive = received && isReadingFresh(current!.date, nowMs);
+  const isStale = received && !hasLive;
+  const displayValue = received ? current!.value : fallbackValue;
   const displayDate =
-    hasLive
+    received
       ? current!.date
       : fallbackRecordedAt
       ? new Date(fallbackRecordedAt).toISOString()
@@ -83,7 +88,9 @@ export default function GlucoseWidget({ fallbackValue, fallbackRecordedAt }: Pro
 
   const led = hasLive
     ? pulseTone === "success" ? "green" : pulseTone === "warning" ? "amber" : "red"
-    : "steel";
+    : isStale
+      ? "amber"
+      : "steel";
 
   return (
     <div className="panel">
@@ -92,10 +99,12 @@ export default function GlucoseWidget({ fallbackValue, fallbackRecordedAt }: Pro
           <span className={`led ${led}`} />
           <b className="whitespace-nowrap">Glycémie live</b>
         </div>
-        <span className={`pill ${hasLive ? "green" : ""}`}>
+        <span className={`pill ${hasLive ? "green" : isStale ? "amber" : ""}`}>
           {hasLive
             ? `FreeStyle · ${displayDate ? formatReadingAge(displayDate, nowMs).replace(/^il y a /, "") : "live"}`
-            : notConfigured
+            : isStale
+              ? `ancienne · ${formatReadingAge(displayDate!, nowMs)}`
+              : notConfigured
               ? "non connecté"
               : displayDate
                 ? `manuel · ${formatReadingAge(displayDate, nowMs)}`
@@ -106,7 +115,10 @@ export default function GlucoseWidget({ fallbackValue, fallbackRecordedAt }: Pro
       {displayValue !== undefined ? (
         <>
         <div className="flex items-start gap-3">
-          <span className="num-hero text-[52px] leading-none" style={color ? { color } : undefined}>
+          <span
+            className={`num-hero text-[52px] leading-none ${isStale ? "text-text-tertiary" : ""}`}
+            style={color ? { color } : undefined}
+          >
             {displayValue}
           </span>
           {hasLive && (
@@ -129,9 +141,14 @@ export default function GlucoseWidget({ fallbackValue, fallbackRecordedAt }: Pro
                   ≈ {Math.round(displayValue + trendVelocityMgPerMin(trendStringToNumber(current!.trend)) * 30)}
                 </p>
               </>
+            ) : isStale ? (
+              <>
+                <p className="text-[11px] text-text-tertiary">Dernière mesure</p>
+                <p className="text-sm font-semibold text-warning">Capteur muet</p>
+              </>
             ) : (
               <>
-                <p className="text-[11px] text-text-tertiary">Statut</p>
+                <p className="text-[11px] text-text-tertiary">Dernière saisie</p>
                 <p className="text-sm font-semibold text-text-primary">{glucoseStatusText(displayValue)}</p>
               </>
             )}
@@ -154,6 +171,14 @@ export default function GlucoseWidget({ fallbackValue, fallbackRecordedAt }: Pro
                 : "Aucune lecture disponible"}
           </p>
         </div>
+      )}
+
+      {isStale && !actionHint && (
+        <p className="alert mt-2 text-xs leading-snug">
+          <span>
+            {`Aucune mesure reçue depuis ${formatReadingAge(displayDate!, nowMs).replace(/^il y a /, "")}. Ce chiffre n'est plus ta glycémie du moment : ouvre LibreLink pour relancer le capteur, ou mesure-toi.`}
+          </span>
+        </p>
       )}
 
       {actionHint && (

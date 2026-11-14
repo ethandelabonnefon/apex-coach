@@ -24,7 +24,7 @@ import {
 } from "@/lib/carbs-on-board";
 import { DIABETES_CONFIG } from "@/lib/constants";
 import type { InsulinLog, MealTime, SplitDoseReminder, DeclaredSportSession } from "@/types";
-import type { GlucoseTrend } from "@/lib/libre-link/utils";
+import { isReadingFresh, type GlucoseTrend } from "@/lib/libre-link/utils";
 import { StoreRestoreBanner } from "@/components/diabete/StoreRestoreBanner";
 import { Badge } from "@/components/ui/Badge";
 import { useGlucose } from "@/hooks/useGlucose";
@@ -139,7 +139,6 @@ import {
   AlertCircle,
   X,
   Apple,
-  ZapOff,
   Activity,
   ShieldCheck,
   ShieldAlert,
@@ -609,24 +608,39 @@ export default function DiabetePage() {
   // et le hook partage un seul fetch en vol par endpoint — la page ne tire
   // donc plus son propre `/api/glucose/current` à chaque intervalle.
   const {
-    current: liveGlucose,
+    current: sensorReading,
     history: liveHistory,
     refetch: refetchGlucose,
-    lastFetchedAt: lastLiveFetch,
   } = useGlucose({ mode: "history" });
+
+  // Âge (min) de la dernière mesure REÇUE du capteur, fraîche ou non.
+  const sensorAgeMin = useMemo(() => {
+    if (!sensorReading) return undefined;
+    const ms = new Date(sensorReading.date).getTime();
+    if (!Number.isFinite(ms)) return undefined;
+    return (nowTick - ms) / 60_000;
+  }, [sensorReading, nowTick]);
+
+  // ─── Fraîcheur : UNE règle pour toute la page (nov. 2026) ─────────────
+  // `liveGlucose` n'existe que si la mesure a moins de 15 min. Le hook
+  // garde la dernière mesure reçue sans limite de durée (pour ne pas
+  // afficher un tiret au moindre accroc réseau) ; pendant la coupure
+  // Abbott du 12/11/2026, tout ce qui suit lisait donc une glycémie
+  // vieille de plusieurs dizaines de minutes comme celle du moment —
+  // correction, règle « −1 U sous 75 », carte hypo, briefing sport.
+  // Périmée = absente : chaque consommateur retombe sur son chemin
+  // « capteur muet », déjà prévu et testé.
+  const liveGlucose =
+    sensorReading && isReadingFresh(sensorReading.date, nowTick) ? sensorReading : null;
   const liveValueForBolus = liveGlucose?.value;
   const liveTrend = trendStringToNumber(liveGlucose?.trend);
 
-  // Âge (min) de la lecture live. Déclaré ici (déplacé depuis plus bas,
-  // revue finale I3) : `cappedDose` en a besoin — une lecture périmée et
-  // HAUTE simule une trajectoire saine, donc aucun plafonnement, en
-  // silence. `suggestTopUp` (plus bas) et `cappedDose` partagent ce calcul.
-  const liveGlucoseAgeMin = useMemo(() => {
-    if (!liveGlucose) return undefined;
-    const ms = new Date(liveGlucose.date).getTime();
-    if (!Number.isFinite(ms)) return undefined;
-    return (nowTick - ms) / 60_000;
-  }, [liveGlucose, nowTick]);
+  // Âge (min) de la lecture live. `cappedDose` en a besoin — une lecture
+  // périmée et HAUTE simule une trajectoire saine, donc aucun plafonnement,
+  // en silence. `suggestTopUp` (plus bas) et `cappedDose` partagent ce calcul.
+  const liveGlucoseAgeMin = liveGlucose ? sensorAgeMin : undefined;
+  /** Une mesure a été reçue mais elle est trop vieille pour servir. */
+  const sensorIsStale = Boolean(sensorReading) && !liveGlucose;
 
   // ─── I2 (revue finale) : source UNIQUE de glycémie pour les DEUX moitiés
   // du calcul de dose (calculateBolus ET capDoseByPrediction). Avant : le
@@ -1035,7 +1049,10 @@ export default function DiabetePage() {
   }
 
   const lastGlucose = glucoseReadings[0];
-  const lastValue = lastGlucose?.value ?? currentGlucose;
+  // Dernière glycémie saisie à la main, s'il y en a une. Surtout PAS de
+  // repli sur `currentGlucose` : c'est le champ du calculateur, qui vaut 120
+  // par défaut — la tuile affichait « 120 · En zone » capteur débranché.
+  const lastValue = lastGlucose?.value;
   const iobTone: "info" | "warning" =
     iob.totalIOB > 2 ? "warning" : "info";
 
@@ -2483,6 +2500,22 @@ export default function DiabetePage() {
             ? "Quantité incertaine — aucun conseil de dose ne sera donné"
             : "Je ne suis pas sûr de la quantité"}
         </button>
+
+        {/* Capteur muet ou mesure périmée : le calcul repose alors sur le
+            chiffre du champ Glycémie. On le DIT — sinon le « 120 » par
+            défaut du champ décide de la dose sans que personne l'ait saisi. */}
+        {liveValueForBolus === undefined && (
+          <p className="alert mb-3 text-xs leading-snug">
+            {/* Un seul enfant : `.alert` est en flex, et des morceaux de
+                texte séparés y perdent leurs espaces de début. */}
+            <span>
+              {sensorIsStale && sensorAgeMin !== undefined
+                ? `Dernière mesure du capteur il y a ${Math.round(sensorAgeMin)} min : trop ancienne pour calculer une dose.`
+                : "Pas de mesure du capteur."}{" "}
+              {`La dose est calculée avec la glycémie saisie ci-dessus (${currentGlucose} mg/dL) : vérifie-la avant d'injecter.`}
+            </span>
+          </p>
+        )}
 
         {liveValueForBolus !== undefined && (liveValueForBolus !== currentGlucose || trendArrow !== liveTrend) && (
           <button

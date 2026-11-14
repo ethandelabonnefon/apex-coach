@@ -19,7 +19,7 @@
 import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { useGlucose } from "@/hooks/useGlucose";
-import { glucoseTone, glucoseToneLabel, trendStringToNumber } from "@/lib/libre-link/utils";
+import { glucoseTone, glucoseToneLabel, isReadingFresh, trendStringToNumber } from "@/lib/libre-link/utils";
 import { computeHyperCorrection } from "@/lib/correction-suggestion";
 import { Badge } from "@/components/ui/Badge";
 import { Syringe, AlertTriangle, Info, Check } from "lucide-react";
@@ -43,7 +43,9 @@ export default function CorrectionSuggestion({
   const { current: live } = useGlucose({ mode: "current" });
   const [justLogged, setJustLogged] = useState(false);
 
-  if (!live) return null;
+  // Une mesure de plus de 15 min n'est pas une glycémie à corriger : en
+  // 40 minutes elle a pu redescendre toute seule, ou chuter.
+  if (!live || !isReadingFresh(live.date)) return null;
   const value = live.value;
   const target = diabetesConfig.targetGlucose;
   const isf = diabetesConfig.insulinSensitivityFactor;

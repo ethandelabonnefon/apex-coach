@@ -67,6 +67,21 @@ export async function setLastLowSoonAlert(ts: number): Promise<void> {
   await kv.set(K_LAST_LOW_SOON, ts);
 }
 
+const K_MONITOR_STATE = "push:monitor-state";
+
+/** État de la panne de surveillance en cours (cf. lib/push/monitor-outage.ts). */
+export async function getMonitorState(): Promise<{ downSince?: number; notifiedAt?: number }> {
+  return (await kv.get<{ downSince?: number; notifiedAt?: number }>(K_MONITOR_STATE)) ?? {};
+}
+
+export async function setMonitorState(state: { downSince?: number; notifiedAt?: number }): Promise<void> {
+  if (state.downSince === undefined && state.notifiedAt === undefined) {
+    await kv.del(K_MONITOR_STATE);
+  } else {
+    await kv.set(K_MONITOR_STATE, state);
+  }
+}
+
 /** Trace du dernier "retour en plage" — sert à reset les alertes */
 export async function getLastBackInRange(): Promise<number | null> {
   return (await kv.get<number>(K_LAST_BACK_IN_RANGE)) ?? null;

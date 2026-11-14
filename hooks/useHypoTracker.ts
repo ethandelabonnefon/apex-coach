@@ -24,6 +24,7 @@ import { useEffect, useRef } from "react";
 import { useStore } from "@/lib/store";
 import { useGlucose } from "@/hooks/useGlucose";
 import { analyzeHypoEvent, findPeak } from "@/lib/hypo-resucrage";
+import { isReadingFresh } from "@/lib/libre-link/utils";
 import type { HypoEvent } from "@/types";
 
 const TICK_MS = 60_000; // 1 min
@@ -46,7 +47,9 @@ export function useHypoTracker(): void {
         const consumedAtMs = new Date(event.consumedAt).getTime();
         const minutesSince = (now - consumedAtMs) / 60_000;
         if (minutesSince < 0 || minutesSince > 90) continue;
-        if (!live?.value) continue;
+        // Une mesure périmée notée comme « glycémie à +15 min » fausserait
+        // le verdict du resucrage ET l'apprentissage du GRG personnel.
+        if (!live?.value || !isReadingFresh(live.date, now)) continue;
         if (event.assessment !== "pending") continue;
 
         const updates: Partial<HypoEvent> = {};

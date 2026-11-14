@@ -21,7 +21,7 @@
  *  5. Feedback final : "too-much / just-right / too-little"
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import {
   estimatePersonalGRG,
@@ -60,6 +60,8 @@ interface HypoLoggerProps {
 }
 
 const QUICK_CARBS = [8, 10, 15, 20, 30];
+/** Durée du verrou anti-double-saisie après un resucrage (min). */
+const RESUGAR_LOCK_MIN = 15;
 
 export default function HypoLogger({
   currentGlucose,
@@ -102,13 +104,42 @@ export default function HypoLogger({
   const [includeInLearning, setIncludeInLearning] = useState<boolean>(!isOverBolus);
 
   const [selectedCarbs, setSelectedCarbs] = useState<number>(suggestion.grams);
-  const [logged, setLogged] = useState(false);
+  // Horloge de la carte (30 s) : le verrou ci-dessous doit se lever à
+  // l'heure, pas « au prochain changement du store ».
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
-  // Vérifier s'il y a déjà une hypo récente (< 30min) pour éviter le double-log
+  // Un resucrage vient d'être noté : on verrouille 15 minutes pour éviter
+  // la double saisie — le temps que les glucides agissent.
+  //
+  // Correctif nov. 2026 : le verrou durait 30 min ET, dans la pratique, tant
+  // que la carte restait à l'écran (donc tant que la glycémie restait sous
+  // 80). Or c'est précisément le cas où il faut se resucrer une deuxième
+  // fois : toujours bas 15 minutes après, on reprend des glucides. La carte
+  // disait « re-checke dans 15 min » puis n'offrait plus rien à faire.
   const recentHypo = useMemo(() => {
-    const cutoff = Date.now() - 30 * 60_000;
-    return hypoEvents.find((e) => new Date(e.detectedAt).getTime() > cutoff);
-  }, [hypoEvents]);
+    const cutoff = nowMs - RESUGAR_LOCK_MIN * 60_000;
+    return hypoEvents.find((e) => new Date(e.consumedAt ?? e.detectedAt).getTime() > cutoff);
+  }, [hypoEvents, nowMs]);
+
+  // Dernier resucrage de l'heure écoulée, verrou levé : on le rappelle
+  // au-dessus du formulaire pour que la 2e prise se fasse en connaissance.
+  const previousResugar = useMemo(() => {
+    if (recentHypo) return null;
+    const cutoff = nowMs - 60 * 60_000;
+    return (
+      [...hypoEvents]
+        .filter((e) => new Date(e.consumedAt ?? e.detectedAt).getTime() > cutoff)
+        .sort(
+          (a, b) =>
+            new Date(b.consumedAt ?? b.detectedAt).getTime() -
+            new Date(a.consumedAt ?? a.detectedAt).getTime(),
+        )[0] ?? null
+    );
+  }, [hypoEvents, nowMs, recentHypo]);
 
   function handleLogCarbs() {
     if (selectedCarbs <= 0) return;
@@ -142,11 +173,10 @@ export default function HypoLogger({
       consumedAt: now,
     });
     if (carbEntry) addCarbEntry(carbEntry);
-    setLogged(true);
   }
 
   // Si récemment loggé → message de confirmation au lieu du formulaire
-  if (recentHypo || logged) {
+  if (recentHypo) {
     return (
       <section className="panel mb-4 border border-warning/40 bg-warning/5">
         <div className="flex items-start gap-3">
@@ -158,15 +188,15 @@ export default function HypoLogger({
               Re-sucrage enregistré
             </p>
             <p className="text-xs text-text-secondary mt-1 leading-snug">
-              {recentHypo?.carbsConsumed || selectedCarbs}g de glucides à{" "}
+              {recentHypo.carbsConsumed}g de glucides à{" "}
               <span className="num">
-                {new Date(recentHypo?.consumedAt ?? Date.now()).toLocaleTimeString(
+                {new Date(recentHypo.consumedAt ?? recentHypo.detectedAt).toLocaleTimeString(
                   "fr-FR",
                   { hour: "2-digit", minute: "2-digit" },
                 )}
               </span>
-              . Re-checke ta glycémie dans 15 min — le feedback arrivera
-              automatiquement.
+              . Laisse-leur 15 min pour agir. Si tu es encore sous 80 à ce
+              moment-là, cette carte te proposera d&apos;en reprendre.
             </p>
           </div>
         </div>
@@ -251,6 +281,16 @@ export default function HypoLogger({
             </span>
           </label>
         </div>
+      )}
+
+      {previousResugar && (
+        <p className="alert mb-3 text-xs leading-snug">
+          <span>
+            {`Tu as déjà pris ${previousResugar.carbsConsumed} g à ${new Date(
+              previousResugar.consumedAt ?? previousResugar.detectedAt,
+            ).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })} et tu es encore sous 80 : reprends des glucides.`}
+          </span>
+        </p>
       )}
 
       {/* Quick-chips */}

@@ -22,6 +22,8 @@ import {
   setLastHyperAlert,
   getLastLowSoonAlert,
   setLastLowSoonAlert,
+  getMonitorState,
+  setMonitorState,
   setLastBackInRange,
   removeSubscription,
   isKvConfigured,
@@ -29,6 +31,7 @@ import {
 import { fetchGlucoseSnapshot } from "@/lib/libre-link/client";
 import { isLibreLinkConfigured } from "@/lib/libre-link/config";
 import { assessLowSoon, readingAgeMinutes, MAX_READING_AGE_MIN } from "./low-prediction";
+import { assessMonitor } from "./monitor-outage";
 
 // Init VAPID une fois par cold-start
 let vapidInitialized = false;
@@ -52,6 +55,7 @@ export type GlucoseAlertPayload = {
     | "meal-confirm"
     | "post-session"
     | "basal"
+    | "sensor"
     | "test";
   title: string;
   body: string;
@@ -111,6 +115,53 @@ export type CheckResult = {
 };
 
 /**
+ * Tient le compte des pannes de surveillance et prévient quand elles durent
+ * (cf. `monitor-outage.ts`). Ne lève jamais : une erreur ici ne doit pas
+ * empêcher le reste du cron de tourner.
+ */
+async function reportMonitorHealth(
+  healthy: boolean,
+  now: number,
+  observedSinceMs?: number,
+  value?: number,
+): Promise<void> {
+  if (!isKvConfigured()) return;
+  try {
+    const state = await getMonitorState();
+    const { action, next, downMinutes } = assessMonitor(state, healthy, now, observedSinceMs);
+
+    if (action === "notify-down") {
+      const res = await sendGlucosePush({
+        type: "sensor",
+        title: "Surveillance en pause",
+        body: `Aucune mesure de glycémie depuis ${Math.round(downMinutes)} min : les alertes d'hypo ne fonctionnent pas. Ouvre LibreLink sur ton téléphone, ou mesure-toi.`,
+        url: "/diabete",
+        tag: "sensor-outage",
+      });
+      // Notification non partie → on ne note pas « prévenu », pour réessayer
+      // au prochain passage.
+      await setMonitorState(res.sent ? next : { downSince: next.downSince, notifiedAt: state.notifiedAt });
+      return;
+    }
+    if (action === "notify-back") {
+      await sendGlucosePush({
+        type: "sensor",
+        title: "Capteur de retour",
+        body:
+          value !== undefined
+            ? `La glycémie remonte de nouveau (${value} mg/dL). Les alertes sont actives.`
+            : "La glycémie remonte de nouveau. Les alertes sont actives.",
+        url: "/diabete",
+        tag: "sensor-outage",
+      });
+    }
+    await setMonitorState(next);
+  } catch (err) {
+    console.error("[push/alerts] monitor health:", err instanceof Error ? err.message : err);
+  }
+}
+
+/**
  * Routine principale du cron : lit la glycémie, décide si on alerte, envoie.
  */
 export async function checkGlucoseAndAlert(): Promise<CheckResult> {
@@ -123,6 +174,7 @@ export async function checkGlucoseAndAlert(): Promise<CheckResult> {
     snapshot = await fetchGlucoseSnapshot();
   } catch (err) {
     const msg = err instanceof Error ? err.message : "unknown";
+    await reportMonitorHealth(false, Date.now());
     return { ok: false, action: "error", reason: `librelink: ${msg}` };
   }
 
@@ -134,8 +186,10 @@ export async function checkGlucoseAndAlert(): Promise<CheckResult> {
   // « Hypo : 65 » toutes les 20 min pendant des heures sur un chiffre mort.
   const ageMin = readingAgeMinutes(snapshot.current.date, now);
   if (ageMin > MAX_READING_AGE_MIN) {
+    await reportMonitorHealth(false, now, new Date(snapshot.current.date).getTime());
     return { ok: true, value, action: "skipped_stale", reason: `reading_${Math.round(ageMin)}min_old` };
   }
+  await reportMonitorHealth(true, now, undefined, value);
 
   const isHypo = value < PUSH_CONFIG.alertThresholds.hypo;
   const isHyper = value > PUSH_CONFIG.alertThresholds.hyper;

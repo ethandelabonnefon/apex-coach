@@ -169,7 +169,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<WhoopTok
  *   3. Marge de sécurité 60s sur l'expiration (évite les refresh "border").
  */
 export async function getValidAccessToken(): Promise<string | null> {
-  let tokens = await getTokens();
+  const tokens = await getTokens();
   if (!tokens) return null;
 
   const isExpired = (t: WhoopTokens) =>
